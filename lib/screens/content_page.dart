@@ -21,19 +21,16 @@ class ContentPage extends StatelessWidget {
         title: const Text('Study Connect'),
         actions: [
           TextButton(
-            onPressed: () {},
+            onPressed: () {
+              Navigator.pushNamed(context, '/');
+            },
             child: const Text('Inicio', style: TextStyle(color: Colors.white)),
           ),
           TextButton(
-            onPressed: () {},
+            onPressed: () {
+              Navigator.pushNamed(context, '/ranking');
+            },
             child: const Text('Ranking', style: TextStyle(color: Colors.white)),
-          ),
-          TextButton(
-            onPressed: () {},
-            child: const Text(
-              'Contenidos',
-              style: TextStyle(color: Colors.white),
-            ),
           ),
           TextButton(
             onPressed: () {},
@@ -69,7 +66,8 @@ class ContentPage extends StatelessWidget {
             isWide
                 ? Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: temas.map((tema) => _buildCard(tema)).toList(),
+                  children:
+                      temas.map((tema) => _buildCard(context, tema)).toList(),
                 )
                 : Column(
                   children:
@@ -77,7 +75,7 @@ class ContentPage extends StatelessWidget {
                           .map(
                             (tema) => Padding(
                               padding: const EdgeInsets.only(bottom: 16),
-                              child: _buildCard(tema),
+                              child: _buildCard(context, tema),
                             ),
                           )
                           .toList(),
@@ -88,7 +86,7 @@ class ContentPage extends StatelessWidget {
     );
   }
 
-  Widget _buildCard(Map<String, String> tema) {
+  Widget _buildCard(BuildContext context, Map<String, String> tema) {
     return Container(
       width: 220,
       padding: const EdgeInsets.all(16),
@@ -108,17 +106,26 @@ class ContentPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          _boton('Ver contenido', Icons.arrow_forward),
+          _boton(context, 'Ver contenido', Icons.arrow_forward),
           const SizedBox(height: 10),
-          _boton('Agregar ejercicio', Icons.add),
+          _boton(context, 'Agregar ejercicio', Icons.add),
         ],
       ),
     );
   }
 
-  Widget _boton(String texto, IconData icono) {
+  Widget _boton(BuildContext context, String texto, IconData icono) {
     return ElevatedButton(
-      onPressed: () {},
+      onPressed: () {
+        // Acción del botón
+        if (texto == 'Ver contenido') {
+          // Navegar a la página de contenido
+          Navigator.pushNamed(context, '/exercise_list');
+        } else if (texto == 'Agregar ejercicio') {
+          // Navegar a la página de agregar ejercicio
+          Navigator.pushNamed(context, '/exercise_upload');
+        }
+      },
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF1A1A1A),

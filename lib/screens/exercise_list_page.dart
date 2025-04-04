@@ -101,7 +101,7 @@ class ExerciseListPage extends StatelessWidget {
                 child: SingleChildScrollView(
                   child: DataTable(
                     columnSpacing: 20,
-                    headingRowColor: MaterialStateProperty.all(
+                    headingRowColor: WidgetStateProperty.all(
                       const Color(0xFF48C9EF),
                     ),
                     columns: const [
@@ -153,7 +153,14 @@ class ExerciseListPage extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(20),
                                     ),
                                   ),
-                                  onPressed: () {},
+                                  onPressed: () {
+                                    // Acción del botón
+                                    Navigator.pushNamed(
+                                      context,
+                                      '/exercise_view',
+                                      arguments: ej,
+                                    );
+                                  },
                                   icon: const Icon(
                                     Icons.arrow_forward,
                                     size: 16,

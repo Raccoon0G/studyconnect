@@ -25,15 +25,15 @@ class RankingPage extends StatelessWidget {
         title: const Text('Study Connect'),
         actions: [
           TextButton(
-            onPressed: () {},
+            onPressed: () {
+              Navigator.pushNamed(context, '/');
+            },
             child: const Text('Inicio', style: TextStyle(color: Colors.white)),
           ),
           TextButton(
-            onPressed: () {},
-            child: const Text('Ranking', style: TextStyle(color: Colors.white)),
-          ),
-          TextButton(
-            onPressed: () {},
+            onPressed: () {
+              Navigator.pushNamed(context, '/content');
+            },
             child: const Text(
               'Contenidos',
               style: TextStyle(color: Colors.white),
@@ -138,7 +138,7 @@ class RankingPage extends StatelessWidget {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: DataTable(
-                        headingRowColor: MaterialStateProperty.all(
+                        headingRowColor: WidgetStateProperty.all(
                           const Color(0xFF48C9EF),
                         ),
                         columnSpacing: 12,
