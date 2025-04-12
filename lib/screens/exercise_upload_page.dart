@@ -19,6 +19,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
     },
   ];
   Map<int, bool> _showKeyboard = {};
+  List<String> _recentSymbols = [];
 
   void _addStep(int index) {
     final current = _stepsControllers[index];
@@ -69,7 +70,17 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
     controller.selection = TextSelection.collapsed(
       offset: selection.start + symbol.length,
     );
-    setState(() {});
+
+    setState(() {
+      _recentSymbols.remove(symbol);
+      _recentSymbols.insert(0, symbol);
+      if (_recentSymbols.length > 8) {
+        _recentSymbols = _recentSymbols.sublist(
+          0,
+          8,
+        ); // máximo 8 símbolos recientes
+      }
+    });
   }
 
   Widget _latexKeyboard(int stepIndex) {
@@ -224,17 +235,27 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
       '\\int_{-a}^{a} f(x) dx',
     ];
 
+    // Construimos la lista dinámica de widgets
+    List<Widget> groups = [];
+
+    if (_recentSymbols.isNotEmpty) {
+      groups.add(buildGroup('Recientes', _recentSymbols));
+      groups.add(const SizedBox(height: 10));
+    }
+
+    groups.addAll([
+      buildGroup('Funciones algebraicas y trascendentales', funciones),
+      const SizedBox(height: 10),
+      buildGroup('Límites de funciones y continuidad', limites),
+      const SizedBox(height: 10),
+      buildGroup('Derivada y optimización', derivadas),
+      const SizedBox(height: 10),
+      buildGroup('Técnicas de integración', integrales),
+    ]);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        buildGroup('Funciones algebraicas y trascendentales', funciones),
-        const SizedBox(height: 10),
-        buildGroup('Límites de funciones y continuidad', limites),
-        const SizedBox(height: 10),
-        buildGroup('Derivada y optimización', derivadas),
-        const SizedBox(height: 10),
-        buildGroup('Técnicas de integración', integrales),
-      ],
+      children: groups,
     );
   }
 
