@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_math_fork/flutter_math.dart';
 
 class ExerciseUploadPage extends StatefulWidget {
   const ExerciseUploadPage({super.key});
@@ -9,6 +10,28 @@ class ExerciseUploadPage extends StatefulWidget {
 
 class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
   final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
+  final List<TextEditingController> _stepsControllers = [
+    TextEditingController(),
+  ];
+
+  void _addStep() {
+    setState(() {
+      _stepsControllers.add(TextEditingController());
+    });
+  }
+
+  void _removeStep(int index) {
+    if (_stepsControllers.length > 1) {
+      setState(() {
+        _stepsControllers.removeAt(index);
+      });
+    }
+  }
+
+  void _showSnack(String text) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,24 +76,14 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Funciones algebraicas y trascendentales',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 20),
             Expanded(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Panel izquierdo
                   Container(
-                    width: 220,
+                    width: 250,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: const Color(0xFF48C9EF),
@@ -94,13 +107,23 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 16),
                         const Text(
-                          'Nota:\nAsigna un título claro y descriptivo a tu ejercicio para que otros usuarios puedan identificarlo fácilmente y beneficiarse de su contenido.',
-                          style: TextStyle(color: Colors.white, fontSize: 12),
-                          textAlign: TextAlign.center,
+                          'Descripción',
+                          style: TextStyle(color: Colors.white),
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _descriptionController,
+                          maxLines: 3,
+                          decoration: const InputDecoration(
+                            filled: true,
+                            fillColor: Colors.white,
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.all(10),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
                         Expanded(
                           child: Image.asset(
                             'assets/images/mascota.png',
@@ -110,8 +133,10 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                       ],
                     ),
                   ),
+
                   const SizedBox(width: 20),
-                  // Panel de contenido (previa)
+
+                  // Panel derecho
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.all(16),
@@ -119,35 +144,61 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            Text(
-                              'Ejercicio nº 1:',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
+                      child: ListView.builder(
+                        itemCount: _stepsControllers.length,
+                        itemBuilder: (context, index) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Paso ${index + 1}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.remove_circle,
+                                        color: Colors.red,
+                                      ),
+                                      onPressed: () => _removeStep(index),
+                                    ),
+                                  ],
+                                ),
+                                TextField(
+                                  controller: _stepsControllers[index],
+                                  decoration: const InputDecoration(
+                                    hintText:
+                                        r'Escribe aquí usando LaTeX, por ejemplo: x^2 + 1 = 0',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                                const SizedBox(height: 10),
+                                const Text(
+                                  'Vista previa:',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  color: const Color(0xFFEFEFEF),
+                                  child: Math.tex(
+                                    _stepsControllers[index].text.isEmpty
+                                        ? r'\text{Escribe una expresión para verla aquí}'
+                                        : _stepsControllers[index].text,
+                                    mathStyle: MathStyle.display,
+                                    textStyle: const TextStyle(fontSize: 18),
+                                  ),
+                                ),
+                              ],
                             ),
-                            SizedBox(height: 10),
-                            Text(
-                              'Halla el dominio de definición de las siguientes funciones:\n'
-                              'a) y = 1 / (x² - 9)\n'
-                              'b) y = √(x - 2)',
-                            ),
-                            SizedBox(height: 20),
-                            Text(
-                              'Solución:',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            SizedBox(height: 10),
-                            Text(
-                              'a) x² - 9 = 0 → x = ±3 → Dominio = R − {−3,3}\n'
-                              'b) x − 2 ≥ 0 → x ≥ 2 → Dominio = [2, ∞)',
-                            ),
-                          ],
-                        ),
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -158,6 +209,16 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                ElevatedButton.icon(
+                  onPressed: _addStep,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Agregar paso'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 20),
                 _botonAccion('Subir', Icons.upload),
                 const SizedBox(width: 20),
                 _botonAccion('Modificar', Icons.edit),
@@ -173,18 +234,16 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
     return ElevatedButton.icon(
       onPressed: () {
         final titulo = _titleController.text;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$texto ejercicio: $titulo')));
+        _showSnack('$texto ejercicio: $titulo');
       },
+      icon: Icon(icono, size: 18),
+      label: Text(texto),
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color(0xFF1A1A1A),
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
       ),
-      icon: Icon(icono, size: 18),
-      label: Text(texto),
     );
   }
 }

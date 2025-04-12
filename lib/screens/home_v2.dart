@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   final int totalContenidos;
 
   const HomePage({super.key, this.totalContenidos = 932});
 
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -220,7 +225,7 @@ class HomePage extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
           ),
           child: Text(
-            'Contenidos\n$totalContenidos+',
+            'Contenidos\n${widget.totalContenidos}+',
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
@@ -247,7 +252,7 @@ class HomePage extends StatelessWidget {
                 letterSpacing: 0.5,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 40),
             const Text(
               'A través de ejercicios colaborativos\ncreados por estudiantes como tú.',
               textAlign: TextAlign.center,
@@ -258,7 +263,7 @@ class HomePage extends StatelessWidget {
                 height: 1.5,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 60),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 8),
               child: Text(
@@ -326,6 +331,8 @@ class HomePage extends StatelessWidget {
     return Column(
       children: [
         Container(
+          height: 300,
+          width: double.infinity,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: const Color(0xFF48C9EF),

@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class ContentPage extends StatelessWidget {
   const ContentPage({super.key});
 
   final List<Map<String, String>> temas = const [
-    {'titulo': 'Funciones algebraicas y trascendentales'},
-    {'titulo': 'Límites de funciones y Continuidad'},
-    {'titulo': 'Derivada y optimización'},
-    {'titulo': 'Técnicas de integración'},
+    {
+      'titulo': 'Funciones algebraicas y trascendentes',
+      'imagen': 'funciones.png',
+    },
+    {'titulo': 'Límites de funciones y Continuidad', 'imagen': 'limites.png'},
+    {'titulo': 'Derivada y optimización', 'imagen': 'derivadas3.png'},
+    {'titulo': 'Técnicas de integración', 'imagen': 'tecnicas2.png'},
   ];
 
   @override
@@ -88,10 +92,15 @@ class ContentPage extends StatelessWidget {
 
   Widget _buildCard(BuildContext context, Map<String, String> tema) {
     return Container(
-      width: 220,
+      height: 750,
+      width: 450,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF48C9EF),
+        gradient: const LinearGradient(
+          colors: [Colors.white, Colors.blueAccent],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -99,21 +108,26 @@ class ContentPage extends StatelessWidget {
           Text(
             tema['titulo']!,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
+            style: GoogleFonts.roboto(
+              fontSize: 20,
               fontWeight: FontWeight.bold,
+              color: const Color(0xFF1A1A1A),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 30),
           _boton(context, 'Ver contenido', Icons.arrow_forward),
-          const SizedBox(height: 10),
+          const SizedBox(height: 30),
           _boton(context, 'Agregar ejercicio', Icons.add),
+          const SizedBox(height: 30),
+          _boton(context, 'Agregar Material', Icons.add),
+          SizedBox(height: 50),
+          _imagenIlustrativa(ancho: 450, alto: 379, assetName: tema['imagen']!),
         ],
       ),
     );
   }
 
+  //TODO Arreglar botones
   Widget _boton(BuildContext context, String texto, IconData icono) {
     return ElevatedButton(
       onPressed: () {
@@ -139,6 +153,25 @@ class ContentPage extends StatelessWidget {
           const SizedBox(width: 8),
           Icon(icono, size: 18),
         ],
+      ),
+    );
+  }
+
+  Widget _imagenIlustrativa({
+    required double ancho,
+    required double alto,
+    required String assetName,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 30),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.asset(
+          'assets/images/$assetName',
+          width: ancho,
+          height: alto,
+          fit: BoxFit.cover,
+        ),
       ),
     );
   }

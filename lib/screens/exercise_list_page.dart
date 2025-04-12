@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class ExerciseListPage extends StatelessWidget {
   const ExerciseListPage({super.key});
@@ -93,8 +94,14 @@ class ExerciseListPage extends StatelessWidget {
             const SizedBox(height: 20),
             Expanded(
               child: Container(
+                height: 500,
+                width: double.infinity,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF48C9EF),
+                  gradient: const LinearGradient(
+                    colors: [Colors.white, Colors.blueAccent],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 padding: const EdgeInsets.all(16),
@@ -104,27 +111,46 @@ class ExerciseListPage extends StatelessWidget {
                     headingRowColor: WidgetStateProperty.all(
                       const Color(0xFF48C9EF),
                     ),
-                    columns: const [
+                    columns: [
                       DataColumn(
                         label: Text(
                           'Ejercicios',
-                          style: TextStyle(color: Colors.white),
+                          style: GoogleFonts.roboto(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                       DataColumn(
                         label: Text(
                           'Calificación',
-                          style: TextStyle(color: Colors.white),
+                          style: GoogleFonts.roboto(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                       DataColumn(
                         label: Text(
                           'Autor',
-                          style: TextStyle(color: Colors.white),
+                          style: GoogleFonts.roboto(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                       DataColumn(
-                        label: Text('', style: TextStyle(color: Colors.white)),
+                        label: Text(
+                          '',
+                          style: GoogleFonts.roboto(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ],
                     rows:
@@ -132,16 +158,26 @@ class ExerciseListPage extends StatelessWidget {
                           return DataRow(
                             cells: [
                               DataCell(
-                                Text(
-                                  ej['titulo'],
-                                  style: const TextStyle(color: Colors.white),
+                                Center(
+                                  child: Text(
+                                    ej['titulo'],
+                                    style: GoogleFonts.roboto(
+                                      color: Colors.black,
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
                               ),
                               DataCell(_buildStars(ej['calificacion'])),
                               DataCell(
                                 Text(
                                   ej['autor'],
-                                  style: const TextStyle(color: Colors.white),
+                                  style: GoogleFonts.roboto(
+                                    color: Colors.white,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                               DataCell(
@@ -165,7 +201,13 @@ class ExerciseListPage extends StatelessWidget {
                                     Icons.arrow_forward,
                                     size: 16,
                                   ),
-                                  label: const Text('Ver ejercicio'),
+                                  label: Text(
+                                    'Ver ejercicio',
+                                    style: GoogleFonts.roboto(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ],

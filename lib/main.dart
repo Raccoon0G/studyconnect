@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import 'package:study_connect/screens/screens.dart';
 
 void main() => runApp(const MyApp());
