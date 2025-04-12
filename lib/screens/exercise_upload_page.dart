@@ -113,6 +113,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
       'f \(x) =',
       'x',
       'y',
+      '\\frac{x}{y}',
       'a^2',
       'b^n',
       '\\sqrt{x}',
