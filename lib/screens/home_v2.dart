@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class HomePage extends StatefulWidget {
   final int totalContenidos;
@@ -214,6 +215,7 @@ class _HomePageState extends State<HomePage> {
           child: Image.asset(
             'assets/images/profe.jpg',
             width: double.infinity,
+            height: 700,
             fit: BoxFit.cover,
           ),
         ),
@@ -241,44 +243,44 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const Text(
+            Text(
               'Potencia tu aprendizaje y Alcanza\ntus objetivos académicos.',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: GoogleFonts.roboto(
                 color: Colors.white,
-                fontSize: 32,
-                fontWeight: FontWeight.w800,
-                height: 1.4,
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 40),
-            const Text(
-              'A través de ejercicios colaborativos\ncreados por estudiantes como tú.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Color(0xFFB0E0FF),
-                fontSize: 20,
+                fontSize: 45,
                 fontWeight: FontWeight.w600,
                 height: 1.5,
               ),
             ),
-            const SizedBox(height: 60),
-            const Padding(
+            const SizedBox(height: 80),
+            Text(
+              'A través de ejercicios colaborativos\ncreados por estudiantes como tú.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.roboto(
+                color: Color(0xFFB0E0FF),
+                fontSize: 28,
+                fontWeight: FontWeight.w600,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 120),
+            Padding(
               padding: EdgeInsets.symmetric(horizontal: 8),
               child: Text(
                 'Sube tus propios ejercicios, estudia los de otros y compite por el\n'
                 'reconocimiento en nuestro sistema de ranking. Únete a una comunidad\n'
                 'de aprendizaje que recompensa tu esfuerzo y colaboración.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: GoogleFonts.roboto(
                   color: Colors.white,
                   fontSize: 16,
                   height: 1.6,
+                  fontWeight: FontWeight.w400,
                 ),
               ),
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 130),
             Wrap(
               spacing: 20,
               alignment: WrapAlignment.center,
@@ -331,7 +333,7 @@ class _HomePageState extends State<HomePage> {
     return Column(
       children: [
         Container(
-          height: 300,
+          height: 200,
           width: double.infinity,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -340,8 +342,16 @@ class _HomePageState extends State<HomePage> {
           ),
           child: Column(
             children: [
-              const Text('Ranking', style: TextStyle(color: Colors.white)),
-              const SizedBox(height: 16),
+              Text(
+                'Ranking',
+                style: GoogleFonts.roboto(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  height: 1.5,
+                ),
+              ),
+              SizedBox(height: 16),
               Wrap(
                 alignment: WrapAlignment.center,
                 spacing: 12,
@@ -355,7 +365,7 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 50),
         if (!isMobile)
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
@@ -365,7 +375,7 @@ class _HomePageState extends State<HomePage> {
               fit: BoxFit.cover,
             ),
           ),
-        if (!isMobile) const SizedBox(height: 20),
+        if (!isMobile) const SizedBox(height: 39),
         ElevatedButton.icon(
           onPressed: () => Navigator.pushNamed(context, '/chat'),
           icon: const Icon(Icons.chat_bubble_outlined),
