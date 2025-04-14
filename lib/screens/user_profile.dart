@@ -1,7 +1,22 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class UserProfilePage extends StatelessWidget {
   const UserProfilePage({super.key});
+
+  Future<Map<String, dynamic>?> _fetchUserData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return null;
+
+    final doc =
+        await FirebaseFirestore.instance
+            .collection('usuarios')
+            .doc(user.uid)
+            .get();
+
+    return doc.data();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -12,87 +27,120 @@ class UserProfilePage extends StatelessWidget {
         title: const Text('Perfil de Usuario'),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.pop(context); // Regresar
-            },
+            onPressed: () => Navigator.pop(context),
             child: const Text('Cerrar', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
-      body: Center(
-        child: Container(
-          width: 400,
-          margin: const EdgeInsets.all(20),
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Avatar
-              const CircleAvatar(
-                radius: 50,
-                backgroundImage: AssetImage('assets/images/avatar1.png'),
-              ),
-              const SizedBox(height: 16),
-              // Nombre y correo
-              const Text(
-                'Jonathan Patterson',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'jonathan@escom.ipn.mx',
-                style: TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Estudiante de ISC',
-                style: TextStyle(color: Colors.black87),
-              ),
-              const SizedBox(height: 20),
+      body: FutureBuilder<Map<String, dynamic>?>(
+        future: _fetchUserData(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            );
+          }
 
-              // Botones
-              ElevatedButton.icon(
-                icon: const Icon(Icons.edit),
-                label: const Text('Editar perfil'),
-                onPressed: () {
-                  Navigator.pushNamed(context, '/edit_profile');
-                },
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(45),
-                  backgroundColor: const Color(0xFF048DD2),
+          if (!snapshot.hasData || snapshot.data == null) {
+            return const Center(
+              child: Text(
+                'No se pudo cargar el perfil.',
+                style: TextStyle(color: Colors.white),
+              ),
+            );
+          }
+
+          final data = snapshot.data!;
+
+          return Center(
+            child: Card(
+              elevation: 12,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              margin: const EdgeInsets.all(24),
+              child: Padding(
+                padding: const EdgeInsets.all(30),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircleAvatar(
+                      radius: 50,
+                      backgroundImage:
+                          (data['FotoPerfil'] ?? '').isNotEmpty
+                              ? NetworkImage(data['FotoPerfil'])
+                              : const AssetImage('assets/images/avatar1.png')
+                                  as ImageProvider,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      data['Nombre'] ?? 'Sin nombre',
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      data['Correo'] ?? '',
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      data['rol'] ?? 'Rol no especificado',
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                    const SizedBox(height: 24),
+                    Wrap(
+                      runSpacing: 12,
+                      spacing: 12,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed:
+                              () =>
+                                  Navigator.pushNamed(context, '/edit_profile'),
+                          icon: const Icon(Icons.edit),
+                          label: const Text('Editar perfil'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF048DD2),
+                            minimumSize: const Size(150, 45),
+                          ),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: () {},
+                          icon: const Icon(Icons.list_alt),
+                          label: const Text('Mis ejercicios'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color.fromARGB(
+                              255,
+                              52,
+                              44,
+                              65,
+                            ),
+                            minimumSize: const Size(150, 45),
+                          ),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            FirebaseAuth.instance.signOut();
+                            Navigator.pushReplacementNamed(context, '/');
+                          },
+                          icon: const Icon(Icons.logout),
+                          label: const Text('Cerrar sesión'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            side: const BorderSide(color: Colors.red),
+                            minimumSize: const Size(150, 45),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 10),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.list_alt),
-                label: const Text('Ver ejercicios aportados'),
-                onPressed: () {},
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(45),
-                  backgroundColor: const Color.fromARGB(255, 52, 44, 65),
-                ),
-              ),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.logout),
-                label: const Text('Cerrar sesión'),
-                onPressed: () {
-                  // FirebaseAuth.instance.signOut(); // si usas auth
-                  Navigator.pushReplacementNamed(context, '/login');
-                },
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(45),
-                  foregroundColor: Colors.red,
-                  side: const BorderSide(color: Colors.red),
-                ),
-              ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }

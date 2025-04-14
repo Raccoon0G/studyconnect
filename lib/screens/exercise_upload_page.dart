@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ExerciseUploadPage extends StatefulWidget {
   const ExerciseUploadPage({super.key});
@@ -20,6 +22,138 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
   ];
   Map<int, bool> _showKeyboard = {};
   List<String> _recentSymbols = [];
+
+  String? _temaSeleccionado;
+
+  final Map<String, String> temasDisponibles = {
+    'FnAlg': 'Funciones algebraicas y trascendentes',
+    'Lim': 'Límites de funciones y continuidad',
+    'Der': 'Derivada y optimización',
+    'TecInteg': 'Técnicas de integración',
+  };
+
+  Future<void> _subirEjercicioAFirestore() async {
+    final titulo = _titleController.text.trim();
+    final descripcion = _descriptionController.text.trim();
+
+    if (_temaSeleccionado == null || _temaSeleccionado!.isEmpty) {
+      showDialog(
+        context: context,
+        builder:
+            (_) => const AlertDialog(
+              title: Text('Tema no seleccionado'),
+              content: Text(
+                'Debes seleccionar un tema antes de subir el ejercicio.',
+              ),
+            ),
+      );
+      return;
+    }
+
+    if (titulo.isEmpty || descripcion.isEmpty) {
+      showDialog(
+        context: context,
+        builder:
+            (_) => const AlertDialog(
+              title: Text('Campos vacíos'),
+              content: Text('Debes completar el título y la descripción.'),
+            ),
+      );
+      return;
+    }
+
+    final firestore = FirebaseFirestore.instance;
+    final user = FirebaseAuth.instance.currentUser;
+    final now = DateTime.now();
+
+    final temasSubcoleccion = {
+      'Der': 'EjerDer',
+      'FnAlg': 'EjerFnAlg',
+      'Lim': 'EjerLim',
+      'TecInteg': 'EjerTecInteg',
+    };
+
+    final subcoleccion =
+        temasSubcoleccion[_temaSeleccionado] ?? 'EjerDesconocido';
+    final ejerciciosRef = firestore
+        .collection('calculo')
+        .doc(_temaSeleccionado)
+        .collection(subcoleccion);
+
+    final snapshot = await ejerciciosRef.get();
+    final ejercicioId =
+        '${_temaSeleccionado}_${(snapshot.docs.length + 1).toString().padLeft(2, '0')}';
+    final versionId = 'Version_01';
+
+    final pasos =
+        _stepsControllers
+            .map((step) => step['latex'].text.trim())
+            .where((p) => p.isNotEmpty)
+            .toList();
+    final descripciones =
+        _stepsControllers
+            .map((step) => step['desc'].text.trim())
+            .where((d) => d.isNotEmpty)
+            .toList();
+
+    final ejerRef = ejerciciosRef.doc(ejercicioId);
+
+    try {
+      await ejerRef.set({
+        'Titulo': titulo,
+        'DesEjercicio': descripcion,
+        'Autor': user?.displayName ?? '',
+        'AutorId': user?.uid ?? '',
+        'CalPromedio': '',
+        'FechCreacion': now,
+        'FechMod': now,
+        'versionActual': versionId,
+      });
+
+      await ejerRef.collection('Versiones').doc(versionId).set({
+        'Titulo': 'Versión 1',
+        'Descripcion': descripcion,
+        'Fecha': now,
+        'AutorId': user?.uid ?? '',
+        'PasosEjer': pasos,
+        'DescPasos': descripciones,
+      });
+
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder:
+            (_) => AlertDialog(
+              title: const Text('Ejercicio subido'),
+              content: const Text(
+                'Tu ejercicio fue guardado correctamente en Firestore.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Aceptar'),
+                ),
+              ],
+            ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder:
+            (_) => AlertDialog(
+              title: const Text('Error al subir'),
+              content: Text('Ocurrió un error al guardar en Firestore: $e'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Aceptar'),
+                ),
+              ],
+            ),
+      );
+    }
+  }
 
   void _addStep(int index) {
     final current = _stepsControllers[index];
@@ -121,7 +255,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
     }
 
     final funciones = [
-      'f \(x) =',
+      'f(x) =',
       'x',
       'y',
       '\\frac{x}{y}',
@@ -326,6 +460,45 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
+                          'Tema :',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: DropdownButtonFormField<String>(
+                            value: _temaSeleccionado,
+                            isExpanded: true, // 🔑 Esto evita el overflow
+                            hint: const Text('Selecciona un tema'),
+                            items:
+                                temasDisponibles.entries.map((entry) {
+                                  return DropdownMenuItem<String>(
+                                    value: entry.key,
+                                    child: Text(
+                                      entry.value,
+                                      overflow:
+                                          TextOverflow
+                                              .ellipsis, // 👈 Para cortar el texto si es muy largo
+                                    ),
+                                  );
+                                }).toList(),
+                            onChanged: (value) {
+                              setState(() {
+                                _temaSeleccionado = value;
+                              });
+                            },
+                            decoration: const InputDecoration(
+                              filled: true,
+                              fillColor: Colors.white,
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 10,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
                           'Título',
                           style: TextStyle(color: Colors.white),
                         ),
@@ -375,6 +548,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                     ),
                   ),
                   const SizedBox(width: 20),
+
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.all(16),
@@ -563,9 +737,8 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _botonAccion('Subir', Icons.upload, () {
-                  final titulo = _titleController.text;
-                  _showSnack('Subido ejercicio: $titulo');
+                _botonAccion('Subir', Icons.upload, () async {
+                  await _subirEjercicioAFirestore();
                 }),
                 const SizedBox(width: 20),
                 _botonAccion('Cancelar', Icons.cancel, () {

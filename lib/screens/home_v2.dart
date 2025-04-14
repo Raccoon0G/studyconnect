@@ -134,15 +134,18 @@ class _HomePageState extends State<HomePage> {
                         style: TextStyle(color: Colors.white),
                       ),
                     ),
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 8),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.white),
-                        borderRadius: BorderRadius.circular(20),
+                    TextButton(
+                      onPressed:
+                          () => Navigator.pushNamed(context, '/user_profile'),
+                      style: TextButton.styleFrom(
+                        side: const BorderSide(color: Colors.white),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                       ),
                       child: Row(
                         children: const [
@@ -244,7 +247,7 @@ class _HomePageState extends State<HomePage> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Text(
-              'Potencia tu aprendizaje y Alcanza\ntus objetivos académicos.',
+              'Potencia tu aprendizaje y Alcanza\ntus objetivos acad\u00e9micos.',
               textAlign: TextAlign.center,
               style: GoogleFonts.roboto(
                 color: Colors.white,
@@ -255,10 +258,10 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 80),
             Text(
-              'A través de ejercicios colaborativos\ncreados por estudiantes como tú.',
+              'A trav\u00e9s de ejercicios colaborativos\ncreados por estudiantes como t\u00fa.',
               textAlign: TextAlign.center,
               style: GoogleFonts.roboto(
-                color: Color(0xFFB0E0FF),
+                color: const Color(0xFFB0E0FF),
                 fontSize: 28,
                 fontWeight: FontWeight.w600,
                 height: 1.5,
@@ -266,11 +269,9 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 120),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Text(
-                'Sube tus propios ejercicios, estudia los de otros y compite por el\n'
-                'reconocimiento en nuestro sistema de ranking. Únete a una comunidad\n'
-                'de aprendizaje que recompensa tu esfuerzo y colaboración.',
+                'Sube tus propios ejercicios, estudia los de otros y compite por el\nreconocimiento en nuestro sistema de ranking. \u00danete a una comunidad\nde aprendizaje que recompensa tu esfuerzo y colaboraci\u00f3n.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.roboto(
                   color: Colors.white,
@@ -286,8 +287,7 @@ class _HomePageState extends State<HomePage> {
               alignment: WrapAlignment.center,
               children: [
                 ElevatedButton(
-                  onPressed:
-                      () => Navigator.pushNamed(context, '/user_profile'),
+                  onPressed: () => Navigator.pushNamed(context, '/login'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: Colors.black,
@@ -300,7 +300,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   child: const Text(
-                    'Iniciar sesión',
+                    'Registrarse',
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -351,7 +351,7 @@ class _HomePageState extends State<HomePage> {
                   height: 1.5,
                 ),
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               Wrap(
                 alignment: WrapAlignment.center,
                 spacing: 12,
