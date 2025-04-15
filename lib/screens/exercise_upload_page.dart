@@ -449,6 +449,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  //TODO: Hacer que el renderizado de la descripcion sea haga mas grande conforme al texto
                   Container(
                     width: 300,
                     padding: const EdgeInsets.all(16),
@@ -468,7 +469,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                           width: double.infinity,
                           child: DropdownButtonFormField<String>(
                             value: _temaSeleccionado,
-                            isExpanded: true, // 🔑 Esto evita el overflow
+                            isExpanded: true,
                             hint: const Text('Selecciona un tema'),
                             items:
                                 temasDisponibles.entries.map((entry) {
@@ -476,9 +477,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                                     value: entry.key,
                                     child: Text(
                                       entry.value,
-                                      overflow:
-                                          TextOverflow
-                                              .ellipsis, // 👈 Para cortar el texto si es muy largo
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   );
                                 }).toList(),
@@ -513,6 +512,32 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                               horizontal: 10,
                             ),
                           ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Vista previa (LaTeX):',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Math.tex(
+                              _titleController.text.trim().isEmpty
+                                  ? r'\text{Escribe un título para mostrarlo aquí}'
+                                  : _titleController.text.trim().replaceAll(
+                                    ' ',
+                                    r'\ ',
+                                  ),
+                              textStyle: const TextStyle(fontSize: 16),
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 16),
                         const Text(
@@ -529,24 +554,49 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                             border: OutlineInputBorder(),
                             contentPadding: EdgeInsets.all(10),
                           ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Vista previa (LaTeX):',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Math.tex(
+                              _descriptionController.text.trim().isEmpty
+                                  ? r'\text{Escribe una descripción para mostrarla aquí}'
+                                  : _descriptionController.text
+                                      .trim()
+                                      .replaceAll(' ', r'\ '),
+                              textStyle: const TextStyle(fontSize: 14),
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 16),
-                        Expanded(
-                          child: Center(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(20),
-                              child: Image.asset(
-                                'assets/images/funciones.png',
-                                height: 600,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
-                              ),
+                        Center(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: Image.asset(
+                              'assets/images/funciones.png',
+                              height: 300,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
                             ),
                           ),
                         ),
                       ],
                     ),
                   ),
+
+                  //ToDo: Cambiar a un widget de imagen
                   const SizedBox(width: 20),
 
                   Expanded(

@@ -1,20 +1,76 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class HomePage extends StatefulWidget {
-  final int totalContenidos;
-
-  const HomePage({super.key, this.totalContenidos = 932});
+  const HomePage({super.key});
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
+  final _auth = FirebaseAuth.instance;
+  String? nombreUsuario;
+  Map<String, int> ejerciciosPorTema = {};
+  int totalEjercicios = 0;
+  bool mostrarDetalles = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _obtenerDatos();
+  }
+
+  Future<void> _obtenerDatos() async {
+    final user = _auth.currentUser;
+
+    if (user != null) {
+      final doc =
+          await FirebaseFirestore.instance
+              .collection('usuarios')
+              .doc(user.uid)
+              .get();
+
+      setState(() {
+        nombreUsuario = doc.data()?['Nombre'] ?? '';
+      });
+    }
+
+    final temas = {
+      'FnAlg': 'EjerFnAlg',
+      'Lim': 'EjerLim',
+      'TecInteg': 'EjerTecInteg',
+      'Der': 'EjerDer',
+    };
+
+    int total = 0;
+    Map<String, int> conteo = {};
+
+    for (final entry in temas.entries) {
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('calculo')
+              .doc(entry.key)
+              .collection(entry.value)
+              .get();
+
+      conteo[entry.key] = snapshot.docs.length;
+      total += snapshot.docs.length;
+    }
+
+    setState(() {
+      ejerciciosPorTema = conteo;
+      totalEjercicios = total;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 800;
+    final user = _auth.currentUser;
 
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
@@ -31,25 +87,13 @@ class _HomePageState extends State<HomePage> {
                 style: TextStyle(color: Colors.white, fontSize: 22),
               ),
               const SizedBox(width: 8),
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withAlpha(51),
-                      blurRadius: 4,
-                      offset: const Offset(1, 2),
-                    ),
-                  ],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.asset(
-                    'assets/images/logo_ipn.png',
-                    fit: BoxFit.contain,
-                  ),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.asset(
+                  'assets/images/logo_ipn.png',
+                  width: 40,
+                  height: 40,
+                  fit: BoxFit.contain,
                 ),
               ),
             ],
@@ -58,52 +102,35 @@ class _HomePageState extends State<HomePage> {
               isMobile
                   ? [
                     PopupMenuButton<String>(
-                      icon: const Icon(
-                        Icons.menu,
-                        color: Colors.white,
-                        size: 28,
-                      ),
+                      icon: const Icon(Icons.menu, color: Colors.white),
                       onSelected: (value) {
-                        switch (value) {
-                          case 'Inicio':
-                            Navigator.pushNamed(context, '/');
-                            break;
-                          case 'Ranking':
-                            Navigator.pushNamed(context, '/ranking');
-                            break;
-                          case 'Contenidos':
-                            Navigator.pushNamed(context, '/content');
-                            break;
-                          case 'Perfil':
-                            Navigator.pushNamed(context, '/user_profile');
-                            break;
-                        }
+                        Navigator.pushNamed(context, '/$value');
                       },
                       itemBuilder:
                           (context) => [
                             const PopupMenuItem(
-                              value: 'Inicio',
+                              value: '',
                               child: ListTile(
                                 leading: Icon(Icons.home),
                                 title: Text('Inicio'),
                               ),
                             ),
                             const PopupMenuItem(
-                              value: 'Ranking',
+                              value: 'ranking',
                               child: ListTile(
                                 leading: Icon(Icons.emoji_events),
                                 title: Text('Ranking'),
                               ),
                             ),
                             const PopupMenuItem(
-                              value: 'Contenidos',
+                              value: 'content',
                               child: ListTile(
                                 leading: Icon(Icons.book),
                                 title: Text('Contenidos'),
                               ),
                             ),
                             const PopupMenuItem(
-                              value: 'Perfil',
+                              value: 'user_profile',
                               child: ListTile(
                                 leading: Icon(Icons.person_outline),
                                 title: Text('Perfil'),
@@ -113,27 +140,18 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ]
                   : [
-                    TextButton(
-                      onPressed: () => Navigator.pushNamed(context, '/'),
-                      child: const Text(
-                        'Inicio',
-                        style: TextStyle(color: Colors.white),
+                    for (final item in [
+                      ['Inicio', '/'],
+                      ['Ranking', '/ranking'],
+                      ['Contenidos', '/content'],
+                    ])
+                      TextButton(
+                        onPressed: () => Navigator.pushNamed(context, item[1]),
+                        child: Text(
+                          item[0],
+                          style: const TextStyle(color: Colors.white),
+                        ),
                       ),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pushNamed(context, '/ranking'),
-                      child: const Text(
-                        'Ranking',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pushNamed(context, '/content'),
-                      child: const Text(
-                        'Contenidos',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
                     TextButton(
                       onPressed:
                           () => Navigator.pushNamed(context, '/user_profile'),
@@ -142,10 +160,7 @@ class _HomePageState extends State<HomePage> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
                       ),
                       child: Row(
                         children: const [
@@ -160,25 +175,13 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withAlpha(51),
-                            blurRadius: 4,
-                            offset: const Offset(1, 2),
-                          ),
-                        ],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.asset(
-                          'assets/images/logo_escom.png',
-                          fit: BoxFit.contain,
-                        ),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.asset(
+                        'assets/images/logo_escom.png',
+                        width: 40,
+                        height: 40,
+                        fit: BoxFit.contain,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -191,7 +194,9 @@ class _HomePageState extends State<HomePage> {
             isMobile
                 ? Column(
                   children: [
-                    _buildCenterColumn(context),
+                    _buildBienvenida(user),
+                    const SizedBox(height: 20),
+                    _buildContenidosCard(),
                     const SizedBox(height: 20),
                     _buildRightColumn(context, isMobile),
                   ],
@@ -201,7 +206,7 @@ class _HomePageState extends State<HomePage> {
                   children: [
                     Expanded(child: _buildLeftColumn()),
                     const SizedBox(width: 20),
-                    Expanded(child: _buildCenterColumn(context)),
+                    Expanded(child: _buildBienvenida(user)),
                     const SizedBox(width: 20),
                     Expanded(child: _buildRightColumn(context, isMobile)),
                   ],
@@ -223,108 +228,126 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         const SizedBox(height: 20),
-        Container(
-          padding: const EdgeInsets.all(22),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Text(
-            'Contenidos\n${widget.totalContenidos}+',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
-          ),
-        ),
+        _buildContenidosCard(),
       ],
     );
   }
 
-  Widget _buildCenterColumn(BuildContext context) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              'Potencia tu aprendizaje y Alcanza\ntus objetivos acad\u00e9micos.',
+  Widget _buildBienvenida(User? user) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 600),
+      child: Column(
+        children: [
+          if (nombreUsuario != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Text(
+                'Hola, $nombreUsuario 👋',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          Text(
+            'Potencia tu aprendizaje y\nAlcanza tus objetivos académicos.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.roboto(
+              color: Colors.white,
+              fontSize: 36,
+              fontWeight: FontWeight.bold,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 40),
+          Text(
+            'A través de ejercicios colaborativos\ncreados por estudiantes como tú.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.roboto(
+              color: const Color(0xFFB0E0FF),
+              fontSize: 24,
+              fontWeight: FontWeight.w600,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 120),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              'Sube tus propios ejercicios, estudia los de otros y compite por el\nreconocimiento en nuestro sistema de ranking. \u00danete a una comunidad\nde aprendizaje que recompensa tu esfuerzo y colaboraci\u00f3n.',
               textAlign: TextAlign.center,
               style: GoogleFonts.roboto(
                 color: Colors.white,
-                fontSize: 45,
-                fontWeight: FontWeight.w600,
-                height: 1.5,
+                fontSize: 16,
+                height: 1.6,
+                fontWeight: FontWeight.w400,
               ),
             ),
-            const SizedBox(height: 80),
-            Text(
-              'A trav\u00e9s de ejercicios colaborativos\ncreados por estudiantes como t\u00fa.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.roboto(
-                color: const Color(0xFFB0E0FF),
-                fontSize: 28,
-                fontWeight: FontWeight.w600,
-                height: 1.5,
+          ),
+          const SizedBox(height: 60),
+          if (user == null)
+            ElevatedButton(
+              onPressed: () => Navigator.pushNamed(context, '/login'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
               ),
+              child: const Text('Registrarse'),
             ),
-            const SizedBox(height: 120),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                'Sube tus propios ejercicios, estudia los de otros y compite por el\nreconocimiento en nuestro sistema de ranking. \u00danete a una comunidad\nde aprendizaje que recompensa tu esfuerzo y colaboraci\u00f3n.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.roboto(
-                  color: Colors.white,
-                  fontSize: 16,
-                  height: 1.6,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
+          const SizedBox(height: 120),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pushNamed(context, '/content'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.transparent,
+              foregroundColor: Colors.white,
+              side: const BorderSide(color: Colors.white),
             ),
-            const SizedBox(height: 130),
-            Wrap(
-              spacing: 20,
-              alignment: WrapAlignment.center,
-              children: [
-                ElevatedButton(
-                  onPressed: () => Navigator.pushNamed(context, '/login'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 28,
-                      vertical: 14,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  child: const Text(
-                    'Registrarse',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () => Navigator.pushNamed(context, '/content'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white, width: 1.5),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 14,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Ver contenidos'),
-                ),
-              ],
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Ver contenidos'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContenidosCard() {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          const Text(
+            'Contenidos',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          Text('$totalEjercicios+', style: const TextStyle(fontSize: 28)),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                mostrarDetalles = !mostrarDetalles;
+              });
+            },
+            child: Text(mostrarDetalles ? 'Ocultar detalles' : 'Ver más'),
+          ),
+          if (mostrarDetalles)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children:
+                  ejerciciosPorTema.entries
+                      .map(
+                        (entry) => Text(
+                          '${_nombreTema(entry.key)}: ${entry.value}',
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      )
+                      .toList(),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -398,5 +421,20 @@ class _HomePageState extends State<HomePage> {
         ),
       ],
     );
+  }
+
+  String _nombreTema(String clave) {
+    switch (clave) {
+      case 'FnAlg':
+        return 'Funciones algebraicas y trascendentes';
+      case 'Lim':
+        return 'Límites de funciones y continuidad';
+      case 'TecInteg':
+        return 'Técnicas de integración';
+      case 'Der':
+        return 'Derivada y optimización';
+      default:
+        return clave;
+    }
   }
 }
