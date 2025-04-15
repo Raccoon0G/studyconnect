@@ -97,12 +97,19 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
             .toList();
 
     final ejerRef = ejerciciosRef.doc(ejercicioId);
-
     try {
+      // Obtener nombre desde la colección 'usuarios'
+      String autorNombre = '';
+      if (user != null) {
+        final userDoc =
+            await firestore.collection('usuarios').doc(user.uid).get();
+        autorNombre = userDoc.data()?['Nombre'] ?? '';
+      }
+
       await ejerRef.set({
         'Titulo': titulo,
         'DesEjercicio': descripcion,
-        'Autor': user?.displayName ?? '',
+        'Autor': autorNombre,
         'AutorId': user?.uid ?? '',
         'CalPromedio': '',
         'FechCreacion': now,
@@ -125,9 +132,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
         builder:
             (_) => AlertDialog(
               title: const Text('Ejercicio subido'),
-              content: const Text(
-                'Tu ejercicio fue guardado correctamente en Firestore.',
-              ),
+              content: const Text('Tu ejercicio fue guardado correctamente.'),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
