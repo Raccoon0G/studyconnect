@@ -34,6 +34,7 @@ class MyApp extends StatelessWidget {
         '/terms': (context) => const TermsPage(),
         '/credits': (context) => const CreditsPage(),
         '/faq': (context) => const FAQPage(),
+        '/user_exercises': (context) => const MyExercisesPage(),
       },
     );
   }

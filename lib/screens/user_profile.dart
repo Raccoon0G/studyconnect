@@ -41,11 +41,30 @@ class UserProfilePage extends StatelessWidget {
             );
           }
 
+          // Si no hay usuario o el documento no existe
           if (!snapshot.hasData || snapshot.data == null) {
-            return const Center(
-              child: Text(
-                'No se pudo cargar el perfil.',
-                style: TextStyle(color: Colors.white),
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'No se pudo cargar el perfil.',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      FirebaseAuth.instance.signOut();
+                      Navigator.pushReplacementNamed(context, '/login');
+                    },
+                    icon: const Icon(Icons.login),
+                    label: const Text('Ir al inicio de sesión'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                    ),
+                  ),
+                ],
               ),
             );
           }
@@ -107,7 +126,11 @@ class UserProfilePage extends StatelessWidget {
                           ),
                         ),
                         ElevatedButton.icon(
-                          onPressed: () {},
+                          onPressed:
+                              () => Navigator.pushNamed(
+                                context,
+                                '/user_exercises',
+                              ),
                           icon: const Icon(Icons.list_alt),
                           label: const Text('Mis ejercicios'),
                           style: ElevatedButton.styleFrom(

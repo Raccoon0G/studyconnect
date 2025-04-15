@@ -80,7 +80,26 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   Future<void> guardarCambios() async {
-    if (user == null) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder:
+          (_) => AlertDialog(
+            title: const Text("¿Guardar cambios?"),
+            content: const Text("¿Deseas guardar los cambios realizados?"),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text("Cancelar"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text("Aceptar"),
+              ),
+            ],
+          ),
+    );
+
+    if (confirm != true) return;
 
     String finalPhotoUrl = photoUrl;
 
@@ -103,10 +122,167 @@ class _EditProfilePageState extends State<EditProfilePage> {
       },
     }, SetOptions(merge: true));
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Cambios guardados')));
+    await showDialog(
+      context: context,
+      builder:
+          (_) => AlertDialog(
+            title: const Text("Cambios guardados"),
+            content: const Text("Tu perfil se ha actualizado correctamente."),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Aceptar"),
+              ),
+            ],
+          ),
+    );
+
     Navigator.pushReplacementNamed(context, '/');
+  }
+
+  Future<void> enviarCambioContrasena() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder:
+          (_) => AlertDialog(
+            title: const Text("¿Cambiar contraseña?"),
+            content: const Text(
+              "Te enviaremos un correo para restablecer tu contraseña. ¿Deseas continuar?",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text("Cancelar"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text("Aceptar"),
+              ),
+            ],
+          ),
+    );
+
+    if (confirm != true || user == null) return;
+
+    await FirebaseAuth.instance.sendPasswordResetEmail(email: user!.email!);
+
+    await showDialog(
+      context: context,
+      builder:
+          (_) => AlertDialog(
+            title: const Text("Correo enviado"),
+            content: const Text(
+              "Hemos enviado un enlace para restablecer tu contraseña.",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Aceptar"),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Future<void> eliminarCuenta() async {
+    final confirmarEliminacion = await showDialog<bool>(
+      context: context,
+      builder:
+          (_) => AlertDialog(
+            title: const Text("¿Eliminar cuenta?"),
+            content: const Text(
+              "Esta acción es irreversible. ¿Estás seguro de que deseas eliminar tu cuenta?",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text("Cancelar"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text("Aceptar"),
+              ),
+            ],
+          ),
+    );
+
+    if (confirmarEliminacion != true || user == null) return;
+
+    final eliminarAportaciones = await showDialog<bool>(
+      context: context,
+      builder:
+          (_) => AlertDialog(
+            title: const Text("¿Eliminar tus ejercicios también?"),
+            content: const Text(
+              "¿Deseas que también se borren tus ejercicios o materiales subidos?",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text("No"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text("Sí"),
+              ),
+            ],
+          ),
+    );
+
+    if (eliminarAportaciones == true) {
+      await _eliminarAportacionesUsuario(user!.uid);
+    }
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(user!.uid)
+          .delete();
+      await user!.delete();
+    } catch (e) {
+      // Reautenticación puede ser requerida
+    }
+
+    await showDialog(
+      context: context,
+      builder:
+          (_) => AlertDialog(
+            title: const Text("Cuenta eliminada"),
+            content: const Text("Tu cuenta ha sido eliminada correctamente."),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Aceptar"),
+              ),
+            ],
+          ),
+    );
+
+    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+  }
+
+  Future<void> _eliminarAportacionesUsuario(String uid) async {
+    final categorias = ['FnAlg', 'Lim', 'Der', 'TecInteg'];
+    final firestore = FirebaseFirestore.instance;
+
+    for (final cat in categorias) {
+      final ejerRef = firestore
+          .collection('calculo')
+          .doc(cat)
+          .collection('Ejer${cat}');
+
+      final query = await ejerRef.where('AutorId', isEqualTo: uid).get();
+
+      for (final doc in query.docs) {
+        await doc.reference.delete();
+      }
+    }
+
+    final matsRef = firestore.collection('Materiales');
+    final matsQuery = await matsRef.where('AutorId', isEqualTo: uid).get();
+    for (final doc in matsQuery.docs) {
+      await doc.reference.delete();
+    }
   }
 
   @override
@@ -186,14 +362,54 @@ class _EditProfilePageState extends State<EditProfilePage> {
                               (val) => setState(() => perfilVisible = val),
                         ),
                         const SizedBox(height: 20),
-                        ElevatedButton.icon(
-                          onPressed: guardarCambios,
-                          icon: const Icon(Icons.save),
-                          label: const Text('Guardar cambios'),
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(45),
-                            backgroundColor: const Color(0xFF048DD2),
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: guardarCambios,
+                                icon: const Icon(Icons.save),
+                                label: const Text('Guardar cambios'),
+                                style: ElevatedButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(45),
+                                  backgroundColor: const Color(0xFF048DD2),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: enviarCambioContrasena,
+                                icon: const Icon(Icons.lock_reset),
+                                label: const Text("Cambiar contraseña"),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.orange,
+                                  side: const BorderSide(color: Colors.orange),
+                                  minimumSize: const Size.fromHeight(45),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: eliminarCuenta,
+                                icon: const Icon(Icons.delete_forever),
+                                label: const Text("Eliminar cuenta"),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.red,
+                                  side: const BorderSide(color: Colors.red),
+                                  minimumSize: const Size.fromHeight(45),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
