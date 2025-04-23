@@ -404,6 +404,12 @@ class _HomePageState extends State<HomePage> {
           icon: const Icon(Icons.chat_bubble_outlined),
           label: const Text('Chat'),
         ),
+        const SizedBox(height: 20),
+        ElevatedButton.icon(
+          onPressed: () => Navigator.pushNamed(context, '/autoevaluation'),
+          icon: const Icon(Icons.chat_bubble_outlined),
+          label: const Text('Autoevaluación'),
+        ),
       ],
     );
   }

@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 class EditProfilePage extends StatefulWidget {
@@ -28,8 +27,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
   bool modoOscuro = true;
   bool notificaciones = true;
   bool perfilVisible = true;
-
   bool isLoading = true;
+  bool telefonoVerificado = false;
   bool correoVerificado = false;
 
   @override
@@ -58,6 +57,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       modoOscuro = data['Config']?['ModoOscuro'] ?? true;
       notificaciones = data['Config']?['Notificaciones'] ?? true;
       perfilVisible = data['Config']?['PerfilVisible'] ?? true;
+      telefonoVerificado = user!.phoneNumber != null;
       correoVerificado = user!.emailVerified;
     }
 
@@ -114,6 +114,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       'Nombre': nameController.text,
       'Correo': emailController.text,
       'Telefono': phoneController.text,
+      'TelefonoVerificado': telefonoVerificado,
       'rol': roleController.text,
       'Acerca de mi': bioController.text,
       'FotoPerfil': finalPhotoUrl,
@@ -143,149 +144,106 @@ class _EditProfilePageState extends State<EditProfilePage> {
     Navigator.pushReplacementNamed(context, '/');
   }
 
-  Future<void> enviarCambioContrasena() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder:
-          (_) => AlertDialog(
-            title: const Text("¿Cambiar contraseña?"),
-            content: const Text(
-              "Te enviaremos un correo para restablecer tu contraseña. ¿Deseas continuar?",
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text("Cancelar"),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text("Aceptar"),
-              ),
-            ],
-          ),
+  void _verificarNumero(BuildContext context) {
+    final numero = phoneController.text.trim();
+
+    if (numero.isEmpty || !numero.startsWith('+')) {
+      _mostrarDialogo(
+        "Número inválido",
+        "Introduce un número válido en formato internacional, por ejemplo: +52XXXXXXXXXX",
+      );
+      return;
+    }
+
+    FirebaseAuth.instance.verifyPhoneNumber(
+      phoneNumber: numero,
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        await FirebaseAuth.instance.currentUser?.linkWithCredential(credential);
+        setState(() => telefonoVerificado = true);
+        await _guardarEstadoVerificado();
+        _mostrarDialogo('Éxito', 'Tu número fue verificado automáticamente.');
+      },
+      verificationFailed: (FirebaseAuthException e) {
+        _mostrarDialogo('Error', 'Fallo en la verificación: ${e.message}');
+      },
+      codeSent: (String verificationId, int? resendToken) {
+        _mostrarDialogoCodigo(context, verificationId);
+      },
+      codeAutoRetrievalTimeout: (String verificationId) {},
     );
+  }
 
-    if (confirm != true || user == null) return;
+  Future<void> _guardarEstadoVerificado() async {
+    await FirebaseFirestore.instance.collection('usuarios').doc(user!.uid).set({
+      'TelefonoVerificado': true,
+    }, SetOptions(merge: true));
+  }
 
-    await FirebaseAuth.instance.sendPasswordResetEmail(email: user!.email!);
+  void _mostrarDialogoCodigo(BuildContext context, String verificationId) {
+    final controller = TextEditingController();
 
-    await showDialog(
+    showDialog(
       context: context,
       builder:
           (_) => AlertDialog(
-            title: const Text("Correo enviado"),
-            content: const Text(
-              "Hemos enviado un enlace para restablecer tu contraseña.",
+            title: const Text('Código enviado'),
+            content: TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Código de 6 dígitos',
+              ),
             ),
             actions: [
               TextButton(
+                child: const Text('Cancelar'),
                 onPressed: () => Navigator.pop(context),
-                child: const Text("Aceptar"),
+              ),
+              ElevatedButton(
+                child: const Text('Verificar'),
+                onPressed: () async {
+                  final code = controller.text.trim();
+                  final credential = PhoneAuthProvider.credential(
+                    verificationId: verificationId,
+                    smsCode: code,
+                  );
+
+                  try {
+                    await FirebaseAuth.instance.currentUser?.linkWithCredential(
+                      credential,
+                    );
+                    setState(() => telefonoVerificado = true);
+                    await _guardarEstadoVerificado();
+                    Navigator.pop(context);
+                    _mostrarDialogo(
+                      'Éxito',
+                      'Teléfono verificado correctamente',
+                    );
+                  } catch (e) {
+                    _mostrarDialogo('Error', 'Código inválido o ya usado.');
+                  }
+                },
               ),
             ],
           ),
     );
   }
 
-  Future<void> eliminarCuenta() async {
-    final confirmarEliminacion = await showDialog<bool>(
+  void _mostrarDialogo(String titulo, String mensaje) {
+    showDialog(
       context: context,
       builder:
           (_) => AlertDialog(
-            title: const Text("¿Eliminar cuenta?"),
-            content: const Text(
-              "Esta acción es irreversible. ¿Estás seguro de que deseas eliminar tu cuenta?",
-            ),
+            title: Text(titulo),
+            content: Text(mensaje),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text("Cancelar"),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text("Aceptar"),
-              ),
-            ],
-          ),
-    );
-
-    if (confirmarEliminacion != true || user == null) return;
-
-    final eliminarAportaciones = await showDialog<bool>(
-      context: context,
-      builder:
-          (_) => AlertDialog(
-            title: const Text("¿Eliminar tus ejercicios también?"),
-            content: const Text(
-              "¿Deseas que también se borren tus ejercicios o materiales subidos?",
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text("No"),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text("Sí"),
-              ),
-            ],
-          ),
-    );
-
-    if (eliminarAportaciones == true) {
-      await _eliminarAportacionesUsuario(user!.uid);
-    }
-
-    try {
-      await FirebaseFirestore.instance
-          .collection('usuarios')
-          .doc(user!.uid)
-          .delete();
-      await user!.delete();
-    } catch (e) {
-      // Reautenticación puede ser requerida
-    }
-
-    await showDialog(
-      context: context,
-      builder:
-          (_) => AlertDialog(
-            title: const Text("Cuenta eliminada"),
-            content: const Text("Tu cuenta ha sido eliminada correctamente."),
-            actions: [
-              TextButton(
+                child: const Text('Aceptar'),
                 onPressed: () => Navigator.pop(context),
-                child: const Text("Aceptar"),
               ),
             ],
           ),
     );
-
-    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
-  }
-
-  Future<void> _eliminarAportacionesUsuario(String uid) async {
-    final categorias = ['FnAlg', 'Lim', 'Der', 'TecInteg'];
-    final firestore = FirebaseFirestore.instance;
-
-    for (final cat in categorias) {
-      final ejerRef = firestore
-          .collection('calculo')
-          .doc(cat)
-          .collection('Ejer$cat');
-
-      final query = await ejerRef.where('AutorId', isEqualTo: uid).get();
-
-      for (final doc in query.docs) {
-        await doc.reference.delete();
-      }
-    }
-
-    final matsRef = firestore.collection('Materiales');
-    final matsQuery = await matsRef.where('AutorId', isEqualTo: uid).get();
-    for (final doc in matsQuery.docs) {
-      await doc.reference.delete();
-    }
   }
 
   @override
@@ -357,20 +315,37 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         ),
 
                         const SizedBox(height: 12),
-
-                        TextField(
-                          controller: phoneController,
-                          keyboardType: TextInputType.number,
-                          maxLength: 10,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _inputField(
+                                'Teléfono (opcional)',
+                                phoneController,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            ElevatedButton.icon(
+                              onPressed: () => _verificarNumero(context),
+                              icon: const Icon(Icons.verified),
+                              label: const Text('Verificar'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                minimumSize: const Size(10, 48),
+                              ),
+                            ),
                           ],
-                          decoration: const InputDecoration(
-                            labelText: 'Teléfono (opcional)',
-                            border: OutlineInputBorder(),
-                            counterText: '',
-                          ),
                         ),
+                        if (telefonoVerificado)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 6),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                '✔ Teléfono verificado',
+                                style: TextStyle(color: Colors.green),
+                              ),
+                            ),
+                          ),
 
                         const SizedBox(height: 12),
                         _inputField('Carrera o Rol', roleController),
@@ -405,40 +380,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                 style: ElevatedButton.styleFrom(
                                   minimumSize: const Size.fromHeight(45),
                                   backgroundColor: const Color(0xFF048DD2),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: enviarCambioContrasena,
-                                icon: const Icon(Icons.lock_reset),
-                                label: const Text("Cambiar contraseña"),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.orange,
-                                  side: const BorderSide(color: Colors.orange),
-                                  minimumSize: const Size.fromHeight(45),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: eliminarCuenta,
-                                icon: const Icon(Icons.delete_forever),
-                                label: const Text("Eliminar cuenta"),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.red,
-                                  side: const BorderSide(color: Colors.red),
-                                  minimumSize: const Size.fromHeight(45),
                                 ),
                               ),
                             ),

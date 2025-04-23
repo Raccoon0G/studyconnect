@@ -6,12 +6,25 @@ class ContentPage extends StatelessWidget {
 
   final List<Map<String, String>> temas = const [
     {
+      'clave': 'FnAlg',
       'titulo': 'Funciones algebraicas y trascendentes',
       'imagen': 'funciones.png',
     },
-    {'titulo': 'Límites de funciones y Continuidad', 'imagen': 'limites.png'},
-    {'titulo': 'Derivada y optimización', 'imagen': 'derivadas3.png'},
-    {'titulo': 'Técnicas de integración', 'imagen': 'tecnicas2.png'},
+    {
+      'clave': 'Lim',
+      'titulo': 'Límites de funciones y Continuidad',
+      'imagen': 'limites.png',
+    },
+    {
+      'clave': 'Der',
+      'titulo': 'Derivada y optimización',
+      'imagen': 'derivadas3.png',
+    },
+    {
+      'clave': 'TecInteg',
+      'titulo': 'Técnicas de integración',
+      'imagen': 'tecnicas2.png',
+    },
   ];
 
   @override
@@ -115,29 +128,36 @@ class ContentPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 30),
-          _boton(context, 'Ver contenido', Icons.arrow_forward),
+          _boton(context, 'Ver contenido', Icons.arrow_forward, tema),
           const SizedBox(height: 30),
-          _boton(context, 'Agregar ejercicio', Icons.add),
+          _boton(context, 'Agregar ejercicio', Icons.add, tema),
           const SizedBox(height: 30),
-          _boton(context, 'Agregar Material', Icons.add),
-          SizedBox(height: 50),
+          _boton(context, 'Agregar Material', Icons.add, tema),
+          const SizedBox(height: 50),
           _imagenIlustrativa(ancho: 450, alto: 379, assetName: tema['imagen']!),
         ],
       ),
     );
   }
 
-  //TODO Arreglar botones
-  Widget _boton(BuildContext context, String texto, IconData icono) {
+  Widget _boton(
+    BuildContext context,
+    String texto,
+    IconData icono,
+    Map<String, String> tema,
+  ) {
     return ElevatedButton(
       onPressed: () {
-        // Acción del botón
         if (texto == 'Ver contenido') {
-          // Navegar a la página de contenido
-          Navigator.pushNamed(context, '/exercise_list');
+          Navigator.pushNamed(
+            context,
+            '/exercise_list',
+            arguments: {'tema': tema['clave']!, 'titulo': tema['titulo']!},
+          );
         } else if (texto == 'Agregar ejercicio') {
-          // Navegar a la página de agregar ejercicio
           Navigator.pushNamed(context, '/exercise_upload');
+        } else if (texto == 'Agregar Material') {
+          Navigator.pushNamed(context, '/upload_material');
         }
       },
       style: ElevatedButton.styleFrom(

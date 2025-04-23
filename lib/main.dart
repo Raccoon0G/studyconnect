@@ -1,5 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart'; // Asegúrate de tener este archivo generado por `flutterfire configure`
+import 'firebase_options.dart';
 import 'package:flutter/material.dart';
 import 'package:study_connect/screens/screens.dart';
 
@@ -24,7 +24,6 @@ class MyApp extends StatelessWidget {
         '/content': (context) => const ContentPage(),
         '/exercise_list': (context) => const ExerciseListPage(),
         '/exercise_upload': (context) => const ExerciseUploadPage(),
-        '/exercise_view': (context) => const ExerciseViewPage(),
         '/ranking': (context) => const RankingPage(),
         '/user_profile': (context) => const UserProfilePage(),
         '/edit_profile': (context) => const EditProfilePage(),
@@ -35,6 +34,21 @@ class MyApp extends StatelessWidget {
         '/credits': (context) => const CreditsPage(),
         '/faq': (context) => const FAQPage(),
         '/user_exercises': (context) => const MyExercisesPage(),
+        '/autoevaluation': (context) => AutoevaluationPage(),
+        '/upload_material': (context) => UploadMaterialPage(),
+      },
+      onGenerateRoute: (settings) {
+        if (settings.name == '/exercise_view') {
+          final args = settings.arguments as Map<String, dynamic>;
+          return MaterialPageRoute(
+            builder:
+                (context) => ExerciseViewPage(
+                  tema: args['tema'],
+                  ejercicioId: args['ejercicioId'],
+                ),
+          );
+        }
+        return null;
       },
     );
   }

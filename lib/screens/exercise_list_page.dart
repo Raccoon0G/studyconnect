@@ -1,45 +1,22 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class ExerciseListPage extends StatelessWidget {
   const ExerciseListPage({super.key});
 
-  final List<Map<String, dynamic>> ejercicios = const [
-    {
-      'titulo': 'Hallar el dominio de las funciones',
-      'autor': 'Jeovany',
-      'calificacion': 4,
-    },
-    {
-      'titulo': 'Averigua cual es el dominio de las funciones',
-      'autor': 'Juan',
-      'calificacion': 3,
-    },
-    {'titulo': 'Dominio de la función', 'autor': 'Hegan', 'calificacion': 5},
-    {
-      'titulo': 'Identifica el rango de las funciones',
-      'autor': 'Jeovany',
-      'calificacion': 4,
-    },
-    {
-      'titulo': 'Halla las raíces de funciones polinómicas',
-      'autor': 'Jeovany',
-      'calificacion': 3,
-    },
-    {
-      'titulo': 'Resuelve funciones racionales',
-      'autor': 'Gerardo',
-      'calificacion': 5,
-    },
-    {
-      'titulo': 'Calcula el límite de la función',
-      'autor': 'Abraham',
-      'calificacion': 2,
-    },
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final args = ModalRoute.of(context)?.settings.arguments as Map?;
+    final String temaKey = args?['tema'] ?? 'FnAlg';
+    final String tituloTema =
+        args?['titulo'] ?? 'Funciones algebraicas y trascendentes';
+
+    final CollectionReference ejerciciosRef = FirebaseFirestore.instance
+        .collection('calculo')
+        .doc(temaKey)
+        .collection('Ejer$temaKey');
+
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
       appBar: AppBar(
@@ -47,22 +24,22 @@ class ExerciseListPage extends StatelessWidget {
         title: const Text('Study Connect'),
         actions: [
           TextButton(
-            onPressed: () {},
+            onPressed: () => Navigator.pushNamed(context, '/'),
             child: const Text('Inicio', style: TextStyle(color: Colors.white)),
           ),
           TextButton(
-            onPressed: () {},
+            onPressed: () => Navigator.pushNamed(context, '/ranking'),
             child: const Text('Ranking', style: TextStyle(color: Colors.white)),
           ),
           TextButton(
-            onPressed: () {},
+            onPressed: () => Navigator.pushNamed(context, '/content'),
             child: const Text(
               'Contenidos',
               style: TextStyle(color: Colors.white),
             ),
           ),
           TextButton(
-            onPressed: () {},
+            onPressed: () => Navigator.pushNamed(context, '/user_profile'),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
@@ -83,9 +60,9 @@ class ExerciseListPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Funciones algebraicas y trascendentales',
-              style: TextStyle(
+            Text(
+              tituloTema,
+              style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
@@ -94,8 +71,6 @@ class ExerciseListPage extends StatelessWidget {
             const SizedBox(height: 20),
             Expanded(
               child: Container(
-                height: 500,
-                width: double.infinity,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [Colors.white, Colors.blueAccent],
@@ -105,115 +80,109 @@ class ExerciseListPage extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 padding: const EdgeInsets.all(16),
-                child: SingleChildScrollView(
-                  child: DataTable(
-                    columnSpacing: 20,
-                    headingRowColor: WidgetStateProperty.all(
-                      const Color(0xFF48C9EF),
-                    ),
-                    columns: [
-                      DataColumn(
-                        label: Text(
-                          'Ejercicios',
-                          style: GoogleFonts.roboto(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                          ),
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: ejerciciosRef.snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final ejercicios = snapshot.data?.docs ?? [];
+
+                    if (ejercicios.isEmpty) {
+                      return const Center(
+                        child: Text(
+                          'No hay ejercicios disponibles.',
+                          style: TextStyle(color: Colors.black),
                         ),
-                      ),
-                      DataColumn(
-                        label: Text(
-                          'Calificación',
-                          style: GoogleFonts.roboto(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                          ),
+                      );
+                    }
+
+                    return SingleChildScrollView(
+                      scrollDirection: Axis.vertical,
+                      child: DataTable(
+                        columnSpacing: 20,
+                        headingRowColor: WidgetStateProperty.all(
+                          const Color(0xFF48C9EF),
                         ),
-                      ),
-                      DataColumn(
-                        label: Text(
-                          'Autor',
-                          style: GoogleFonts.roboto(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
+                        columns: const [
+                          DataColumn(
+                            label: Text(
+                              'Ejercicios',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 22,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                      DataColumn(
-                        label: Text(
-                          '',
-                          style: GoogleFonts.roboto(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
+                          DataColumn(
+                            label: Text(
+                              'Calificación',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 22,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ],
-                    rows:
-                        ejercicios.map((ej) {
-                          return DataRow(
-                            cells: [
-                              DataCell(
-                                Center(
-                                  child: Text(
-                                    ej['titulo'],
-                                    style: GoogleFonts.roboto(
-                                      color: Colors.black,
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.bold,
+                          DataColumn(
+                            label: Text(
+                              'Autor',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 22,
+                              ),
+                            ),
+                          ),
+                          DataColumn(label: Text('')),
+                        ],
+                        rows:
+                            ejercicios.map((doc) {
+                              final data = doc.data() as Map<String, dynamic>;
+                              return DataRow(
+                                cells: [
+                                  DataCell(Text(data['Titulo'] ?? '')),
+                                  DataCell(
+                                    _buildStars(
+                                      (data['CalPromedio'] ?? '0').toString(),
                                     ),
                                   ),
-                                ),
-                              ),
-                              DataCell(_buildStars(ej['calificacion'])),
-                              DataCell(
-                                Text(
-                                  ej['autor'],
-                                  style: GoogleFonts.roboto(
-                                    color: Colors.white,
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF1A1A1A),
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(20),
+                                  DataCell(Text(data['Autor'] ?? '')),
+                                  DataCell(
+                                    ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(
+                                          0xFF1A1A1A,
+                                        ),
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                        ),
+                                      ),
+                                      onPressed: () {
+                                        Navigator.pushNamed(
+                                          context,
+                                          '/exercise_view',
+                                          arguments: {
+                                            'tema': temaKey,
+                                            'ejercicioId': doc.id,
+                                          },
+                                        );
+                                      },
+                                      icon: const Icon(
+                                        Icons.arrow_forward,
+                                        size: 16,
+                                      ),
+                                      label: const Text('Ver ejercicio'),
                                     ),
                                   ),
-                                  onPressed: () {
-                                    // Acción del botón
-                                    Navigator.pushNamed(
-                                      context,
-                                      '/exercise_view',
-                                      arguments: ej,
-                                    );
-                                  },
-                                  icon: const Icon(
-                                    Icons.arrow_forward,
-                                    size: 16,
-                                  ),
-                                  label: Text(
-                                    'Ver ejercicio',
-                                    style: GoogleFonts.roboto(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
-                  ),
+                                ],
+                              );
+                            }).toList(),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -223,14 +192,16 @@ class ExerciseListPage extends StatelessWidget {
     );
   }
 
-  Widget _buildStars(int count) {
+  Widget _buildStars(String calificacionStr) {
+    final int calificacion =
+        int.tryParse(calificacionStr.split('.').first) ?? 0;
     return Row(
       children: List.generate(5, (index) {
-        if (index < count) {
-          return const Icon(Icons.star, color: Colors.yellow, size: 20);
-        } else {
-          return const Icon(Icons.star_border, color: Colors.white, size: 20);
-        }
+        return Icon(
+          index < calificacion ? Icons.star : Icons.star_border,
+          color: index < calificacion ? Colors.yellow : Colors.white,
+          size: 20,
+        );
       }),
     );
   }

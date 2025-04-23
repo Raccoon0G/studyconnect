@@ -1,11 +1,20 @@
 import 'dart:html' as html;
 import 'dart:typed_data';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:screenshot/screenshot.dart';
 
 class ExerciseViewPage extends StatefulWidget {
-  const ExerciseViewPage({super.key});
+  final String tema;
+  final String ejercicioId;
+
+  const ExerciseViewPage({
+    super.key,
+    required this.tema,
+    required this.ejercicioId,
+  });
 
   @override
   State<ExerciseViewPage> createState() => _ExerciseViewPageState();
@@ -14,310 +23,64 @@ class ExerciseViewPage extends StatefulWidget {
 class _ExerciseViewPageState extends State<ExerciseViewPage> {
   final ScreenshotController _screenshotController = ScreenshotController();
 
-  final List<Map<String, dynamic>> comentarios = [
-    {'usuario': 'Juan', 'comentario': 'Muy útil, gracias!', 'estrellas': 4},
-    {'usuario': 'Ana', 'comentario': 'Excelente explicación.', 'estrellas': 5},
-  ];
+  Map<String, dynamic>? ejercicioData;
+  List<String> pasos = [];
+  List<String> descripciones = [];
+  List<Map<String, dynamic>> comentarios = [];
+  List<Map<String, dynamic>> versionesPrevias = [];
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF036799),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF048DD2),
-        title: const Text('Study Connect'),
-        actions: [
-          TextButton(
-            onPressed: () {},
-            child: const Text('Inicio', style: TextStyle(color: Colors.white)),
-          ),
-          TextButton(
-            onPressed: () {},
-            child: const Text('Ranking', style: TextStyle(color: Colors.white)),
-          ),
-          TextButton(
-            onPressed: () {},
-            child: const Text(
-              'Contenidos',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-          TextButton(
-            onPressed: () {},
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                'Perfil',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-        ],
-      ),
-      body: Screenshot(
-        controller: _screenshotController,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Funciones algebraicas y trascendentales',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 300,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF48C9EF),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Center(
-                            child: Text(
-                              'Última actualización',
-                              style: GoogleFonts.roboto(
-                                color: Colors.white,
-                                fontSize: 24,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Center(
-                            child: Text(
-                              '05/11/24',
-                              style: GoogleFonts.roboto(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Center(
-                            child: Text(
-                              'Autor :',
-                              style: GoogleFonts.roboto(
-                                color: Colors.white,
-                                fontSize: 20,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Center(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                'Abraham',
-                                style: GoogleFonts.roboto(
-                                  color: Colors.black,
-                                  fontSize: 17,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Center(
-                            child: Text(
-                              'Calificación :',
-                              style: GoogleFonts.roboto(
-                                color: Colors.white,
-                                fontSize: 20,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: List.generate(5, (i) {
-                              return const Icon(
-                                Icons.star,
-                                color: Colors.yellow,
-                                size: 20,
-                              );
-                            }),
-                          ),
-                          const SizedBox(height: 20),
-                          Expanded(
-                            child: Center(
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(20),
-                                child: Image.asset(
-                                  'assets/images/funciones.png',
-                                  height: 600,
-                                  width: double.infinity,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: Container(
-                        height: 800,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: SingleChildScrollView(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Ejercicio nº 1:',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              const Text(
-                                'Halla el dominio de definición de las siguientes funciones:\n'
-                                'a) y = 1 / (x² - 9)\n'
-                                'b) y = √(x - 2)',
-                              ),
-                              const SizedBox(height: 20),
-                              const Text(
-                                'Solución:',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 10),
-                              const Text(
-                                'a) x² - 9 = 0 → x = ±3 → Dominio = R − {−3,3}\n'
-                                'b) x − 2 ≥ 0 → x ≥ 2 → Dominio = [2, ∞)',
-                              ),
-                              const SizedBox(height: 300),
-                              const Divider(
-                                thickness: 1,
-                                color: Colors.black26,
-                              ),
-                              const SizedBox(height: 20),
-                              ExpansionTile(
-                                title: const Text(
-                                  'Comentarios',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 18,
-                                    color: Colors.black,
-                                  ),
-                                ),
-                                children: [
-                                  SizedBox(
-                                    height: 200,
-                                    child: ListView.builder(
-                                      padding: const EdgeInsets.all(8),
-                                      itemCount: comentarios.length,
-                                      itemBuilder: (context, index) {
-                                        final comentario = comentarios[index];
-                                        return ListTile(
-                                          leading: const Icon(Icons.person),
-                                          title: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                comentario['usuario'] ??
-                                                    'Anónimo',
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 14,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(comentario['comentario']),
-                                            ],
-                                          ),
-                                          subtitle: Row(
-                                            children: List.generate(5, (i) {
-                                              return Icon(
-                                                i < comentario['estrellas']
-                                                    ? Icons.star
-                                                    : Icons.star_border,
-                                                size: 16,
-                                                color: Colors.yellow,
-                                              );
-                                            }),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _botonAccion(
-                    'Calificar',
-                    Icons.star,
-                    onPressed: _mostrarDialogoCalificacion,
-                  ),
-                  const SizedBox(width: 20),
-                  _botonAccion(
-                    'Compartir',
-                    Icons.share,
-                    onPressed: _compartirCapturaConFacebookWeb,
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  void initState() {
+    super.initState();
+    _cargarDatosDesdeFirestore();
   }
 
-  Future<void> _compartirCapturaConFacebookWeb() async {
-    final Uint8List? image = await _screenshotController.capture();
-    if (image != null) {
-      final blob = html.Blob([image]);
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      html.AnchorElement(href: url)
-        ..target = '_blank'
-        ..download = "captura.png"
-        ..click();
-      html.Url.revokeObjectUrl(url);
-      // Abre una nueva pestaña con diálogo para compartir en Facebook
-      html.window.open(
-        'https://www.facebook.com/sharer/sharer.php?u=https://tu-sitio.com',
-        '_blank',
-      );
+  Future<void> _cargarDatosDesdeFirestore() async {
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final docRef = firestore
+          .collection('calculo')
+          .doc(widget.tema)
+          .collection('Ejer${widget.tema}')
+          .doc(widget.ejercicioId);
+
+      final docSnap = await docRef.get();
+      final data = docSnap.data();
+      if (data == null) return;
+
+      final versionId = data['versionActual'] ?? 'Version_01';
+      final versionSnap =
+          await docRef.collection('Versiones').doc(versionId).get();
+      final versionData = versionSnap.data();
+
+      final versionesSnap =
+          await docRef
+              .collection('Versiones')
+              .orderBy('Fecha', descending: true)
+              .get();
+
+      final versiones =
+          versionesSnap.docs
+              .where((v) => v.id != versionId)
+              .map((doc) => {'id': doc.id, 'data': doc.data()})
+              .toList();
+
+      setState(() {
+        ejercicioData = data;
+        pasos = List<String>.from(versionData?['PasosEjer'] ?? []);
+        descripciones = List<String>.from(versionData?['DescPasos'] ?? []);
+        comentarios = List<Map<String, dynamic>>.from(
+          data['Comentarios'] ?? [],
+        );
+        versionesPrevias = versiones;
+      });
+    } catch (e) {
+      debugPrint('❌ Error al cargar ejercicio: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al cargar el ejercicio.')),
+        );
+      }
     }
   }
 
@@ -361,17 +124,29 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () {
+                  onPressed: () async {
                     if (commentController.text.isNotEmpty && rating > 0) {
+                      final comentario = {
+                        'usuario': 'Tú',
+                        'comentario': commentController.text,
+                        'estrellas': rating,
+                      };
+
+                      await FirebaseFirestore.instance
+                          .collection('calculo')
+                          .doc(widget.tema)
+                          .collection('Ejer${widget.tema}')
+                          .doc(widget.ejercicioId)
+                          .update({
+                            'Comentarios': FieldValue.arrayUnion([comentario]),
+                          });
+
                       setState(() {
-                        comentarios.add({
-                          'usuario': 'Tú',
-                          'comentario': commentController.text,
-                          'estrellas': rating,
-                        });
+                        comentarios.add(comentario);
                       });
+
+                      Navigator.pop(context);
                     }
-                    Navigator.pop(context);
                   },
                   child: const Text("Enviar"),
                 ),
@@ -383,21 +158,253 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     );
   }
 
-  Widget _botonAccion(
-    String texto,
-    IconData icono, {
-    required VoidCallback onPressed,
-  }) {
+  Future<void> _compartirCapturaConFacebookWeb() async {
+    final Uint8List? image = await _screenshotController.capture();
+    if (image != null) {
+      final blob = html.Blob([image]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      html.AnchorElement(href: url)
+        ..target = '_blank'
+        ..download = "captura.png"
+        ..click();
+      html.Url.revokeObjectUrl(url);
+      html.window.open(
+        'https://www.facebook.com/sharer/sharer.php?u=https://tu-sitio.com',
+        '_blank',
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (ejercicioData == null) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF036799),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final autor = ejercicioData?['Autor'] ?? 'Anónimo';
+    final fecha = (ejercicioData?['FechMod'] as Timestamp?)?.toDate();
+    final cal =
+        int.tryParse(
+          (ejercicioData?['CalPromedio'] ?? '0').toString().split('.').first,
+        ) ??
+        0;
+    final titulo = ejercicioData?['Titulo'] ?? '';
+    final desc = ejercicioData?['DesEjercicio'] ?? '';
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF036799),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF048DD2),
+        title: const Text('Study Connect'),
+      ),
+      body: Screenshot(
+        controller: _screenshotController,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                titulo,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Autor: $autor',
+                style: const TextStyle(color: Colors.white),
+              ),
+              if (fecha != null)
+                Text(
+                  'Fecha: ${fecha.day}/${fecha.month}/${fecha.year}',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              Row(
+                children: List.generate(
+                  5,
+                  (i) => Icon(
+                    i < cal ? Icons.star : Icons.star_border,
+                    color: Colors.yellow,
+                    size: 20,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Math.tex(
+                  desc,
+                  mathStyle: MathStyle.display,
+                  textStyle: const TextStyle(fontSize: 16),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Solución paso a paso:',
+                style: TextStyle(color: Colors.white, fontSize: 20),
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: ListView(
+                  children: [
+                    ...List.generate(pasos.length, (index) {
+                      return Card(
+                        elevation: 2,
+                        margin: const EdgeInsets.symmetric(vertical: 10),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (index < descripciones.length)
+                                Text(
+                                  'Paso ${index + 1}: ${descripciones[index]}',
+                                ),
+                              const SizedBox(height: 6),
+                              Math.tex(
+                                pasos[index],
+                                mathStyle: MathStyle.display,
+                                textStyle: const TextStyle(fontSize: 18),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                    if (versionesPrevias.isNotEmpty) ...[
+                      const Divider(height: 30),
+                      const Text(
+                        'Versiones anteriores:',
+                        style: TextStyle(color: Colors.white, fontSize: 18),
+                      ),
+                      ...versionesPrevias.map((ver) {
+                        final v = ver['data'];
+                        final ps = List<String>.from(v['PasosEjer'] ?? []);
+                        final ds = List<String>.from(v['DescPasos'] ?? []);
+                        final fecha = (v['Fecha'] as Timestamp?)?.toDate();
+                        return Card(
+                          color: Colors.grey.shade200,
+                          margin: const EdgeInsets.symmetric(vertical: 8),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Versión ${ver['id']} — ${fecha != null ? '${fecha.day}/${fecha.month}/${fecha.year}' : ''}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                ...List.generate(ps.length, (i) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        if (i < ds.length)
+                                          Text('Paso ${i + 1}: ${ds[i]}'),
+                                        Math.tex(
+                                          ps[i],
+                                          mathStyle: MathStyle.display,
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                    ],
+                    const Divider(),
+                    const Text(
+                      'Comentarios:',
+                      style: TextStyle(color: Colors.white, fontSize: 18),
+                    ),
+                    const SizedBox(height: 10),
+                    ...comentarios.map(
+                      (c) => ListTile(
+                        leading: const Icon(Icons.person, color: Colors.white),
+                        title: Text(
+                          c['usuario'] ?? 'Anónimo',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              c['comentario'] ?? '',
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            Row(
+                              children: List.generate(5, (i) {
+                                return Icon(
+                                  i < (c['estrellas'] ?? 0)
+                                      ? Icons.star
+                                      : Icons.star_border,
+                                  size: 16,
+                                  color: Colors.yellow,
+                                );
+                              }),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _botonAccion(
+                    'Calificar',
+                    Icons.star,
+                    _mostrarDialogoCalificacion,
+                  ),
+                  const SizedBox(width: 20),
+                  _botonAccion(
+                    'Compartir',
+                    Icons.share,
+                    _compartirCapturaConFacebookWeb,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _botonAccion(String texto, IconData icono, VoidCallback onPressed) {
     return ElevatedButton.icon(
       onPressed: onPressed,
+      icon: Icon(icono),
+      label: Text(texto),
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color(0xFF1A1A1A),
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
       ),
-      icon: Icon(icono, size: 18),
-      label: Text(texto),
     );
   }
 }
