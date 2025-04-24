@@ -251,6 +251,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
 
   Widget _estrellaConDecimal(double valor) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(5, (i) {
         if (valor >= i + 1)
           return const Icon(Icons.star, color: Colors.yellow, size: 20);
@@ -355,301 +356,504 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Columna izquierda (info autor + imagen)
               Expanded(
                 flex: 1,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      constraints: const BoxConstraints(
-                        minWidth: 100,
-                        maxWidth: 400,
+                child: Container(
+                  margin: const EdgeInsets.only(right: 16),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF055B84),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _infoConIcono(
+                        Icons.person,
+                        'Autor: $autor',
+                        alineacion: MainAxisAlignment.center,
                       ),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Math.tex(
-                          nombre.replaceAll(' ', r'\ ').replaceAll('\n', r'\\'),
-                          mathStyle: MathStyle.display,
-                          textStyle: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
+                      const SizedBox(height: 8),
+                      Center(
+                        child: Text(
+                          'Version :',
+                          style: GoogleFonts.ebGaramond(
+                            fontSize: 18,
                             fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'Autor: $autor',
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    if (fecha != null)
-                      Text(
-                        DateFormat('dd/MM/yyyy').format(fecha),
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    const SizedBox(height: 10),
-                    _estrellaConDecimal(calificacion),
-                    Text(
-                      '${calificacion.toStringAsFixed(1)} / 5.0',
-                      style: const TextStyle(color: Colors.white70),
-                    ),
-                    const SizedBox(height: 8),
-
-                    if (versiones.isNotEmpty)
-                      DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          dropdownColor: Colors.white,
-                          value: versionSeleccionada,
-                          icon: const Icon(
-                            Icons.arrow_drop_down,
                             color: Colors.white,
                           ),
-                          style: const TextStyle(color: Colors.black),
-                          items:
-                              versiones.map<DropdownMenuItem<String>>((ver) {
-                                final fecha =
-                                    (ver['fecha'] as Timestamp?)?.toDate();
-                                final formatted =
-                                    fecha != null
-                                        ? DateFormat('dd/MM/yyyy').format(fecha)
-                                        : 'Sin fecha';
-                                return DropdownMenuItem<String>(
-                                  value: ver['id'],
-                                  child: Text(
-                                    'Versión : ${ver['id']} - $formatted',
-                                  ),
-                                );
-                              }).toList(),
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() {
-                                versionSeleccionada = value;
-                              });
-                              _cargarVersionSeleccionada(value);
-                            }
-                          },
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      if (versiones.isNotEmpty)
+                        Center(
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              dropdownColor: Colors.white,
+                              value: versionSeleccionada,
+                              icon: const Icon(
+                                Icons.arrow_drop_down,
+                                color: Colors.white,
+                              ),
+                              style: GoogleFonts.ebGaramond(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                              items:
+                                  versiones.map((ver) {
+                                    final fecha =
+                                        (ver['fecha'] as Timestamp?)?.toDate();
+                                    final formatted =
+                                        fecha != null
+                                            ? DateFormat(
+                                              'dd/MM/yyyy',
+                                            ).format(fecha)
+                                            : 'Sin fecha';
+                                    return DropdownMenuItem<String>(
+                                      value: ver['id'] as String,
+                                      child: Text('${ver['id']} - $formatted'),
+                                    );
+                                  }).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() => versionSeleccionada = val);
+                                  _cargarVersionSeleccionada(val);
+                                }
+                              },
+                            ),
+                          ),
+                        ),
 
-                    const SizedBox(height: 10),
-                    Text(
-                      '${comentarios.length} comentario(s)',
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ],
+                      Center(
+                        child: Text(
+                          'Última actualización :',
+                          style: GoogleFonts.ebGaramond(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Center(
+                        child: Text(
+                          fecha != null
+                              ? DateFormat('dd/MM/yy').format(fecha)
+                              : '---',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Center(
+                        child: Text(
+                          'Calificación :',
+                          style: GoogleFonts.ebGaramond(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _estrellaConDecimal(calificacion),
+                      const SizedBox(height: 8),
+                      Center(
+                        child: Text(
+                          '${calificacion.toStringAsFixed(1)} / 5.0',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      const Divider(color: Colors.white54),
+                      Center(
+                        child: Text(
+                          '${comentarios.length} comentario(s)',
+                          style: const TextStyle(color: Colors.white60),
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+                      // Imagen decorativa
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.asset(
+                          'assets/images/funciones.png',
+                          fit: BoxFit.cover,
+                          errorBuilder:
+                              (_, __, ___) => const Text(
+                                'No se pudo cargar la imagen.',
+                                style: TextStyle(color: Colors.redAccent),
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
+
               const SizedBox(width: 20),
               Expanded(
-                flex: 2,
-                child: ListView(
-                  children: [
-                    const Text(
-                      'Descripción del ejercicio:',
-                      style: TextStyle(fontSize: 18, color: Colors.white),
-                    ),
-                    const SizedBox(height: 20),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
+                flex: 3,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
                       ),
-                      child: Text(
-                        dividirDescripcionEnLineas(desc),
+                    ],
+                  ),
+                  child: ListView(
+                    children: [
+                      Text(
+                        'Título del ejercicio:',
                         style: GoogleFonts.ebGaramond(
-                          fontSize: 18,
-                          color: Colors.black,
-                          fontWeight: FontWeight.w500,
+                          fontSize: 19,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
                         ),
-                        softWrap: true,
-                        textAlign: TextAlign.justify,
                       ),
-                    ),
-                    //todo
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Pasos a seguir:',
-                      style: TextStyle(fontSize: 18, color: Colors.white),
-                    ),
-                    ...List.generate(
-                      pasos.length,
-                      (i) => Card(
-                        margin: const EdgeInsets.symmetric(vertical: 6),
+                      Card(
+                        elevation: 3,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        color: const Color(0xFFF6F3FA),
+                        margin: const EdgeInsets.only(bottom: 16),
                         child: Padding(
-                          padding: const EdgeInsets.all(12),
+                          padding: const EdgeInsets.all(16),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (i < descripciones.length)
-                                Math.tex(
-                                  descripciones[i]
-                                      .replaceAll(' ', r'\ ')
-                                      .replaceAll('\n', r'\\'),
-                                  mathStyle: MathStyle.display,
-                                  textStyle: const TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.black,
-                                  ),
-                                ),
                               const SizedBox(height: 16),
                               SingleChildScrollView(
                                 scrollDirection: Axis.horizontal,
                                 child: Math.tex(
-                                  pasos[i]
-                                      .replaceAll(' ', r'\,')
+                                  nombre
+                                      .replaceAll(' ', r'\ ')
                                       .replaceAll('\n', r'\\'),
                                   mathStyle: MathStyle.display,
-                                  textStyle: const TextStyle(fontSize: 18),
+                                  textStyle: const TextStyle(
+                                    fontSize: 22,
+                                    color: Colors.black,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    ExpansionTile(
-                      title: Text(
-                        'Comentarios (${comentarios.length})',
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      children:
-                          comentarios.map((c) {
-                            final fecha =
-                                (c['timestamp'] as Timestamp?)?.toDate();
-                            final formatted =
-                                fecha != null
-                                    ? DateFormat(
-                                      'dd/MM/yyyy HH:mm',
-                                    ).format(fecha)
-                                    : '';
-                            final editable =
-                                c['usuarioId'] ==
-                                FirebaseAuth.instance.currentUser?.uid;
 
-                            return ListTile(
-                              leading: const Icon(
-                                Icons.person,
-                                color: Colors.white,
-                              ),
-                              title: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      c['nombre'] ?? 'Anónimo',
+                      const SizedBox(height: 10),
+                      _infoConIcono(
+                        Icons.info,
+                        'Tema: ${widget.tema}',
+                        colorTexto: Colors.black,
+                        tamanoTexto: 17,
+                      ),
+                      const SizedBox(height: 8),
+                      _infoConIcono(
+                        Icons.info,
+                        'Ejercicio: ${widget.ejercicioId}',
+                        colorTexto: Colors.black,
+                        tamanoTexto: 17,
+                      ),
+                      const SizedBox(height: 10),
+                      const Divider(color: Colors.black87, height: 20),
+
+                      const Text(
+                        'Descripción del ejercicio:',
+                        style: TextStyle(fontSize: 18, color: Colors.black),
+                      ),
+                      const SizedBox(height: 20),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF6F3FA),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 6,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Text(
+                          dividirDescripcionEnLineas(desc),
+                          style: GoogleFonts.ebGaramond(
+                            fontSize: 18,
+                            color: Colors.black,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          softWrap: true,
+                          textAlign: TextAlign.justify,
+                        ),
+                      ),
+
+                      //todo
+                      const SizedBox(height: 20),
+                      const Divider(color: Colors.black87, height: 20),
+                      const Text(
+                        'Pasos a seguir:',
+                        style: TextStyle(fontSize: 18, color: Colors.black),
+                      ),
+                      ...List.generate(
+                        pasos.length,
+                        (i) => Card(
+                          margin: const EdgeInsets.symmetric(vertical: 6),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Paso ${i + 1}:',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: Colors.black,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                if (i < descripciones.length)
+                                  Math.tex(
+                                    descripciones[i]
+                                        .replaceAll(' ', r'\ ')
+                                        .replaceAll('\n', r'\\'),
+                                    mathStyle: MathStyle.display,
+                                    textStyle: const TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                const SizedBox(height: 16),
+                                SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Math.tex(
+                                    pasos[i]
+                                        .replaceAll(' ', r'\,')
+                                        .replaceAll('\n', r'\\'),
+                                    mathStyle: MathStyle.display,
+                                    textStyle: const TextStyle(fontSize: 18),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ExpansionTile(
+                        title: Text(
+                          'Comentarios (${comentarios.length})',
+                          style: const TextStyle(color: Colors.black),
+                        ),
+                        children:
+                            comentarios.map((c) {
+                              final fecha =
+                                  (c['timestamp'] as Timestamp?)?.toDate();
+                              final formatted =
+                                  fecha != null
+                                      ? DateFormat(
+                                        'dd/MM/yyyy HH:mm',
+                                      ).format(fecha)
+                                      : '';
+                              final editable =
+                                  c['usuarioId'] ==
+                                  FirebaseAuth.instance.currentUser?.uid;
+
+                              return ListTile(
+                                leading: const Icon(
+                                  Icons.person,
+                                  color: Colors.white,
+                                ),
+                                title: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        c['nombre'] ?? 'Anónimo',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                    if (editable)
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.delete,
+                                          size: 20,
+                                          color: Colors.redAccent,
+                                        ),
+                                        onPressed: () async {
+                                          final docs =
+                                              await FirebaseFirestore.instance
+                                                  .collection(
+                                                    'comentarios_ejercicios',
+                                                  )
+                                                  .where(
+                                                    'usuarioId',
+                                                    isEqualTo: c['usuarioId'],
+                                                  )
+                                                  .where(
+                                                    'comentario',
+                                                    isEqualTo: c['comentario'],
+                                                  )
+                                                  .where(
+                                                    'timestamp',
+                                                    isEqualTo: c['timestamp'],
+                                                  )
+                                                  .get();
+                                          for (final d in docs.docs) {
+                                            await d.reference.delete();
+                                          }
+                                          _cargarComentarios();
+                                        },
+                                      ),
+                                  ],
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      formatted,
+                                      style: const TextStyle(
+                                        color: Colors.white60,
+                                      ),
+                                    ),
+                                    Text(
+                                      c['comentario'] ?? '',
                                       style: const TextStyle(
                                         color: Colors.white,
                                       ),
                                     ),
-                                  ),
-                                  if (editable)
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.delete,
-                                        size: 20,
-                                        color: Colors.redAccent,
-                                      ),
-                                      onPressed: () async {
-                                        final docs =
-                                            await FirebaseFirestore.instance
-                                                .collection(
-                                                  'comentarios_ejercicios',
-                                                )
-                                                .where(
-                                                  'usuarioId',
-                                                  isEqualTo: c['usuarioId'],
-                                                )
-                                                .where(
-                                                  'comentario',
-                                                  isEqualTo: c['comentario'],
-                                                )
-                                                .where(
-                                                  'timestamp',
-                                                  isEqualTo: c['timestamp'],
-                                                )
-                                                .get();
-                                        for (final d in docs.docs) {
-                                          await d.reference.delete();
-                                        }
-                                        _cargarComentarios();
-                                      },
+                                    _estrellaConDecimal(
+                                      (c['estrellas'] ?? 0).toDouble(),
                                     ),
-                                ],
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    formatted,
-                                    style: const TextStyle(
-                                      color: Colors.white60,
-                                    ),
-                                  ),
-                                  Text(
-                                    c['comentario'] ?? '',
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                  _estrellaConDecimal(
-                                    (c['estrellas'] ?? 0).toDouble(),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        currentUser != null
-                            ? _botonAccion(
-                              'Calificar',
-                              Icons.star,
-                              _mostrarDialogoCalificacion,
-                            )
-                            : ElevatedButton.icon(
-                              onPressed:
-                                  () => showDialog(
-                                    context: context,
-                                    builder:
-                                        (_) => AlertDialog(
-                                          title: const Text('Inicia sesión'),
-                                          content: const Text(
-                                            'Debes iniciar sesión para comentar.',
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed:
-                                                  () => Navigator.pushNamed(
-                                                    context,
-                                                    '/login',
-                                                  ),
-                                              child: const Text(
-                                                'Iniciar sesión',
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                  ),
-                              icon: const Icon(Icons.lock),
-                              label: const Text('Inicia sesión'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.grey,
-                              ),
-                            ),
-                        const SizedBox(width: 20),
-                        _botonAccion(
-                          'Compartir',
-                          Icons.share,
-                          _compartirCapturaConFacebookWeb,
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+                      const SizedBox(height: 40),
+                      Card(
+                        color: const Color(0xFFF6F3FA),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                      ],
-                    ),
-                  ],
+                        elevation: 6,
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 20,
+                            horizontal: 24,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              const Text(
+                                '¿Te fue útil este ejercicio?',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              if (comentarios.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${comentarios.length} persona(s) ya lo calificaron',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.black54,
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 16),
+                              Wrap(
+                                spacing: 20,
+                                runSpacing: 12,
+                                alignment: WrapAlignment.center,
+                                children: [
+                                  currentUser != null
+                                      ? _botonAccion(
+                                        'Calificar',
+                                        Icons.star,
+                                        _mostrarDialogoCalificacion,
+                                      )
+                                      : ElevatedButton.icon(
+                                        onPressed:
+                                            () => showDialog(
+                                              context: context,
+                                              builder:
+                                                  (_) => AlertDialog(
+                                                    title: const Text(
+                                                      'Inicia sesión',
+                                                    ),
+                                                    content: const Text(
+                                                      'Debes iniciar sesión para comentar.',
+                                                    ),
+                                                    actions: [
+                                                      TextButton(
+                                                        onPressed:
+                                                            () =>
+                                                                Navigator.pushNamed(
+                                                                  context,
+                                                                  '/login',
+                                                                ),
+                                                        child: const Text(
+                                                          'Iniciar sesión',
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                            ),
+                                        icon: const Icon(Icons.lock),
+                                        label: const Text('Inicia sesión'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.grey,
+                                        ),
+                                      ),
+                                  _botonAccion(
+                                    'Compartir',
+                                    Icons.share,
+                                    _compartirCapturaConFacebookWeb,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              const Text(
+                                '¡Comparte este ejercicio con tus compañeros!',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontStyle: FontStyle.italic,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -691,4 +895,32 @@ String dividirDescripcionEnLineas(
   }
 
   return buffer.toString();
+}
+
+Widget _infoConIcono(
+  IconData icon,
+  String texto, {
+  MainAxisAlignment alineacion = MainAxisAlignment.start,
+  Color colorTexto = Colors.white, // Nuevo parámetro
+  double tamanoTexto = 18, // Nuevo parámetro
+}) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Row(
+      mainAxisAlignment: alineacion,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Icon(icon, color: colorTexto, size: 18),
+        const SizedBox(width: 8),
+        Text(
+          texto,
+          style: GoogleFonts.ebGaramond(
+            color: colorTexto,
+            fontSize: tamanoTexto,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    ),
+  );
 }
