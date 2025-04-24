@@ -746,7 +746,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                               return ListTile(
                                 leading: const Icon(
                                   Icons.person,
-                                  color: Colors.white,
+                                  color: Colors.black,
                                 ),
                                 title: Row(
                                   children: [
@@ -754,7 +754,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                                       child: Text(
                                         c['nombre'] ?? 'Anónimo',
                                         style: const TextStyle(
-                                          color: Colors.white,
+                                          color: Colors.black,
                                         ),
                                       ),
                                     ),
@@ -798,13 +798,13 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                                     Text(
                                       formatted,
                                       style: const TextStyle(
-                                        color: Colors.white60,
+                                        color: Colors.black,
                                       ),
                                     ),
                                     Text(
                                       c['comentario'] ?? '',
                                       style: const TextStyle(
-                                        color: Colors.white,
+                                        color: Colors.black,
                                       ),
                                     ),
                                     _estrellaConDecimal(
