@@ -1,12 +1,12 @@
 // ExerciseViewPage completo con: calificación dinámica, eliminación y edición de comentarios, estrella parcial, nombres, anónimo, y validaciones
 //todo Darle major presentacion, agregar imagenes, y mejorar el diseño
-
 import 'dart:html' as html;
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:intl/intl.dart';
 
@@ -30,8 +30,9 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
   List<String> descripciones = [];
   List<Map<String, dynamic>> comentarios = [];
   final currentUser = FirebaseAuth.instance.currentUser;
+
   List<Map<String, dynamic>> versiones = [];
-  String? versionActualId;
+  String? versionSeleccionada;
 
   @override
   void initState() {
@@ -41,37 +42,56 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
   }
 
   Future<void> _cargarDatosDesdeFirestore() async {
+    final doc =
+        await FirebaseFirestore.instance
+            .collection('calculo')
+            .doc(widget.tema)
+            .collection('Ejer${widget.tema}')
+            .doc(widget.ejercicioId)
+            .get();
+
+    final versionId = doc['versionActual'];
+    final version =
+        await doc.reference.collection('Versiones').doc(versionId).get();
+
+    setState(() {
+      ejercicioData = doc.data();
+      pasos = List<String>.from(version['PasosEjer'] ?? []);
+      descripciones = List<String>.from(version['DescPasos'] ?? []);
+    });
+
+    final versionesSnap =
+        await doc.reference
+            .collection('Versiones')
+            .orderBy('Fecha', descending: true)
+            .get();
+
+    versiones =
+        versionesSnap.docs.map((d) {
+          return {'id': d.id, 'fecha': d['Fecha']};
+        }).toList();
+
+    versionSeleccionada = versionId;
+
+    setState(() {
+      versionSeleccionada = versionId;
+    });
+  }
+
+  Future<void> _cargarVersionSeleccionada(String versionId) async {
     final docRef = FirebaseFirestore.instance
         .collection('calculo')
         .doc(widget.tema)
         .collection('Ejer${widget.tema}')
         .doc(widget.ejercicioId);
 
-    final docSnap = await docRef.get();
-    final data = docSnap.data();
-    if (data == null) return;
-
-    versionActualId = data['versionActual'];
-
-    final versionSnap =
-        await docRef.collection('Versiones').doc(versionActualId).get();
-
-    final versionesSnap =
-        await docRef.collection('Versiones').orderBy('Fecha').get();
+    final versionDoc =
+        await docRef.collection('Versiones').doc(versionId).get();
+    final versionData = versionDoc.data();
 
     setState(() {
-      ejercicioData = data;
-      pasos = List<String>.from(versionSnap['PasosEjer'] ?? []);
-      descripciones = List<String>.from(versionSnap['DescPasos'] ?? []);
-      versiones =
-          versionesSnap.docs
-              .map(
-                (d) => {
-                  'id': d.id,
-                  'fecha': (d['Fecha'] as Timestamp).toDate(),
-                },
-              )
-              .toList();
+      pasos = List<String>.from(versionData?['PasosEjer'] ?? []);
+      descripciones = List<String>.from(versionData?['DescPasos'] ?? []);
     });
   }
 
@@ -131,6 +151,40 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                     ],
                   ),
                   actions: [
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: DropdownButton<String>(
+                        value: versionSeleccionada,
+                        dropdownColor: Colors.white,
+                        icon: const Icon(
+                          Icons.arrow_drop_down,
+                          color: Colors.white,
+                        ),
+                        underline: const SizedBox(),
+                        style: const TextStyle(color: Colors.black),
+                        items:
+                            versiones.map<DropdownMenuItem<String>>((ver) {
+                              final fecha =
+                                  (ver['fecha'] as Timestamp?)?.toDate();
+                              final formatted =
+                                  fecha != null
+                                      ? DateFormat('dd/MM/yyyy').format(fecha)
+                                      : 'Sin fecha';
+                              return DropdownMenuItem<String>(
+                                value: ver['id'],
+                                child: Text(
+                                  'Versión ${ver['id']} - $formatted',
+                                ),
+                              );
+                            }).toList(),
+                        onChanged: (String? value) {
+                          if (value != null) {
+                            setState(() => versionSeleccionada = value);
+                            _cargarVersionSeleccionada(value);
+                          }
+                        },
+                      ),
+                    ),
                     TextButton(
                       onPressed: () async {
                         final user = FirebaseAuth.instance.currentUser;
@@ -250,9 +304,50 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
       appBar: AppBar(
-        title: const Text('Study Connect'),
         backgroundColor: const Color(0xFF048DD2),
+        title: const Text('Study Connect'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pushNamed(context, '/');
+            },
+            child: const Text('Inicio', style: TextStyle(color: Colors.white)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pushNamed(context, '/ranking');
+            },
+            child: const Text('Ranking', style: TextStyle(color: Colors.white)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pushNamed(context, '/content');
+            },
+            child: const Text(
+              'Contenidos',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pushNamed(context, '/profile');
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'Perfil',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+        ],
       ),
+
       body: Screenshot(
         controller: _screenshotController,
         child: Padding(
@@ -265,14 +360,26 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      nombre,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                    Container(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      constraints: const BoxConstraints(
+                        minWidth: 100,
+                        maxWidth: 400,
+                      ),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Math.tex(
+                          nombre.replaceAll(' ', r'\ ').replaceAll('\n', r'\\'),
+                          mathStyle: MathStyle.display,
+                          textStyle: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
+                    const SizedBox(height: 10),
                     Text(
                       'Autor: $autor',
                       style: const TextStyle(color: Colors.white),
@@ -288,6 +395,44 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                       '${calificacion.toStringAsFixed(1)} / 5.0',
                       style: const TextStyle(color: Colors.white70),
                     ),
+                    const SizedBox(height: 8),
+
+                    if (versiones.isNotEmpty)
+                      DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          dropdownColor: Colors.white,
+                          value: versionSeleccionada,
+                          icon: const Icon(
+                            Icons.arrow_drop_down,
+                            color: Colors.white,
+                          ),
+                          style: const TextStyle(color: Colors.black),
+                          items:
+                              versiones.map<DropdownMenuItem<String>>((ver) {
+                                final fecha =
+                                    (ver['fecha'] as Timestamp?)?.toDate();
+                                final formatted =
+                                    fecha != null
+                                        ? DateFormat('dd/MM/yyyy').format(fecha)
+                                        : 'Sin fecha';
+                                return DropdownMenuItem<String>(
+                                  value: ver['id'],
+                                  child: Text(
+                                    'Versión : ${ver['id']} - $formatted',
+                                  ),
+                                );
+                              }).toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() {
+                                versionSeleccionada = value;
+                              });
+                              _cargarVersionSeleccionada(value);
+                            }
+                          },
+                        ),
+                      ),
+
                     const SizedBox(height: 10),
                     Text(
                       '${comentarios.length} comentario(s)',
@@ -301,14 +446,30 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                 flex: 2,
                 child: ListView(
                   children: [
+                    const Text(
+                      'Descripción del ejercicio:',
+                      style: TextStyle(fontSize: 18, color: Colors.white),
+                    ),
+                    const SizedBox(height: 20),
                     Container(
+                      width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Math.tex(desc, mathStyle: MathStyle.display),
+                      child: Text(
+                        dividirDescripcionEnLineas(desc),
+                        style: GoogleFonts.ebGaramond(
+                          fontSize: 18,
+                          color: Colors.black,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        softWrap: true,
+                        textAlign: TextAlign.justify,
+                      ),
                     ),
+                    //todo
                     const SizedBox(height: 20),
                     const Text(
                       'Pasos a seguir:',
@@ -324,8 +485,27 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               if (i < descripciones.length)
-                                Text('Paso ${i + 1}: ${descripciones[i]}'),
-                              Math.tex(pasos[i], mathStyle: MathStyle.display),
+                                Math.tex(
+                                  descripciones[i]
+                                      .replaceAll(' ', r'\ ')
+                                      .replaceAll('\n', r'\\'),
+                                  mathStyle: MathStyle.display,
+                                  textStyle: const TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.black,
+                                  ),
+                                ),
+                              const SizedBox(height: 16),
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Math.tex(
+                                  pasos[i]
+                                      .replaceAll(' ', r'\,')
+                                      .replaceAll('\n', r'\\'),
+                                  mathStyle: MathStyle.display,
+                                  textStyle: const TextStyle(fontSize: 18),
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -480,16 +660,35 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
   }
 }
 
-Widget _botonAccion(String texto, IconData icono, VoidCallback accion) {
-  return ElevatedButton.icon(
-    onPressed: accion,
-    icon: Icon(icono),
-    label: Text(texto),
-    style: ElevatedButton.styleFrom(
-      backgroundColor: Colors.blue,
-      foregroundColor: Colors.white,
-      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-    ),
-  );
+//Widget _botonAccion(String texto, IconData icono, VoidCallback accion) {
+//  return ElevatedButton.icon(
+//    onPressed: accion,
+//    icon: Icon(icono),
+//    label: Text(texto),
+//    style: ElevatedButton.styleFrom(
+//      backgroundColor: Colors.blue,
+//      foregroundColor: Colors.white,
+//      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+//      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+//    ),
+//  );
+//}
+
+String dividirDescripcionEnLineas(
+  String texto, {
+  int maxPalabrasPorLinea = 25,
+}) {
+  final palabras = texto.split(' ');
+  final buffer = StringBuffer();
+
+  for (int i = 0; i < palabras.length; i++) {
+    buffer.write(palabras[i]);
+    if ((i + 1) % maxPalabrasPorLinea == 0 && i != palabras.length - 1) {
+      buffer.write('\n'); // salto de línea visible
+    } else if (i != palabras.length - 1) {
+      buffer.write(' ');
+    }
+  }
+
+  return buffer.toString();
 }
