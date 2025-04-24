@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_math_fork/flutter_math.dart';
 
 class ExerciseListPage extends StatelessWidget {
   const ExerciseListPage({super.key});
@@ -16,6 +16,8 @@ class ExerciseListPage extends StatelessWidget {
         .collection('calculo')
         .doc(temaKey)
         .collection('Ejer$temaKey');
+
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
@@ -71,6 +73,7 @@ class ExerciseListPage extends StatelessWidget {
             const SizedBox(height: 20),
             Expanded(
               child: Container(
+                width: double.infinity,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [Colors.white, Colors.blueAccent],
@@ -98,6 +101,92 @@ class ExerciseListPage extends StatelessWidget {
                       );
                     }
 
+                    if (isMobile) {
+                      return ListView(
+                        children:
+                            ejercicios.map((doc) {
+                              final data = doc.data() as Map<String, dynamic>;
+                              final tituloLatex = (data['Titulo'] ?? '')
+                                  .replaceAll(' ', r'\ ');
+                              final descripcion =
+                                  (data['DesEjercicio'] ?? '')
+                                      .split(' ')
+                                      .take(14)
+                                      .join(' ') +
+                                  '...';
+                              final autorLatex = (data['Autor'] ?? '')
+                                  .replaceAll(' ', r'\ ');
+
+                              return Card(
+                                color: Colors.white,
+                                margin: const EdgeInsets.symmetric(vertical: 8),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Math.tex(
+                                        tituloLatex,
+                                        mathStyle: MathStyle.text,
+                                        textStyle: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Math.tex(
+                                        descripcion.replaceAll(' ', r'\ '),
+                                        mathStyle: MathStyle.text,
+                                        textStyle: const TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Math.tex(
+                                        autorLatex,
+                                        mathStyle: MathStyle.text,
+                                        textStyle: const TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.black54,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Align(
+                                        alignment: Alignment.centerRight,
+                                        child: ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: const Color(
+                                              0xFF1A1A1A,
+                                            ),
+                                            foregroundColor: Colors.white,
+                                          ),
+                                          onPressed: () {
+                                            Navigator.pushNamed(
+                                              context,
+                                              '/exercise_view',
+                                              arguments: {
+                                                'tema': temaKey,
+                                                'ejercicioId': doc.id,
+                                              },
+                                            );
+                                          },
+                                          child: const Icon(
+                                            Icons.arrow_forward_ios,
+                                            size: 16,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                      );
+                    }
+
                     return SingleChildScrollView(
                       scrollDirection: Axis.vertical,
                       child: DataTable(
@@ -108,19 +197,19 @@ class ExerciseListPage extends StatelessWidget {
                         columns: const [
                           DataColumn(
                             label: Text(
-                              'Ejercicios',
+                              'Ejercicio',
                               style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 22,
+                                fontSize: 20,
                               ),
                             ),
                           ),
                           DataColumn(
                             label: Text(
-                              'Calificación',
+                              'Descripción',
                               style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 22,
+                                fontSize: 20,
                               ),
                             ),
                           ),
@@ -129,7 +218,16 @@ class ExerciseListPage extends StatelessWidget {
                               'Autor',
                               style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 22,
+                                fontSize: 20,
+                              ),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Text(
+                              'Calificación',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
                               ),
                             ),
                           ),
@@ -138,15 +236,54 @@ class ExerciseListPage extends StatelessWidget {
                         rows:
                             ejercicios.map((doc) {
                               final data = doc.data() as Map<String, dynamic>;
+                              final tituloLatex = (data['Titulo'] ?? '')
+                                  .replaceAll(' ', r'\ ');
+                              final descripcion =
+                                  (data['DesEjercicio'] ?? '')
+                                      .split(' ')
+                                      .take(14)
+                                      .join(' ') +
+                                  '...';
+                              final autorLatex = (data['Autor'] ?? '')
+                                  .replaceAll(' ', r'\ ');
+
                               return DataRow(
                                 cells: [
-                                  DataCell(Text(data['Titulo'] ?? '')),
+                                  DataCell(
+                                    Math.tex(
+                                      tituloLatex,
+                                      mathStyle: MathStyle.text,
+                                      textStyle: const TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.black,
+                                      ),
+                                    ),
+                                  ),
+                                  DataCell(
+                                    Math.tex(
+                                      descripcion.replaceAll(' ', r'\ '),
+                                      mathStyle: MathStyle.text,
+                                      textStyle: const TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                  ),
+                                  DataCell(
+                                    Math.tex(
+                                      autorLatex,
+                                      mathStyle: MathStyle.text,
+                                      textStyle: const TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.black54,
+                                      ),
+                                    ),
+                                  ),
                                   DataCell(
                                     _buildStars(
                                       (data['CalPromedio'] ?? '0').toString(),
                                     ),
                                   ),
-                                  DataCell(Text(data['Autor'] ?? '')),
                                   DataCell(
                                     ElevatedButton.icon(
                                       style: ElevatedButton.styleFrom(
@@ -174,7 +311,7 @@ class ExerciseListPage extends StatelessWidget {
                                         Icons.arrow_forward,
                                         size: 16,
                                       ),
-                                      label: const Text('Ver ejercicio'),
+                                      label: const Text('Ver'),
                                     ),
                                   ),
                                 ],
