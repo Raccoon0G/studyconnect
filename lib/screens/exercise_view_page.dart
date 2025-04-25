@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:intl/intl.dart';
@@ -364,21 +365,27 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
   }
 
   Widget _estrellaConDecimal(double valor) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(5, (i) {
-        if (valor >= i + 1) {
-          return const Icon(Icons.star, color: Color(0xFFFFC107), size: 22);
-        } else if (valor > i) {
-          return const Icon(
-            Icons.star_half,
-            color: Color(0xFFFFC107),
-            size: 22,
-          );
-        } else {
-          return const Icon(Icons.star_border, color: Colors.black38, size: 22);
-        }
-      }),
+    return Center(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(5, (i) {
+          if (valor >= i + 1) {
+            return const Icon(Icons.star, color: Color(0xFFFFC107), size: 22);
+          } else if (valor > i) {
+            return const Icon(
+              Icons.star_half,
+              color: Color(0xFFFFC107),
+              size: 22,
+            );
+          } else {
+            return const Icon(
+              Icons.star_border,
+              color: Colors.black38,
+              size: 22,
+            );
+          }
+        }),
+      ),
     );
   }
 
@@ -749,6 +756,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                       ...List.generate(
                         pasos.length,
                         (i) => Card(
+                          color: const Color(0xFFF6F3FA),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: Column(
@@ -757,52 +765,85 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                                 Text('Paso ${i + 1}:'),
                                 const SizedBox(height: 6),
 
-                                // DESCRIPCIÓN (con Builder seguro)
-                                if (i < descripciones.length)
-                                  Builder(
-                                    builder: (_) {
-                                      try {
-                                        return SingleChildScrollView(
-                                          scrollDirection: Axis.horizontal,
-                                          child: Math.tex(
-                                            prepararLaTeX(descripciones[i]),
-                                            mathStyle: MathStyle.display,
-                                            textStyle: const TextStyle(
-                                              fontSize: 16,
-                                              color: Colors.black,
-                                            ),
-                                          ),
-                                        );
-                                      } catch (e) {
-                                        return const Text(
-                                          '⚠️ Descripción inválida',
-                                          style: TextStyle(
-                                            color: Colors.redAccent,
-                                          ),
-                                        );
-                                      }
-                                    },
-                                  ),
-
-                                const SizedBox(height: 12),
-
-                                // PASO (también con Builder)
+                                // DESCRIPCIÓN y PASO (combinados)
                                 Builder(
                                   builder: (_) {
                                     try {
-                                      return SingleChildScrollView(
-                                        scrollDirection: Axis.horizontal,
-                                        child: Math.tex(
-                                          prepararLaTeX(pasos[i]),
-                                          mathStyle: MathStyle.display,
-                                          textStyle: const TextStyle(
-                                            fontSize: 18,
-                                          ),
-                                        ),
+                                      final pasoLatex = prepararLaTeX(pasos[i]);
+                                      final descLatex =
+                                          (i < descripciones.length)
+                                              ? prepararLaTeX(descripciones[i])
+                                              : '';
+
+                                      final mostrarAmbos =
+                                          pasoLatex != descLatex;
+
+                                      return Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          if (descLatex.isNotEmpty)
+                                            SingleChildScrollView(
+                                              scrollDirection: Axis.horizontal,
+                                              child: Math.tex(
+                                                descLatex,
+                                                mathStyle: MathStyle.display,
+                                                textStyle: const TextStyle(
+                                                  fontSize: 16,
+                                                  color: Colors.black,
+                                                ),
+                                              ),
+                                            ),
+                                          if (mostrarAmbos &&
+                                              pasoLatex.isNotEmpty)
+                                            const SizedBox(height: 10),
+                                          if (mostrarAmbos &&
+                                              pasoLatex.isNotEmpty)
+                                            SingleChildScrollView(
+                                              scrollDirection: Axis.horizontal,
+                                              child: Math.tex(
+                                                pasoLatex,
+                                                mathStyle: MathStyle.display,
+                                                textStyle: const TextStyle(
+                                                  fontSize: 18,
+                                                  color: Colors.black87,
+                                                ),
+                                              ),
+                                            ),
+                                          if (pasoLatex.isNotEmpty)
+                                            Align(
+                                              alignment: Alignment.centerRight,
+                                              child: TextButton.icon(
+                                                onPressed: () async {
+                                                  await Clipboard.setData(
+                                                    ClipboardData(
+                                                      text: pasos[i],
+                                                    ),
+                                                  );
+                                                  ScaffoldMessenger.of(
+                                                    context,
+                                                  ).showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                        'Código LaTeX copiado',
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                                icon: const Icon(
+                                                  Icons.copy,
+                                                  size: 18,
+                                                ),
+                                                label: const Text(
+                                                  'Copiar LaTeX',
+                                                ),
+                                              ),
+                                            ),
+                                        ],
                                       );
                                     } catch (e) {
                                       return const Text(
-                                        '⚠️ Expresión inválida',
+                                        '⚠️ Error al mostrar el paso',
                                         style: TextStyle(
                                           color: Colors.redAccent,
                                         ),
@@ -815,6 +856,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                           ),
                         ),
                       ),
+
                       //todo
                       const SizedBox(height: 16),
                       ExpansionTile(
