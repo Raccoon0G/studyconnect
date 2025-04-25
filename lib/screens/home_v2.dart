@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:study_connect/services/notification_service.dart';
+import 'package:study_connect/widgets/notification_icon_widget.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -194,6 +196,8 @@ class _HomePageState extends State<HomePage> {
                           style: const TextStyle(color: Colors.white),
                         ),
                       ),
+                    if (_auth.currentUser != null)
+                      NotificationIconWidget(), //  AQUI el widget
                     TextButton(
                       onPressed:
                           () => Navigator.pushNamed(context, '/user_profile'),
@@ -321,7 +325,7 @@ class _HomePageState extends State<HomePage> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
-              'Sube tus propios ejercicios, estudia los de otros y compite por el\nreconocimiento en nuestro sistema de ranking. \u00danete a una comunidad\nde aprendizaje que recompensa tu esfuerzo y colaboraci\u00f3n.',
+              'Sube tus propios ejercicios, estudia los de otros y compite por el\nreconocimiento en nuestro sistema de ranking \u00danete a una comunidad\nde aprendizaje que recompensa tu esfuerzo y colaboraci\u00f3n',
               textAlign: TextAlign.center,
               style: GoogleFonts.roboto(
                 color: Colors.white,
@@ -399,6 +403,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildRightColumn(BuildContext context, bool isMobile) {
+    final isLoggedIn = FirebaseAuth.instance.currentUser != null;
     return FutureBuilder<QuerySnapshot>(
       future:
           FirebaseFirestore.instance
@@ -493,19 +498,81 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.pushNamed(context, '/chat'),
-              icon: const Icon(Icons.chat_bubble_outline),
-              label: const Text('Chat'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.blueGrey,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
+
+            GestureDetector(
+              onTap: () {
+                if (!isLoggedIn) {
+                  showDialog(
+                    context: context,
+                    builder:
+                        (context) => AlertDialog(
+                          title: const Text('Inicio de sesión requerido'),
+                          content: const Text(
+                            'Para usar el chat necesitas iniciar sesión.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Cancelar'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                Navigator.pushNamed(context, '/login');
+                              },
+                              child: const Text('Iniciar sesión'),
+                            ),
+                          ],
+                        ),
+                  );
+                } else {
+                  Navigator.pushNamed(context, '/chat');
+                }
+              },
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: [
+                      if (isLoggedIn)
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 5,
+                          offset: const Offset(0, 2),
+                        ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 14,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isLoggedIn
+                              ? Icons.chat_bubble_outline
+                              : Icons.lock_outline,
+                          color: Colors.blueGrey,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          isLoggedIn ? 'Chat' : 'Inicia sesión',
+                          style: const TextStyle(
+                            color: Colors.blueGrey,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 24),
               ),
             ),
+
             const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: () => Navigator.pushNamed(context, '/autoevaluation'),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:study_connect/services/notification_service.dart';
+import 'package:study_connect/widgets/notification_icon_widget.dart';
 
 class ChatHomePage extends StatefulWidget {
   const ChatHomePage({super.key});
@@ -20,10 +22,24 @@ class _ChatHomePageState extends State<ChatHomePage> {
   List<DocumentSnapshot> _usuarios = [];
   Map<String, Map<String, String>> cacheUsuarios = {};
 
+  String? nombreUsuario;
+
   @override
   void initState() {
     super.initState();
     _cargarUsuarios();
+    _obtenerNombreUsuario();
+  }
+
+  Future<void> _obtenerNombreUsuario() async {
+    final doc =
+        await FirebaseFirestore.instance.collection('usuarios').doc(uid).get();
+
+    final nombreEmisor = doc['Nombre'] ?? 'Usuario';
+
+    setState(() {
+      nombreUsuario = nombreEmisor;
+    });
   }
 
   Future<void> _cargarUsuarios() async {
@@ -74,10 +90,12 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
   void _enviarMensaje() async {
     if (chatIdSeleccionado == null || mensaje.trim().isEmpty) return;
+
     final mensajesRef = FirebaseFirestore.instance
         .collection('Chats')
         .doc(chatIdSeleccionado)
         .collection('Mensajes');
+
     await mensajesRef.add({
       'AutorID': uid,
       'Contenido': mensaje.trim(),
@@ -87,10 +105,29 @@ class _ChatHomePageState extends State<ChatHomePage> {
       'eliminado': false,
       'leidoPor': [uid],
     });
+
     await FirebaseFirestore.instance
         .collection('Chats')
         .doc(chatIdSeleccionado)
         .update({'UltimaAct': Timestamp.now()});
+
+    // Crear notificación para el receptor
+    if (otroUid != null && otroUid != uid) {
+      await NotificationService.crearNotificacion(
+        uidDestino: otroUid!,
+        tipo: 'mensaje',
+        titulo: 'Nuevo mensaje de $nombreUsuario',
+        //titulo: 'Nuevo mensaje de ${nombreUsuario ?? 'Usuario'}',
+        contenido:
+            mensaje.trim().length > 40
+                ? '${mensaje.trim().substring(0, 40)}...'
+                : mensaje.trim(),
+        referenciaId: chatIdSeleccionado!,
+        uidEmisor: uid,
+        nombreEmisor: nombreUsuario ?? 'Usuario',
+      );
+    }
+
     _mensajeController.clear();
     setState(() => mensaje = '');
   }
@@ -360,6 +397,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
               style: TextStyle(color: Colors.white),
             ),
           ),
+          const NotificationIconWidget(),
           TextButton.icon(
             onPressed: () => Navigator.pushNamed(context, '/user_profile'),
             icon: const Icon(Icons.person, color: Colors.white),

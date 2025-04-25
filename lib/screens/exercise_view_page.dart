@@ -9,6 +9,7 @@ import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:intl/intl.dart';
+import 'package:study_connect/widgets/notification_icon_widget.dart';
 
 class ExerciseViewPage extends StatefulWidget {
   final String tema;
@@ -382,6 +383,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
               style: TextStyle(color: Colors.white),
             ),
           ),
+          const NotificationIconWidget(),
           TextButton(
             onPressed: () {
               Navigator.pushNamed(context, '/profile');

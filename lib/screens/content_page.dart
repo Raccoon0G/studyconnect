@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:study_connect/widgets/notification_icon_widget.dart';
 
 class ContentPage extends StatelessWidget {
   const ContentPage({super.key});
@@ -49,6 +50,7 @@ class ContentPage extends StatelessWidget {
             },
             child: const Text('Ranking', style: TextStyle(color: Colors.white)),
           ),
+          const NotificationIconWidget(),
           TextButton(
             onPressed: () {},
             child: Container(

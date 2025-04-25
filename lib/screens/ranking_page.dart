@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:study_connect/widgets/notification_icon_widget.dart';
 
 class RankingPage extends StatefulWidget {
   const RankingPage({super.key});
@@ -91,6 +92,7 @@ class _RankingPageState extends State<RankingPage> {
               style: TextStyle(color: Colors.white),
             ),
           ),
+          const NotificationIconWidget(),
           TextButton(
             onPressed: () {},
             child: Container(

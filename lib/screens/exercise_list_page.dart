@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
+import 'package:study_connect/widgets/notification_icon_widget.dart';
 
 class ExerciseListPage extends StatelessWidget {
   const ExerciseListPage({super.key});
@@ -40,6 +41,7 @@ class ExerciseListPage extends StatelessWidget {
               style: TextStyle(color: Colors.white),
             ),
           ),
+          const NotificationIconWidget(),
           TextButton(
             onPressed: () => Navigator.pushNamed(context, '/user_profile'),
             child: Container(
