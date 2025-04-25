@@ -21,6 +21,48 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _obtenerDatos();
+    _cargarTopRanking();
+  }
+
+  List<Map<String, dynamic>> topUsuarios = [];
+
+  Future<void> _cargarTopRanking() async {
+    final query =
+        await FirebaseFirestore.instance
+            .collection('usuarios')
+            .orderBy('EjerSubidos', descending: true) // o "Puntos"
+            .limit(3)
+            .get();
+
+    setState(() {
+      topUsuarios =
+          query.docs.map((doc) {
+            final data = doc.data();
+            return {
+              'nombre': data['Nombre'] ?? 'Usuario',
+              'avatar':
+                  data['FotoPerfil'] ??
+                  'assets/images/avatar1.png', // asegúrate que exista o usa un default
+            };
+          }).toList();
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> _obtenerTop3Usuarios() async {
+    final snapshot =
+        await FirebaseFirestore.instance
+            .collection('usuarios')
+            .orderBy('Puntaje', descending: true)
+            .limit(3)
+            .get();
+
+    return snapshot.docs.map((doc) {
+      final data = doc.data();
+      return {
+        'nombre': data['Nombre'] ?? 'Usuario',
+        'avatar': data['FotoPerfil'] ?? 'assets/images/default_avatar.png',
+      };
+    }).toList();
   }
 
   Future<void> _obtenerDatos() async {
@@ -190,7 +232,9 @@ class _HomePageState extends State<HomePage> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
-        child:
+        child: Column(
+          children: [
+            _preloadIcons(), // <- Forzamos precarga de íconos
             isMobile
                 ? Column(
                   children: [
@@ -211,6 +255,8 @@ class _HomePageState extends State<HomePage> {
                     Expanded(child: _buildRightColumn(context, isMobile)),
                   ],
                 ),
+          ],
+        ),
       ),
     );
   }
@@ -353,77 +399,169 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildRightColumn(BuildContext context, bool isMobile) {
-    return Column(
-      children: [
-        Container(
-          height: 200,
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF48C9EF),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            children: [
-              Text(
-                'Ranking',
-                style: GoogleFonts.roboto(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 12,
-                runSpacing: 16,
-                children: [
-                  _avatar('assets/images/avatar1.png', 'Jeovanny'),
-                  _avatar('assets/images/avatar2.png', 'Ulises'),
-                  _avatar('assets/images/avatar3.png', 'Olivia'),
+    return FutureBuilder<QuerySnapshot>(
+      future:
+          FirebaseFirestore.instance
+              .collection('usuarios')
+              .orderBy('Calificacion', descending: true)
+              .limit(3)
+              .get(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final topUsers = snapshot.data!.docs;
+
+        return Column(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 600),
+              curve: Curves.easeInOut,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFB3E5FC),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
                 ],
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 50),
-        if (!isMobile)
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Image.asset(
-              'assets/images/alumno.jpg',
-              width: double.infinity,
-              fit: BoxFit.cover,
+              child: Column(
+                children: [
+                  Text(
+                    '🏆 Top 3 Ranking',
+                    style: GoogleFonts.roboto(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF01579B),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 16,
+                    runSpacing: 16,
+                    children:
+                        topUsers.asMap().entries.map((entry) {
+                          final i = entry.key;
+                          final data =
+                              entry.value.data() as Map<String, dynamic>;
+                          final nombre = data['Nombre'] ?? 'Usuario';
+                          final puntaje = (data['Calificacion'] ?? 0)
+                              .toStringAsFixed(2);
+                          final ejercicios = data['EjerSubidos'] ?? 0;
+                          final foto = data['FotoPerfil'];
+
+                          // Backup en caso de error o URL inválida
+                          final defaultAvatars = [
+                            'assets/images/avatar1.png',
+                            'assets/images/avatar2.png',
+                            'assets/images/avatar3.png',
+                          ];
+
+                          final ImageProvider<Object> avatar =
+                              (foto == null || foto.isEmpty)
+                                  ? AssetImage(defaultAvatars[i % 3])
+                                  : (foto.startsWith('http')
+                                      ? NetworkImage(foto)
+                                          as ImageProvider<Object>
+                                      : AssetImage(defaultAvatars[i % 3]));
+
+                          return _avatarMiniRanking(
+                            avatar,
+                            nombre,
+                            puntaje,
+                            ejercicios,
+                          );
+                        }).toList(),
+                  ),
+                ],
+              ),
             ),
-          ),
-        if (!isMobile) const SizedBox(height: 39),
-        ElevatedButton.icon(
-          onPressed: () => Navigator.pushNamed(context, '/chat'),
-          icon: const Icon(Icons.chat_bubble_outlined),
-          label: const Text('Chat'),
-        ),
-        const SizedBox(height: 20),
-        ElevatedButton.icon(
-          onPressed: () => Navigator.pushNamed(context, '/autoevaluation'),
-          icon: const Icon(Icons.chat_bubble_outlined),
-          label: const Text('Autoevaluación'),
-        ),
-      ],
+            const SizedBox(height: 40),
+            if (!isMobile)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.asset(
+                  'assets/images/alumno.jpg',
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pushNamed(context, '/chat'),
+              icon: const Icon(Icons.chat_bubble_outline),
+              label: const Text('Chat'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.blueGrey,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pushNamed(context, '/autoevaluation'),
+              icon: const Icon(Icons.assignment_turned_in),
+              label: const Text('Autoevaluación'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.blueGrey,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
-  Widget _avatar(String path, String nombre) {
+  Widget _avatarMiniRanking(
+    ImageProvider avatar,
+    String nombre,
+    String puntaje,
+    int ejercicios,
+  ) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        CircleAvatar(radius: 48, backgroundImage: AssetImage(path)),
-        const SizedBox(height: 8),
+        MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 3),
+            ),
+            child: CircleAvatar(radius: 32, backgroundImage: avatar),
+          ),
+        ),
+        const SizedBox(height: 6),
         Text(
           nombre,
-          style: const TextStyle(color: Colors.white, fontSize: 14),
-          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.blue,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
+        Text(
+          '⭐ $puntaje pts',
+          style: const TextStyle(color: Colors.blueGrey, fontSize: 12),
+        ),
+        Text(
+          '$ejercicios ejercicios',
+          style: const TextStyle(color: Colors.black54, fontSize: 11),
         ),
       ],
     );
@@ -442,5 +580,19 @@ class _HomePageState extends State<HomePage> {
       default:
         return clave;
     }
+  }
+
+  Widget _preloadIcons() {
+    return Offstage(
+      child: Row(
+        children: const [
+          Icon(Icons.emoji_events),
+          Icon(Icons.star),
+          Icon(Icons.star_border),
+          Icon(Icons.star_half),
+          Icon(Icons.assignment_turned_in),
+        ],
+      ),
+    );
   }
 }

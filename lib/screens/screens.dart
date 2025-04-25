@@ -1,4 +1,4 @@
-export 'package:study_connect/screens/chat_page.dart';
+export 'package:study_connect/screens/chat_home_page.dart';
 export 'package:study_connect/screens/content_page.dart';
 export 'package:study_connect/screens/edit_profile_page.dart';
 export 'package:study_connect/screens/exercise_list_page.dart';

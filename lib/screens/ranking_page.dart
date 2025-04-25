@@ -50,6 +50,13 @@ class _RankingPageState extends State<RankingPage> {
             final uid = entry.key;
             final califs = entry.value;
             final promedio = califs.reduce((a, b) => a + b) / califs.length;
+
+            // Actualiza o crea el campo Calificacion en la colección usuarios
+            FirebaseFirestore.instance.collection('usuarios').doc(uid).set({
+              'Calificacion': promedio,
+              'EjerSubidos': califs.length,
+            }, SetOptions(merge: true));
+
             return {
               'uid': uid,
               'nombre': nombrePorUid[uid] ?? 'Anónimo',
