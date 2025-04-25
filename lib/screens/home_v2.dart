@@ -404,192 +404,226 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildRightColumn(BuildContext context, bool isMobile) {
     final isLoggedIn = FirebaseAuth.instance.currentUser != null;
-    return FutureBuilder<QuerySnapshot>(
-      future:
-          FirebaseFirestore.instance
-              .collection('usuarios')
-              .orderBy('Calificacion', descending: true)
-              .limit(3)
-              .get(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
 
-        final topUsers = snapshot.data!.docs;
+    return Column(
+      children: [
+        FutureBuilder<QuerySnapshot>(
+          future:
+              FirebaseFirestore.instance
+                  .collection('usuarios')
+                  .orderBy('Calificacion', descending: true)
+                  .limit(3)
+                  .get(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return _buildSkeletonRanking(); // << NUEVO método
+            }
 
-        return Column(
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 600),
-              curve: Curves.easeInOut,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFFB3E5FC),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    '🏆 Top 3 Ranking',
-                    style: GoogleFonts.roboto(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF01579B),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 16,
-                    runSpacing: 16,
-                    children:
-                        topUsers.asMap().entries.map((entry) {
-                          final i = entry.key;
-                          final data =
-                              entry.value.data() as Map<String, dynamic>;
-                          final nombre = data['Nombre'] ?? 'Usuario';
-                          final puntaje = (data['Calificacion'] ?? 0)
-                              .toStringAsFixed(2);
-                          final ejercicios = data['EjerSubidos'] ?? 0;
-                          final foto = data['FotoPerfil'];
+            final topUsers = snapshot.data!.docs;
 
-                          // Backup en caso de error o URL inválida
-                          final defaultAvatars = [
-                            'assets/images/avatar1.png',
-                            'assets/images/avatar2.png',
-                            'assets/images/avatar3.png',
-                          ];
+            if (topUsers.isEmpty) {
+              return const Text(
+                'No hay usuarios en el ranking',
+                style: TextStyle(color: Colors.white),
+              );
+            }
 
-                          final ImageProvider<Object> avatar =
-                              (foto == null || foto.isEmpty)
-                                  ? AssetImage(defaultAvatars[i % 3])
-                                  : (foto.startsWith('http')
-                                      ? NetworkImage(foto)
-                                          as ImageProvider<Object>
-                                      : AssetImage(defaultAvatars[i % 3]));
-
-                          return _avatarMiniRanking(
-                            avatar,
-                            nombre,
-                            puntaje,
-                            ejercicios,
-                          );
-                        }).toList(),
-                  ),
-                ],
-              ),
+            return _buildRankingCard(topUsers); // << EXTRAEMOS contenido
+          },
+        ),
+        const SizedBox(height: 40),
+        if (!isMobile)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Image.asset(
+              'assets/images/alumno.jpg',
+              width: double.infinity,
+              fit: BoxFit.cover,
             ),
-            const SizedBox(height: 40),
-            if (!isMobile)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Image.asset(
-                  'assets/images/alumno.jpg',
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            const SizedBox(height: 20),
+          ),
+        const SizedBox(height: 20),
 
-            GestureDetector(
-              onTap: () {
-                if (!isLoggedIn) {
-                  showDialog(
-                    context: context,
-                    builder:
-                        (context) => AlertDialog(
-                          title: const Text('Inicio de sesión requerido'),
-                          content: const Text(
-                            'Para usar el chat necesitas iniciar sesión.',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Cancelar'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                Navigator.pushNamed(context, '/login');
-                              },
-                              child: const Text('Iniciar sesión'),
-                            ),
-                          ],
+        // Botón de chat (sin cambios)
+        GestureDetector(
+          onTap: () {
+            if (!isLoggedIn) {
+              showDialog(
+                context: context,
+                builder:
+                    (context) => AlertDialog(
+                      title: const Text('Inicio de sesión requerido'),
+                      content: const Text(
+                        'Para usar el chat necesitas iniciar sesión.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancelar'),
                         ),
-                  );
-                } else {
-                  Navigator.pushNamed(context, '/chat');
-                }
-              },
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: [
-                      if (isLoggedIn)
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 5,
-                          offset: const Offset(0, 2),
-                        ),
-                    ],
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 14,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isLoggedIn
-                              ? Icons.chat_bubble_outline
-                              : Icons.lock_outline,
-                          color: Colors.blueGrey,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          isLoggedIn ? 'Chat' : 'Inicia sesión',
-                          style: const TextStyle(
-                            color: Colors.blueGrey,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            Navigator.pushNamed(context, '/login');
+                          },
+                          child: const Text('Iniciar sesión'),
                         ),
                       ],
                     ),
-                  ),
+              );
+            } else {
+              Navigator.pushNamed(context, '/chat');
+            }
+          },
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  if (isLoggedIn)
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 5,
+                      offset: const Offset(0, 2),
+                    ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 14,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isLoggedIn
+                          ? Icons.chat_bubble_outline
+                          : Icons.lock_outline,
+                      color: Colors.blueGrey,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      isLoggedIn ? 'Chat' : 'Inicia sesión',
+                      style: const TextStyle(
+                        color: Colors.blueGrey,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
+          ),
+        ),
 
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.pushNamed(context, '/autoevaluation'),
-              icon: const Icon(Icons.assignment_turned_in),
-              label: const Text('Autoevaluación'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.blueGrey,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-              ),
+        const SizedBox(height: 16),
+        // Botón de autoevaluación (sin cambios)
+        ElevatedButton.icon(
+          onPressed: () => Navigator.pushNamed(context, '/autoevaluation'),
+          icon: const Icon(Icons.assignment_turned_in),
+          label: const Text('Autoevaluación'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: Colors.blueGrey,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(30),
             ),
-          ],
-        );
-      },
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSkeletonRanking() {
+    return Container(
+      height: 200,
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: const [
+          SizedBox(height: 16),
+          CircularProgressIndicator(color: Colors.white),
+          SizedBox(height: 12),
+          Text('Cargando ranking...', style: TextStyle(color: Colors.white70)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRankingCard(List<QueryDocumentSnapshot> topUsers) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeInOut,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFB3E5FC),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Text(
+            '🏆 Top 3 Ranking',
+            style: GoogleFonts.roboto(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF01579B),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 16,
+            runSpacing: 16,
+            children:
+                topUsers.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final data = entry.value.data() as Map<String, dynamic>;
+                  final nombre = data['Nombre'] ?? 'Usuario';
+                  final puntaje = (data['Calificacion'] ?? 0).toStringAsFixed(
+                    2,
+                  );
+                  final ejercicios = data['EjerSubidos'] ?? 0;
+                  final foto = data['FotoPerfil'];
+
+                  final defaultAvatars = [
+                    'assets/images/avatar1.png',
+                    'assets/images/avatar2.png',
+                    'assets/images/avatar3.png',
+                  ];
+
+                  final ImageProvider avatar =
+                      (foto == null || foto.isEmpty)
+                          ? AssetImage(defaultAvatars[i % 3])
+                          : (foto.startsWith('http')
+                              ? NetworkImage(foto)
+                              : AssetImage(defaultAvatars[i % 3]));
+
+                  return _avatarMiniRanking(
+                    avatar,
+                    nombre,
+                    puntaje,
+                    ejercicios,
+                  );
+                }).toList(),
+          ),
+        ],
+      ),
     );
   }
 
