@@ -9,6 +9,7 @@ import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:intl/intl.dart';
+import 'package:study_connect/services/notification_service.dart';
 import 'package:study_connect/widgets/notification_icon_widget.dart';
 
 class ExerciseViewPage extends StatefulWidget {
@@ -124,194 +125,259 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
 
     showDialog(
       context: context,
-      barrierDismissible:
-          true, // Permite cerrar haciendo clic fuera del diálogo
+      barrierDismissible: true,
       builder:
-          (_) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            insetPadding: const EdgeInsets.all(24),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                color: Colors.white,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Califica este ejercicio',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
+          (_) => StatefulBuilder(
+            builder:
+                (context, setState) => Dialog(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  insetPadding: const EdgeInsets.all(24),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      color: Colors.white,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'Califica este ejercicio',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(
+                            5,
+                            (i) => IconButton(
+                              icon: Icon(
+                                i < rating ? Icons.star : Icons.star_border,
+                                color: Colors.amber,
+                                size: 30,
+                              ),
+                              onPressed: () => setState(() => rating = i + 1),
+                            ),
                           ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(
-                      5,
-                      (i) => IconButton(
-                        icon: Icon(
-                          i < rating ? Icons.star : Icons.star_border,
-                          color: Colors.amber,
-                          size: 30,
-                        ),
-                        onPressed: () => setState(() => rating = i + 1),
-                      ),
-                    ),
-                  ),
-                  TextField(
-                    controller: controller,
-                    decoration: const InputDecoration(
-                      labelText: 'Comentario',
-                      border: OutlineInputBorder(),
-                    ),
-                    maxLines: 2,
-                  ),
-                  const SizedBox(height: 12),
-                  CheckboxListTile(
-                    value: comoAnonimo,
-                    onChanged: (val) => setState(() => comoAnonimo = val!),
-                    title: const Text('Comentar como anónimo'),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          value: versionSeleccionada,
-                          items:
-                              versiones.map<DropdownMenuItem<String>>((ver) {
-                                final fecha =
-                                    (ver['fecha'] as Timestamp?)?.toDate();
-                                final formatted =
-                                    fecha != null
-                                        ? DateFormat('dd/MM/yyyy').format(fecha)
-                                        : 'Sin fecha';
-                                return DropdownMenuItem<String>(
-                                  value: ver['id'],
-                                  child: Text(
-                                    'Versión ${ver['id']} - $formatted',
-                                  ),
-                                );
-                              }).toList(),
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() => versionSeleccionada = value);
-                              _cargarVersionSeleccionada(value);
-                            }
-                          },
+                        TextField(
+                          controller: controller,
                           decoration: const InputDecoration(
-                            labelText: 'Seleccionar versión',
+                            labelText: 'Comentario',
                             border: OutlineInputBorder(),
                           ),
+                          maxLines: 2,
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 12),
+                        CheckboxListTile(
+                          value: comoAnonimo,
+                          onChanged:
+                              (val) => setState(() => comoAnonimo = val!),
+                          title: const Text('Comentar como anónimo'),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                value: versionSeleccionada,
+                                items:
+                                    versiones.map<DropdownMenuItem<String>>((
+                                      ver,
+                                    ) {
+                                      final fecha =
+                                          (ver['fecha'] as Timestamp?)
+                                              ?.toDate();
+                                      final formatted =
+                                          fecha != null
+                                              ? DateFormat(
+                                                'dd/MM/yyyy',
+                                              ).format(fecha)
+                                              : 'Sin fecha';
+                                      return DropdownMenuItem<String>(
+                                        value: ver['id'],
+                                        child: Text(
+                                          'Versión ${ver['id']} - $formatted',
+                                        ),
+                                      );
+                                    }).toList(),
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setState(() => versionSeleccionada = value);
+                                    _cargarVersionSeleccionada(value);
+                                  }
+                                },
+                                decoration: const InputDecoration(
+                                  labelText: 'Seleccionar versión',
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Cancelar'),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton.icon(
+                              icon: const Icon(Icons.send),
+                              label: const Text('Enviar'),
+                              onPressed: () async {
+                                final user = FirebaseAuth.instance.currentUser;
+                                if (user == null ||
+                                    controller.text.isEmpty ||
+                                    rating == 0) {
+                                  return;
+                                }
+
+                                final userData =
+                                    await FirebaseFirestore.instance
+                                        .collection('usuarios')
+                                        .doc(user.uid)
+                                        .get();
+
+                                final comentario = {
+                                  'usuarioId': user.uid,
+                                  'nombre':
+                                      comoAnonimo
+                                          ? 'Anónimo'
+                                          : userData['Nombre'],
+                                  'comentario': controller.text,
+                                  'estrellas': rating,
+                                  'timestamp': Timestamp.now(),
+                                  'tema': widget.tema,
+                                  'ejercicioId': widget.ejercicioId,
+                                  'modificado': false,
+                                };
+
+                                await FirebaseFirestore.instance
+                                    .collection('comentarios_ejercicios')
+                                    .add(comentario);
+
+                                // ACTUALIZAR PROMEDIO DE CALIFICACIONES
+                                final calSnap =
+                                    await FirebaseFirestore.instance
+                                        .collection('comentarios_ejercicios')
+                                        .where(
+                                          'ejercicioId',
+                                          isEqualTo: widget.ejercicioId,
+                                        )
+                                        .where('tema', isEqualTo: widget.tema)
+                                        .get();
+
+                                final ratings =
+                                    calSnap.docs
+                                        .map((d) => d['estrellas'] as int)
+                                        .toList();
+                                final promedio =
+                                    ratings.reduce((a, b) => a + b) /
+                                    ratings.length;
+
+                                await FirebaseFirestore.instance
+                                    .collection('calculo')
+                                    .doc(widget.tema)
+                                    .collection('Ejer${widget.tema}')
+                                    .doc(widget.ejercicioId)
+                                    .update({'CalPromedio': promedio});
+
+                                // MANDAR NOTIFICACIÓN AL AUTOR DEL EJERCICIO
+                                final autorId = ejercicioData?['AutorId'];
+                                final nombreEjer = ejercicioData?['Titulo'];
+
+                                if (autorId != null && autorId != user.uid) {
+                                  await NotificationService.crearNotificacion(
+                                    uidDestino: autorId,
+                                    tipo: 'calificacion',
+                                    titulo: 'Nueva calificación',
+                                    contenido:
+                                        'Han calificado tu ejercicio "$nombreEjer"',
+                                    referenciaId: widget.ejercicioId,
+                                    tema: widget.tema,
+                                    uidEmisor: user.uid,
+                                    nombreEmisor:
+                                        comoAnonimo
+                                            ? 'Anónimo'
+                                            : userData['Nombre'],
+                                  );
+                                }
+
+                                _cargarComentarios(); // recargar comentarios en pantalla
+                                Navigator.pop(context);
+
+                                showDialog(
+                                  context: context,
+                                  builder:
+                                      (_) => AlertDialog(
+                                        title: const Text(
+                                          'Gracias por tu calificación',
+                                        ),
+                                        content: const Text(
+                                          'Tu opinión ha sido enviada con éxito.',
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () {
+                                              Navigator.of(
+                                                context,
+                                                rootNavigator: true,
+                                              ).pop(); // Cierra todol Dialog principal de calificación
+                                            },
+
+                                            child: const Text('Aceptar'),
+                                          ),
+                                        ],
+                                      ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancelar'),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.send),
-                        label: const Text('Enviar'),
-                        onPressed: () async {
-                          final user = FirebaseAuth.instance.currentUser;
-                          if (user == null ||
-                              controller.text.isEmpty ||
-                              rating == 0)
-                            return;
-
-                          final userData =
-                              await FirebaseFirestore.instance
-                                  .collection('usuarios')
-                                  .doc(user.uid)
-                                  .get();
-
-                          final comentario = {
-                            'usuarioId': user.uid,
-                            'nombre':
-                                comoAnonimo ? 'Anónimo' : userData['Nombre'],
-                            'comentario': controller.text,
-                            'estrellas': rating,
-                            'timestamp': Timestamp.now(),
-                            'tema': widget.tema,
-                            'ejercicioId': widget.ejercicioId,
-                            'modificado': false,
-                          };
-
-                          await FirebaseFirestore.instance
-                              .collection('comentarios_ejercicios')
-                              .add(comentario);
-
-                          final calSnap =
-                              await FirebaseFirestore.instance
-                                  .collection('comentarios_ejercicios')
-                                  .where(
-                                    'ejercicioId',
-                                    isEqualTo: widget.ejercicioId,
-                                  )
-                                  .where('tema', isEqualTo: widget.tema)
-                                  .get();
-
-                          final ratings =
-                              calSnap.docs
-                                  .map((d) => d['estrellas'] as int)
-                                  .toList();
-                          final promedio =
-                              ratings.reduce((a, b) => a + b) / ratings.length;
-
-                          await FirebaseFirestore.instance
-                              .collection('calculo')
-                              .doc(widget.tema)
-                              .collection('Ejer${widget.tema}')
-                              .doc(widget.ejercicioId)
-                              .update({'CalPromedio': promedio});
-
-                          _cargarComentarios();
-                          Navigator.pop(context);
-                        },
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+                ),
           ),
     );
   }
 
   Widget _estrellaConDecimal(double valor) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
       children: List.generate(5, (i) {
-        if (valor >= i + 1)
-          return const Icon(Icons.star, color: Colors.yellow, size: 20);
-        if (valor > i && valor < i + 1)
-          return Icon(Icons.star_half, color: Colors.yellow, size: 20);
-        return const Icon(Icons.star_border, color: Colors.yellow, size: 20);
+        if (valor >= i + 1) {
+          return const Icon(Icons.star, color: Color(0xFFFFC107), size: 22);
+        } else if (valor > i) {
+          return const Icon(
+            Icons.star_half,
+            color: Color(0xFFFFC107),
+            size: 22,
+          );
+        } else {
+          return const Icon(Icons.star_border, color: Colors.black38, size: 22);
+        }
       }),
     );
   }
@@ -683,48 +749,73 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                       ...List.generate(
                         pasos.length,
                         (i) => Card(
-                          margin: const EdgeInsets.symmetric(vertical: 6),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  'Paso ${i + 1}:',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: Colors.black,
-                                  ),
-                                ),
+                                Text('Paso ${i + 1}:'),
                                 const SizedBox(height: 6),
+
+                                // DESCRIPCIÓN (con Builder seguro)
                                 if (i < descripciones.length)
-                                  Math.tex(
-                                    descripciones[i]
-                                        .replaceAll(' ', r'\ ')
-                                        .replaceAll('\n', r'\\'),
-                                    mathStyle: MathStyle.display,
-                                    textStyle: const TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.black,
-                                    ),
+                                  Builder(
+                                    builder: (_) {
+                                      try {
+                                        return SingleChildScrollView(
+                                          scrollDirection: Axis.horizontal,
+                                          child: Math.tex(
+                                            prepararLaTeX(descripciones[i]),
+                                            mathStyle: MathStyle.display,
+                                            textStyle: const TextStyle(
+                                              fontSize: 16,
+                                              color: Colors.black,
+                                            ),
+                                          ),
+                                        );
+                                      } catch (e) {
+                                        return const Text(
+                                          '⚠️ Descripción inválida',
+                                          style: TextStyle(
+                                            color: Colors.redAccent,
+                                          ),
+                                        );
+                                      }
+                                    },
                                   ),
-                                const SizedBox(height: 16),
-                                SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  child: Math.tex(
-                                    pasos[i]
-                                        .replaceAll(' ', r'\,')
-                                        .replaceAll('\n', r'\\'),
-                                    mathStyle: MathStyle.display,
-                                    textStyle: const TextStyle(fontSize: 18),
-                                  ),
+
+                                const SizedBox(height: 12),
+
+                                // PASO (también con Builder)
+                                Builder(
+                                  builder: (_) {
+                                    try {
+                                      return SingleChildScrollView(
+                                        scrollDirection: Axis.horizontal,
+                                        child: Math.tex(
+                                          prepararLaTeX(pasos[i]),
+                                          mathStyle: MathStyle.display,
+                                          textStyle: const TextStyle(
+                                            fontSize: 18,
+                                          ),
+                                        ),
+                                      );
+                                    } catch (e) {
+                                      return const Text(
+                                        '⚠️ Expresión inválida',
+                                        style: TextStyle(
+                                          color: Colors.redAccent,
+                                        ),
+                                      );
+                                    }
+                                  },
                                 ),
                               ],
                             ),
                           ),
                         ),
                       ),
+                      //todo
                       const SizedBox(height: 16),
                       ExpansionTile(
                         title: Text(
@@ -757,41 +848,13 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                                         c['nombre'] ?? 'Anónimo',
                                         style: const TextStyle(
                                           color: Colors.black,
+                                          fontWeight: FontWeight.w600,
                                         ),
                                       ),
                                     ),
-                                    if (editable)
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.delete,
-                                          size: 20,
-                                          color: Colors.redAccent,
-                                        ),
-                                        onPressed: () async {
-                                          final docs =
-                                              await FirebaseFirestore.instance
-                                                  .collection(
-                                                    'comentarios_ejercicios',
-                                                  )
-                                                  .where(
-                                                    'usuarioId',
-                                                    isEqualTo: c['usuarioId'],
-                                                  )
-                                                  .where(
-                                                    'comentario',
-                                                    isEqualTo: c['comentario'],
-                                                  )
-                                                  .where(
-                                                    'timestamp',
-                                                    isEqualTo: c['timestamp'],
-                                                  )
-                                                  .get();
-                                          for (final d in docs.docs) {
-                                            await d.reference.delete();
-                                          }
-                                          _cargarComentarios();
-                                        },
-                                      ),
+                                    _estrellaConDecimal(
+                                      (c['estrellas'] ?? 0).toDouble(),
+                                    ),
                                   ],
                                 ),
                                 subtitle: Column(
@@ -800,7 +863,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                                     Text(
                                       formatted,
                                       style: const TextStyle(
-                                        color: Colors.black,
+                                        color: Colors.black54,
                                       ),
                                     ),
                                     Text(
@@ -809,14 +872,46 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                                         color: Colors.black,
                                       ),
                                     ),
-                                    _estrellaConDecimal(
-                                      (c['estrellas'] ?? 0).toDouble(),
-                                    ),
                                   ],
                                 ),
+                                trailing:
+                                    editable
+                                        ? IconButton(
+                                          icon: const Icon(
+                                            Icons.delete,
+                                            color: Colors.redAccent,
+                                          ),
+                                          onPressed: () async {
+                                            final docs =
+                                                await FirebaseFirestore.instance
+                                                    .collection(
+                                                      'comentarios_ejercicios',
+                                                    )
+                                                    .where(
+                                                      'usuarioId',
+                                                      isEqualTo: c['usuarioId'],
+                                                    )
+                                                    .where(
+                                                      'comentario',
+                                                      isEqualTo:
+                                                          c['comentario'],
+                                                    )
+                                                    .where(
+                                                      'timestamp',
+                                                      isEqualTo: c['timestamp'],
+                                                    )
+                                                    .get();
+                                            for (final d in docs.docs) {
+                                              await d.reference.delete();
+                                            }
+                                            _cargarComentarios();
+                                          },
+                                        )
+                                        : null,
                               );
                             }).toList(),
                       ),
+
                       const SizedBox(height: 16),
                       const SizedBox(height: 40),
                       Card(
@@ -946,6 +1041,23 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
 //    ),
 //  );
 //}
+
+String prepararLaTeX(String texto) {
+  try {
+    return texto
+        .replaceAllMapped(
+          RegExp(r'(?<!\\) '),
+          (m) => r'\ ',
+        ) // espacios normales
+        .replaceAll('\n', r'\\') // saltos de línea
+        .replaceAllMapped(
+          RegExp(r'([{}])'),
+          (m) => '\\${m[0]}',
+        ); // escapa {} si aparecen sueltos
+  } catch (_) {
+    return 'Contenido inválido';
+  }
+}
 
 String dividirDescripcionEnLineas(
   String texto, {
