@@ -856,7 +856,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                           ),
                         ),
                       ),
-
+                      // la dividi en en 4 casos para que se desplieguen bien , descripcion y paso son iguales Solo se muestra uno una vez , si el paso y la descripcion son diferentes se muestran ambos uno arriba de otro , solo hay paso solo se muestra paso y si solo hay descripcion solo se muestra la descripcion :D
                       //todo
                       const SizedBox(height: 16),
                       ExpansionTile(
