@@ -225,7 +225,7 @@ class _LoginPageState extends State<LoginPage>
       body: Row(
         children: [
           Expanded(
-            flex: 2,
+            flex: 3,
             child: Container(
               color: const Color(0xFF024D78),
               padding: const EdgeInsets.all(32),
@@ -234,7 +234,7 @@ class _LoginPageState extends State<LoginPage>
           ),
 
           Expanded(
-            flex: 3,
+            flex: 1,
             child: Center(
               child: Container(
                 width: 400,

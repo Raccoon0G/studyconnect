@@ -1,6 +1,6 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class LoginCarousel extends StatefulWidget {
   const LoginCarousel({super.key});
@@ -11,7 +11,6 @@ class LoginCarousel extends StatefulWidget {
 
 class _LoginCarouselState extends State<LoginCarousel> {
   final PageController _pageController = PageController();
-
   late final Timer _autoScrollTimer;
   int _currentPage = 0;
 
@@ -29,10 +28,10 @@ class _LoginCarouselState extends State<LoginCarousel> {
 
     _autoScrollTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
       if (_pageController.hasClients) {
-        final nextPage = (_pageController.page ?? 0).round() + 1;
+        final nextPage = (_currentPage + 1) % _items.length;
         _pageController.animateToPage(
-          nextPage % _items.length,
-          duration: const Duration(milliseconds: 500),
+          nextPage,
+          duration: const Duration(milliseconds: 600),
           curve: Curves.easeInOut,
         );
       }
@@ -65,13 +64,13 @@ class _LoginCarouselState extends State<LoginCarousel> {
     ),
     _CarouselItem(
       image: 'assets/images/slide4.png',
-      title: 'Gana reconocimiento',
-      description: 'Sube tus ejercicios y obtén puntos en el ranking.',
+      title: 'Mejora tu rendimiento',
+      description: 'Practica y supera tus propios registros académicos.',
     ),
     _CarouselItem(
       image: 'assets/images/slide5.png',
-      title: 'Gana reconocimiento',
-      description: 'Sube tus ejercicios y obtén puntos en el ranking.',
+      title: 'Conecta con estudiantes',
+      description: 'Forma parte de la comunidad y comparte conocimientos.',
     ),
   ];
 
@@ -88,36 +87,46 @@ class _LoginCarouselState extends State<LoginCarousel> {
                 itemCount: _items.length,
                 itemBuilder: (context, index) {
                   final item = _items[index];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Image.asset(
-                          item.image,
-                          height: constraints.maxHeight * 0.4,
-                          fit: BoxFit.contain,
+                  final isCurrent = index == _currentPage;
+                  return AnimatedOpacity(
+                    opacity: isCurrent ? 1.0 : 0.5,
+                    duration: const Duration(milliseconds: 400),
+                    child: AnimatedScale(
+                      scale: isCurrent ? 1.0 : 0.9,
+                      duration: const Duration(milliseconds: 400),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Image.asset(
+                              item.image,
+                              height: constraints.maxHeight * 0.4,
+                              fit: BoxFit.contain,
+                            ),
+                            const SizedBox(height: 20),
+                            Text(
+                              item.title,
+                              style: GoogleFonts.montserrat(
+                                // <--- Nueva fuente bonita
+                                color: Colors.white,
+                                fontSize: 26,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              item.description,
+                              style: GoogleFonts.montserrat(
+                                color: Colors.white70,
+                                fontSize: 16,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 20),
-                        Text(
-                          item.title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          item.description,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 16,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+                      ),
                     ),
                   );
                 },
@@ -164,7 +173,6 @@ class _LoginCarouselState extends State<LoginCarousel> {
                 ),
               ),
             ),
-
             const SizedBox(height: 20),
           ],
         );
