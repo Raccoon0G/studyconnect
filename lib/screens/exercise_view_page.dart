@@ -330,27 +330,38 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
 
                                 showDialog(
                                   context: context,
-                                  builder:
-                                      (_) => AlertDialog(
-                                        title: const Text(
-                                          'Gracias por tu calificación',
-                                        ),
-                                        content: const Text(
-                                          'Tu opinión ha sido enviada con éxito.',
-                                        ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () {
-                                              Navigator.of(
-                                                context,
-                                                rootNavigator: true,
-                                              ).pop(); // Cierra todol Dialog principal de calificación
-                                            },
+                                  barrierDismissible: false,
+                                  builder: (dialogContext) {
+                                    // Capturamos el contexto del diálogo
+                                    final localContext = dialogContext;
 
-                                            child: const Text('Aceptar'),
-                                          ),
-                                        ],
+                                    // Cerrarlo automáticamente después de 2 segundos
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback((_) {
+                                          Future.delayed(
+                                            const Duration(seconds: 2),
+                                            () {
+                                              if (Navigator.canPop(
+                                                localContext,
+                                              )) {
+                                                Navigator.of(
+                                                  localContext,
+                                                  rootNavigator: true,
+                                                ).pop();
+                                              }
+                                            },
+                                          );
+                                        });
+
+                                    return const AlertDialog(
+                                      title: Text(
+                                        'Gracias por tu calificación',
                                       ),
+                                      content: Text(
+                                        'Tu opinión ha sido enviada con éxito.',
+                                      ),
+                                    );
+                                  },
                                 );
                               },
                             ),
@@ -943,10 +954,43 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                                                       isEqualTo: c['timestamp'],
                                                     )
                                                     .get();
+
                                             for (final d in docs.docs) {
                                               await d.reference.delete();
                                             }
-                                            _cargarComentarios();
+
+                                            await _cargarComentarios();
+
+                                            // Mostrar AlertDialog que se cierra automáticamente
+                                            showDialog(
+                                              context: context,
+                                              barrierDismissible:
+                                                  false, // no se puede cerrar tocando afuera
+                                              builder: (context) {
+                                                // Cerrar automáticamente después de 2 segundos
+                                                Future.delayed(
+                                                  const Duration(seconds: 2),
+                                                  () {
+                                                    if (Navigator.canPop(
+                                                      context,
+                                                    )) {
+                                                      Navigator.of(
+                                                        context,
+                                                      ).pop();
+                                                    }
+                                                  },
+                                                );
+
+                                                return const AlertDialog(
+                                                  title: Text(
+                                                    'Comentario eliminado',
+                                                  ),
+                                                  content: Text(
+                                                    'Tu comentario ha sido eliminado correctamente.',
+                                                  ),
+                                                );
+                                              },
+                                            );
                                           },
                                         )
                                         : null,
@@ -1069,20 +1113,6 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     );
   }
 }
-
-//Widget _botonAccion(String texto, IconData icono, VoidCallback accion) {
-//  return ElevatedButton.icon(
-//    onPressed: accion,
-//    icon: Icon(icono),
-//    label: Text(texto),
-//    style: ElevatedButton.styleFrom(
-//      backgroundColor: Colors.blue,
-//      foregroundColor: Colors.white,
-//      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-//      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-//    ),
-//  );
-//}
 
 String prepararLaTeX(String texto) {
   try {
