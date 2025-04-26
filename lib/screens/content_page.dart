@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:study_connect/widgets/card_tema.dart';
 import 'package:study_connect/widgets/notification_icon_widget.dart';
 
 class ContentPage extends StatelessWidget {
@@ -68,7 +69,7 @@ class ContentPage extends StatelessWidget {
           const SizedBox(width: 16),
         ],
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -82,62 +83,100 @@ class ContentPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            isWide
-                ? Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children:
-                      temas.map((tema) => _buildCard(context, tema)).toList(),
-                )
-                : Column(
-                  children:
-                      temas
-                          .map(
-                            (tema) => Padding(
-                              padding: const EdgeInsets.only(bottom: 16),
-                              child: _buildCard(context, tema),
-                            ),
-                          )
-                          .toList(),
+
+            Center(
+              child: Wrap(
+                spacing: 24,
+                runSpacing: 24,
+                alignment: WrapAlignment.center,
+                children: [
+                  CardTema(
+                    titulo: 'Funciones algebraicas y trascendentes',
+                    clave: 'FnAlg',
+                    imagen: 'funciones.png',
+                  ),
+                  CardTema(
+                    titulo: 'Límites de funciones y Continuidad',
+                    clave: 'Lim',
+                    imagen: 'limites.png',
+                  ),
+                  CardTema(
+                    titulo: 'Derivada y optimización',
+                    clave: 'Der',
+                    imagen: 'derivadas3.png',
+                  ),
+                  CardTema(
+                    titulo: 'Técnicas de integración',
+                    clave: 'TecInteg',
+                    imagen: 'tecnicas2.png',
+                  ),
+                ],
+              ),
+            ),
+            //OTRA VISTA DE LAS TARJETAS
+            //isWide
+            //    ? Center(
+            //      child: SizedBox(
+            //        width:
+            //            MediaQuery.of(context).size.width *
+            //            0.94, // margen lateral
+            //        child: SingleChildScrollView(
+            //          scrollDirection: Axis.horizontal,
+            //          child: Row(
+            //            mainAxisAlignment: MainAxisAlignment.center,
+            //            children:
+            //                temas.map((tema) {
+            //                  return Padding(
+            //                    padding: const EdgeInsets.symmetric(
+            //                      horizontal: 12,
+            //                    ),
+            //                    child: _buildCard(context, tema),
+            //                  );
+            //                }).toList(),
+            //          ),
+            //        ),
+            //      ),
+            //    )
+            //    : Column(
+            //      children:
+            //          temas
+            //              .map(
+            //                (tema) => Padding(
+            //                  padding: const EdgeInsets.only(bottom: 16),
+            //                  child: _buildCard(context, tema),
+            //                ),
+            //              )
+            //              .toList(),
+            //    ),
+            const SizedBox(height: 30),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  onPressed:
+                      () => Navigator.pushNamed(context, '/exercise_upload'),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Agregar ejercicio'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                  ),
                 ),
+                const SizedBox(width: 16),
+                ElevatedButton.icon(
+                  onPressed:
+                      () => Navigator.pushNamed(context, '/upload_material'),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Agregar material'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildCard(BuildContext context, Map<String, String> tema) {
-    return Container(
-      height: 750,
-      width: 450,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Colors.white, Colors.blueAccent],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          Text(
-            tema['titulo']!,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.roboto(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF1A1A1A),
-            ),
-          ),
-          const SizedBox(height: 30),
-          _boton(context, 'Ver contenido', Icons.arrow_forward, tema),
-          const SizedBox(height: 30),
-          _boton(context, 'Agregar ejercicio', Icons.add, tema),
-          const SizedBox(height: 30),
-          _boton(context, 'Agregar Material', Icons.add, tema),
-          const SizedBox(height: 50),
-          _imagenIlustrativa(ancho: 450, alto: 379, assetName: tema['imagen']!),
-        ],
       ),
     );
   }
