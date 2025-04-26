@@ -135,159 +135,180 @@ class _RegisterPageState extends State<RegisterPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
-      body: Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Container(
-              color: const Color(0xFF024D78),
-              padding: const EdgeInsets.all(32),
-              child:
-                  const RegisterCarousel(), //  el  widget DEL CARRUSEL DE LOGIN
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Center(
-              child: Container(
-                height: 600,
-                width: 400,
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF48C9EF),
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [BoxShadow(color: Colors.black, blurRadius: 12)],
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final bool esPantallaGrande = constraints.maxWidth >= 900;
+          final double anchoFormulario =
+              esPantallaGrande ? 400 : constraints.maxWidth * 0.9;
+
+          return Row(
+            children: [
+              if (esPantallaGrande)
+                Expanded(
+                  flex: 3,
+                  child: Container(
+                    color: const Color(0xFF024D78),
+                    padding: const EdgeInsets.all(32),
+                    child:
+                        const RegisterCarousel(), //  Carrusel sólo en pantallas grandes
+                  ),
                 ),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Registro',
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      _buildField(
-                        _emailController,
-                        'Correo',
-                        validator: _validateEmail,
-                        inputFormatters: [
-                          LengthLimitingTextInputFormatter(320),
+              Expanded(
+                flex: esPantallaGrande ? 1 : 2, // Si es chica, que ocupe más
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(
+                      16,
+                    ), // Para que no se corte en móviles
+                    child: Container(
+                      width: anchoFormulario,
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF48C9EF),
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black, blurRadius: 12),
                         ],
                       ),
-                      const SizedBox(height: 14),
-                      _buildField(
-                        _passwordController,
-                        'Contraseña',
-                        obscure: _obscurePassword,
-                        validator: _validatePassword,
-                        inputFormatters: [LengthLimitingTextInputFormatter(24)],
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                          ),
-                          onPressed:
-                              () => setState(
-                                () => _obscurePassword = !_obscurePassword,
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Registro',
+                              style: TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
                               ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      _buildField(
-                        _confirmPasswordController,
-                        'Confirmar contraseña',
-                        obscure: _obscureConfirmPassword,
-                        validator: (value) {
-                          if (value != _passwordController.text) {
-                            return 'Las contraseñas no coinciden';
-                          }
-                          return null;
-                        },
-                        inputFormatters: [LengthLimitingTextInputFormatter(24)],
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscureConfirmPassword
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                          ),
-                          onPressed:
-                              () => setState(
-                                () =>
-                                    _obscureConfirmPassword =
-                                        !_obscureConfirmPassword,
+                            ),
+                            const SizedBox(height: 24),
+                            _buildField(
+                              _emailController,
+                              'Correo',
+                              validator: _validateEmail,
+                              inputFormatters: [
+                                LengthLimitingTextInputFormatter(320),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            _buildField(
+                              _passwordController,
+                              'Contraseña',
+                              obscure: _obscurePassword,
+                              validator: _validatePassword,
+                              inputFormatters: [
+                                LengthLimitingTextInputFormatter(24),
+                              ],
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                ),
+                                onPressed:
+                                    () => setState(
+                                      () =>
+                                          _obscurePassword = !_obscurePassword,
+                                    ),
                               ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      _checkboxWithInternalRoute(
-                        value: _acceptedTerms,
-                        label: 'Acepto Términos y condiciones',
-                        onChanged:
-                            (val) =>
-                                setState(() => _acceptedTerms = val ?? false),
-                        routeName: '/terms',
-                        context: context,
-                      ),
-                      const SizedBox(height: 10),
-                      Center(
-                        child: Container(
-                          width: 200,
-                          height: 1,
-                          color: Colors.white38,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      _checkboxWithInternalRoute(
-                        value: _acceptedPrivacy,
-                        label: 'Acepto Aviso de privacidad',
-                        onChanged:
-                            (val) =>
-                                setState(() => _acceptedPrivacy = val ?? false),
-                        routeName: '/privacy',
-                        context: context,
-                      ),
-                      const SizedBox(height: 26),
-                      Center(
-                        child: Image.asset(
-                          'assets/images/logo.png',
-                          height: 80,
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      Center(
-                        child: ElevatedButton(
-                          onPressed: _register,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.black,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 32,
-                              vertical: 14,
                             ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
+                            const SizedBox(height: 14),
+                            _buildField(
+                              _confirmPasswordController,
+                              'Confirmar contraseña',
+                              obscure: _obscureConfirmPassword,
+                              validator: (value) {
+                                if (value != _passwordController.text) {
+                                  return 'Las contraseñas no coinciden';
+                                }
+                                return null;
+                              },
+                              inputFormatters: [
+                                LengthLimitingTextInputFormatter(24),
+                              ],
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscureConfirmPassword
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                ),
+                                onPressed:
+                                    () => setState(
+                                      () =>
+                                          _obscureConfirmPassword =
+                                              !_obscureConfirmPassword,
+                                    ),
+                              ),
                             ),
-                          ),
-                          child: const Text('Registrarse'),
+                            const SizedBox(height: 14),
+                            _checkboxWithInternalRoute(
+                              value: _acceptedTerms,
+                              label: 'Acepto Términos y condiciones',
+                              onChanged:
+                                  (val) => setState(
+                                    () => _acceptedTerms = val ?? false,
+                                  ),
+                              routeName: '/terms',
+                              context: context,
+                            ),
+                            const SizedBox(height: 10),
+                            Center(
+                              child: Container(
+                                width: 200,
+                                height: 1,
+                                color: Colors.white38,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            _checkboxWithInternalRoute(
+                              value: _acceptedPrivacy,
+                              label: 'Acepto Aviso de privacidad',
+                              onChanged:
+                                  (val) => setState(
+                                    () => _acceptedPrivacy = val ?? false,
+                                  ),
+                              routeName: '/privacy',
+                              context: context,
+                            ),
+                            const SizedBox(height: 26),
+                            Center(
+                              child: Image.asset(
+                                'assets/images/logo.png',
+                                height: 80,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Center(
+                              child: ElevatedButton(
+                                onPressed: _register,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: Colors.black,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 32,
+                                    vertical: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                ),
+                                child: const Text('Registrarse'),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }

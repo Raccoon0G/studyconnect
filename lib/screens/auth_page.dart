@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:study_connect/widgets/hoverable_text.dart';
 import 'package:study_connect/widgets/login_carousel.dart';
 
 class LoginPage extends StatefulWidget {
@@ -218,209 +219,181 @@ class _LoginPageState extends State<LoginPage>
     return emailRegex.hasMatch(email);
   }
 
+  // prueba
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
-      body: Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Container(
-              color: const Color(0xFF024D78),
-              padding: const EdgeInsets.all(32),
-              child: const LoginCarousel(), //  el  widget DEL CARRUSEL DE LOGIN
-            ),
-          ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final bool esPantallaGrande = constraints.maxWidth >= 900;
+          final double anchoFormulario =
+              esPantallaGrande ? 400 : constraints.maxWidth * 0.9;
 
-          Expanded(
-            flex: 1,
-            child: Center(
-              child: Container(
-                height: 600,
-                width: 400,
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF48C9EF),
-                  borderRadius: BorderRadius.circular(24),
+          return Row(
+            children: [
+              if (esPantallaGrande)
+                Expanded(
+                  flex: 3,
+                  child: Container(
+                    color: const Color(0xFF024D78),
+                    padding: const EdgeInsets.all(32),
+                    child: const LoginCarousel(),
+                  ),
                 ),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'Login',
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+              Expanded(
+                flex: esPantallaGrande ? 1 : 2,
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Container(
+                      width: anchoFormulario,
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF48C9EF),
+                        borderRadius: BorderRadius.circular(24),
                       ),
-                      const SizedBox(height: 24),
-                      _buildInputField(
-                        label: 'Correo electrónico',
-                        controller: _emailController,
-                        errorText: _emailError,
-                        isValid:
-                            _emailError == null &&
-                            _emailController.text.isNotEmpty,
-                        hintText: 'ejemplo@dominio.com',
-                        helperText: 'Debe tener un formato válido de correo.',
-                      ),
-
-                      // _buildInputField(
-                      //   label: 'Contraseña',
-                      //   controller: _passwordController,
-                      //   obscure: _obscurePassword,
-                      //   errorText: _passwordError,
-                      //   isValid:
-                      //       _passwordError == null &&
-                      //       _passwordController.text.isNotEmpty,
-                      //   hintText: 'Mínimo 6 caracteres',
-                      //   helperText:
-                      //       'Debe contener al menos 6 caracteres. \n Y maximo 20 caracteres.',
-                      //   suffixIcon: IconButton(
-                      //     icon: Icon(
-                      //       _obscurePassword
-                      //           ? Icons.visibility_off
-                      //           : Icons.visibility,
-                      //     ),
-                      //     onPressed: () {
-                      //       setState(() {
-                      //         _obscurePassword = !_obscurePassword;
-                      //       });
-                      //     },
-                      //   ),
-                      // ),
-                      AnimatedBuilder(
-                        animation: _shakeController,
-                        builder: (context, child) {
-                          return Transform.translate(
-                            offset: Offset(_shakeAnimation.value, 0),
-                            child: child,
-                          );
-                        },
-                        child: _buildInputField(
-                          label: 'Contraseña',
-                          controller: _passwordController,
-                          obscure: _obscurePassword,
-                          errorText: _passwordError,
-                          isValid:
-                              _passwordError == null &&
-                              _passwordController.text.isNotEmpty,
-                          hintText: 'Mínimo 8 caracteres',
-                          helperText:
-                              'Debe contener al menos 8 caracteres. \n Y máximo 24 caracteres.',
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Login',
+                              style: TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
                             ),
-                            onPressed: () {
-                              setState(() {
-                                _obscurePassword = !_obscurePassword;
-                              });
-                            },
-                          ),
-                        ),
-                      ),
-
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: _resetPassword,
-                          child: const Text(
-                            '¿Olvidaste tu contraseña?',
-                            style: TextStyle(
-                              color: Colors.white,
-                              decoration: TextDecoration.underline,
+                            const SizedBox(height: 24),
+                            _buildInputField(
+                              label: 'Correo electrónico',
+                              controller: _emailController,
+                              errorText: _emailError,
+                              isValid:
+                                  _emailError == null &&
+                                  _emailController.text.isNotEmpty,
+                              hintText: 'ejemplo@dominio.com',
+                              helperText:
+                                  'Debe tener un formato válido de correo.',
                             ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 26),
-                      Image.asset(
-                        'assets/images/logo.png',
-                        height: 80,
-                        fit: BoxFit.contain,
-                      ),
-                      const SizedBox(height: 24),
-                      // _isLoading
-                      //     ? const CircularProgressIndicator(color: Colors.white)
-                      //     : ElevatedButton(
-                      //       onPressed: _isLoading ? null : _login,
-                      //       style: ElevatedButton.styleFrom(
-                      //         backgroundColor: Colors.white,
-                      //         foregroundColor: Colors.black,
-                      //         padding: const EdgeInsets.symmetric(
-                      //           horizontal: 32,
-                      //           vertical: 12,
-                      //         ),
-                      //         shape: RoundedRectangleBorder(
-                      //           borderRadius: BorderRadius.circular(30),
-                      //         ),
-                      //       ),
-                      //       child: const Text('Ingresar'),
-                      //     ),
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        child: ElevatedButton(
-                          onPressed:
-                              (_isLoading ||
-                                      (_intentoFallido && !_formularioValido))
-                                  ? null
-                                  : _login,
-
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.black,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 32,
-                              vertical: 12,
+                            AnimatedBuilder(
+                              animation: _shakeController,
+                              builder: (context, child) {
+                                return Transform.translate(
+                                  offset: Offset(_shakeAnimation.value, 0),
+                                  child: child,
+                                );
+                              },
+                              child: _buildInputField(
+                                label: 'Contraseña',
+                                controller: _passwordController,
+                                obscure: _obscurePassword,
+                                errorText: _passwordError,
+                                isValid:
+                                    _passwordError == null &&
+                                    _passwordController.text.isNotEmpty,
+                                hintText: 'Mínimo 8 caracteres',
+                                helperText:
+                                    'Debe contener al menos 8 caracteres.\nY máximo 24 caracteres.',
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscurePassword
+                                        ? Icons.visibility_off
+                                        : Icons.visibility,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _obscurePassword = !_obscurePassword;
+                                    });
+                                  },
+                                ),
+                              ),
                             ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: _resetPassword,
+                                child: HoverableText(
+                                  text: '¿Olvidaste tu contraseña?',
+                                  textAlign: TextAlign.left,
+                                  onTap: _resetPassword,
+                                ),
+                              ),
                             ),
-                          ),
-                          child:
-                              _isLoading
-                                  ? Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: const [
-                                      SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2.5,
-                                          color: Colors.black,
-                                        ),
-                                      ),
-                                      SizedBox(width: 12),
-                                      Text('Ingresando...'),
-                                    ],
-                                  )
-                                  : const Text('Ingresar'),
+                            const SizedBox(height: 26),
+                            Image.asset(
+                              'assets/images/logo.png',
+                              height: 80,
+                              fit: BoxFit.contain,
+                            ),
+                            const SizedBox(height: 24),
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              child: ElevatedButton(
+                                onPressed:
+                                    (_isLoading ||
+                                            (_intentoFallido &&
+                                                !_formularioValido))
+                                        ? null
+                                        : _login,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: Colors.black,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 32,
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                ),
+                                child:
+                                    _isLoading
+                                        ? Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: const [
+                                            SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2.5,
+                                                color: Colors.black,
+                                              ),
+                                            ),
+                                            SizedBox(width: 12),
+                                            Text('Ingresando...'),
+                                          ],
+                                        )
+                                        : const Text('Ingresar'),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            TextButton(
+                              onPressed:
+                                  () =>
+                                      Navigator.pushNamed(context, '/register'),
+                              child: HoverableText(
+                                text: '¿No tienes cuenta? Regístrate',
+                                textAlign: TextAlign.left,
+                                onTap:
+                                    () => Navigator.pushNamed(
+                                      context,
+                                      '/register',
+                                    ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-
-                      const SizedBox(height: 10),
-                      TextButton(
-                        onPressed:
-                            () => Navigator.pushNamed(context, '/register'),
-                        child: const Text(
-                          '¿No tienes cuenta? Regístrate',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
