@@ -2,14 +2,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-class LoginCarousel extends StatefulWidget {
-  const LoginCarousel({super.key});
+class RegisterCarousel extends StatefulWidget {
+  const RegisterCarousel({super.key});
 
   @override
-  State<LoginCarousel> createState() => _LoginCarouselState();
+  State<RegisterCarousel> createState() => _RegisterCarouselState();
 }
 
-class _LoginCarouselState extends State<LoginCarousel> {
+class _RegisterCarouselState extends State<RegisterCarousel> {
   final PageController _pageController = PageController();
   late final Timer _autoScrollTimer;
   int _currentPage = 0;

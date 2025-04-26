@@ -229,7 +229,7 @@ class _LoginPageState extends State<LoginPage>
             child: Container(
               color: const Color(0xFF024D78),
               padding: const EdgeInsets.all(32),
-              child: const LoginCarousel(), // 👈 el nuevo widget
+              child: const LoginCarousel(), //  el  widget DEL CARRUSEL DE LOGIN
             ),
           ),
 
@@ -237,6 +237,7 @@ class _LoginPageState extends State<LoginPage>
             flex: 1,
             child: Center(
               child: Container(
+                height: 600,
                 width: 400,
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -339,7 +340,13 @@ class _LoginPageState extends State<LoginPage>
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 26),
+                      Image.asset(
+                        'assets/images/logo.png',
+                        height: 80,
+                        fit: BoxFit.contain,
+                      ),
+                      const SizedBox(height: 24),
                       // _isLoading
                       //     ? const CircularProgressIndicator(color: Colors.white)
                       //     : ElevatedButton(

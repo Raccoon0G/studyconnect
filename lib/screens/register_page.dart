@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:study_connect/widgets/register_carousel.dart';
+import 'package:study_connect/widgets/hoverable_text.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -136,36 +138,19 @@ class _RegisterPageState extends State<RegisterPage> {
       body: Row(
         children: [
           Expanded(
-            flex: 1,
+            flex: 3,
             child: Container(
               color: const Color(0xFF024D78),
-              padding: const EdgeInsets.symmetric(horizontal: 40),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  SizedBox(height: 16),
-                  Text(
-                    'CREAR UNA\nNUEVA CUENTA',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(height: 20),
-                  Text(
-                    'Unete y comienza a aprender compartiendo ejercicios',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                ],
-              ),
+              padding: const EdgeInsets.all(32),
+              child:
+                  const RegisterCarousel(), //  el  widget DEL CARRUSEL DE LOGIN
             ),
           ),
           Expanded(
             flex: 1,
             child: Center(
               child: Container(
+                height: 600,
                 width: 400,
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -251,6 +236,15 @@ class _RegisterPageState extends State<RegisterPage> {
                         routeName: '/terms',
                         context: context,
                       ),
+                      const SizedBox(height: 10),
+                      Center(
+                        child: Container(
+                          width: 200,
+                          height: 1,
+                          color: Colors.white38,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
                       _checkboxWithInternalRoute(
                         value: _acceptedPrivacy,
                         label: 'Acepto Aviso de privacidad',
@@ -260,7 +254,16 @@ class _RegisterPageState extends State<RegisterPage> {
                         routeName: '/privacy',
                         context: context,
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 26),
+                      Center(
+                        child: Image.asset(
+                          'assets/images/logo.png',
+                          height: 80,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
                       Center(
                         child: ElevatedButton(
                           onPressed: _register,
@@ -333,22 +336,32 @@ class _RegisterPageState extends State<RegisterPage> {
     required String routeName,
     required BuildContext context,
   }) {
-    return Row(
-      children: [
-        Checkbox(value: value, onChanged: onChanged),
-        Flexible(
-          child: GestureDetector(
-            onTap: () => Navigator.pushNamed(context, routeName),
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                decoration: TextDecoration.underline,
-              ),
+    return Center(
+      //  Ahora TODO el checkbox + texto estará centrado
+      child: Row(
+        mainAxisSize:
+            MainAxisSize
+                .min, //  Solo ocupa lo que necesita (no toda la pantalla)
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+
+        children: [
+          Checkbox(
+            value: value,
+            onChanged: onChanged,
+            visualDensity: const VisualDensity(
+              horizontal: -4,
+              vertical: -4,
+            ), // más compacto
+          ),
+          Flexible(
+            child: HoverableText(
+              text: label,
+              onTap: () => Navigator.pushNamed(context, routeName),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
