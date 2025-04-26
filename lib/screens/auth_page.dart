@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:study_connect/widgets/login_carousel.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -227,28 +228,11 @@ class _LoginPageState extends State<LoginPage>
             flex: 2,
             child: Container(
               color: const Color(0xFF024D78),
-              padding: const EdgeInsets.symmetric(horizontal: 40),
-              child: const Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'INICIAR SESIÓN',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 36,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(height: 40),
-                  Text(
-                    'Accede para comenzar a compartir y resolver ejercicios.',
-                    style: TextStyle(color: Colors.white70, fontSize: 16),
-                  ),
-                ],
-              ),
+              padding: const EdgeInsets.all(32),
+              child: const LoginCarousel(), // 👈 el nuevo widget
             ),
           ),
+
           Expanded(
             flex: 3,
             child: Center(

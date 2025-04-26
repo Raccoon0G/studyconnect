@@ -1,0 +1,186 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+class LoginCarousel extends StatefulWidget {
+  const LoginCarousel({super.key});
+
+  @override
+  State<LoginCarousel> createState() => _LoginCarouselState();
+}
+
+class _LoginCarouselState extends State<LoginCarousel> {
+  final PageController _pageController = PageController();
+
+  late final Timer _autoScrollTimer;
+  int _currentPage = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController.addListener(() {
+      final page = _pageController.page?.round() ?? 0;
+      if (page != _currentPage) {
+        setState(() {
+          _currentPage = page;
+        });
+      }
+    });
+
+    _autoScrollTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+      if (_pageController.hasClients) {
+        final nextPage = (_pageController.page ?? 0).round() + 1;
+        _pageController.animateToPage(
+          nextPage % _items.length,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoScrollTimer.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  final List<_CarouselItem> _items = const [
+    _CarouselItem(
+      image: 'assets/images/slide1.png',
+      title: 'Aprende colaborando',
+      description:
+          'Comparte y resuelve ejercicios junto con otros estudiantes.',
+    ),
+    _CarouselItem(
+      image: 'assets/images/slide2.png',
+      title: 'Explora contenido visual',
+      description: 'Consulta soluciones paso a paso renderizadas con LaTeX.',
+    ),
+    _CarouselItem(
+      image: 'assets/images/slide3.png',
+      title: 'Gana reconocimiento',
+      description: 'Sube tus ejercicios y obtén puntos en el ranking.',
+    ),
+    _CarouselItem(
+      image: 'assets/images/slide4.png',
+      title: 'Gana reconocimiento',
+      description: 'Sube tus ejercicios y obtén puntos en el ranking.',
+    ),
+    _CarouselItem(
+      image: 'assets/images/slide5.png',
+      title: 'Gana reconocimiento',
+      description: 'Sube tus ejercicios y obtén puntos en el ranking.',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Expanded(
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: _items.length,
+                itemBuilder: (context, index) {
+                  final item = _items[index];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Image.asset(
+                          item.image,
+                          height: constraints.maxHeight * 0.4,
+                          fit: BoxFit.contain,
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          item.title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          item.description,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 16,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                _items.length,
+                (index) => GestureDetector(
+                  onTap: () {
+                    _pageController.animateToPage(
+                      index,
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.easeInOut,
+                    );
+                  },
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween<double>(
+                      begin: 1.0,
+                      end: _currentPage == index ? 1.4 : 1.0,
+                    ),
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.elasticOut,
+                    builder: (context, scale, child) {
+                      return Transform.scale(
+                        scale: scale,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color:
+                                _currentPage == index
+                                    ? Colors.white
+                                    : Colors.white38,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _CarouselItem {
+  final String image;
+  final String title;
+  final String description;
+
+  const _CarouselItem({
+    required this.image,
+    required this.title,
+    required this.description,
+  });
+}
