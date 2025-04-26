@@ -9,7 +9,49 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _LoginPageState extends State<LoginPage>
+    with SingleTickerProviderStateMixin {
+  @override
+  void initState() {
+    super.initState();
+    _emailController.addListener(_actualizarEstado);
+    _passwordController.addListener(_actualizarEstado);
+    _shakeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+
+    _shakeAnimation = Tween<double>(
+      begin: 0,
+      end: 24,
+    ).chain(CurveTween(curve: Curves.elasticIn)).animate(_shakeController);
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _shakeController.dispose();
+    super.dispose();
+  }
+
+  void _actualizarEstado() {
+    setState(() {}); // fuerza actualización del botón
+  }
+
+  bool _intentoFallido = false;
+
+  bool get _formularioValido {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    final emailValido = _validateEmailFormat(email);
+    final passwordValida = password.length >= 6 && password.length <= 20;
+    return emailValido && passwordValida;
+  }
+
+  late AnimationController _shakeController;
+  late Animation<double> _shakeAnimation;
+
   final _auth = FirebaseAuth.instance;
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
@@ -21,7 +63,10 @@ class _LoginPageState extends State<LoginPage> {
   String? _passwordError;
 
   Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      setState(() => _intentoFallido = true); // Marca el intento fallido
+      return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -87,6 +132,8 @@ class _LoginPageState extends State<LoginPage> {
     } on FirebaseAuthException catch (e) {
       setState(() {
         _isLoading = false;
+        _intentoFallido = true;
+        _shakeController.forward(from: 0); //  sacude después del error
         _emailError = null;
         _passwordError = null;
       });
@@ -225,28 +272,68 @@ class _LoginPageState extends State<LoginPage> {
                         isValid:
                             _emailError == null &&
                             _emailController.text.isNotEmpty,
+                        hintText: 'ejemplo@dominio.com',
+                        helperText: 'Debe tener un formato válido de correo.',
                       ),
-                      _buildInputField(
-                        label: 'Contraseña',
-                        controller: _passwordController,
-                        obscure: _obscurePassword,
-                        errorText: _passwordError,
-                        isValid:
-                            _passwordError == null &&
-                            _passwordController.text.isNotEmpty,
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off
-                                : Icons.visibility,
+
+                      // _buildInputField(
+                      //   label: 'Contraseña',
+                      //   controller: _passwordController,
+                      //   obscure: _obscurePassword,
+                      //   errorText: _passwordError,
+                      //   isValid:
+                      //       _passwordError == null &&
+                      //       _passwordController.text.isNotEmpty,
+                      //   hintText: 'Mínimo 6 caracteres',
+                      //   helperText:
+                      //       'Debe contener al menos 6 caracteres. \n Y maximo 20 caracteres.',
+                      //   suffixIcon: IconButton(
+                      //     icon: Icon(
+                      //       _obscurePassword
+                      //           ? Icons.visibility_off
+                      //           : Icons.visibility,
+                      //     ),
+                      //     onPressed: () {
+                      //       setState(() {
+                      //         _obscurePassword = !_obscurePassword;
+                      //       });
+                      //     },
+                      //   ),
+                      // ),
+                      AnimatedBuilder(
+                        animation: _shakeController,
+                        builder: (context, child) {
+                          return Transform.translate(
+                            offset: Offset(_shakeAnimation.value, 0),
+                            child: child,
+                          );
+                        },
+                        child: _buildInputField(
+                          label: 'Contraseña',
+                          controller: _passwordController,
+                          obscure: _obscurePassword,
+                          errorText: _passwordError,
+                          isValid:
+                              _passwordError == null &&
+                              _passwordController.text.isNotEmpty,
+                          hintText: 'Mínimo 6 caracteres',
+                          helperText:
+                              'Debe contener al menos 6 caracteres. Y máximo 20 caracteres.',
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
                           ),
-                          onPressed: () {
-                            setState(() {
-                              _obscurePassword = !_obscurePassword;
-                            });
-                          },
                         ),
                       ),
+
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
@@ -261,23 +348,64 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      _isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : ElevatedButton(
-                            onPressed: _isLoading ? null : _login,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: Colors.black,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 32,
-                                vertical: 12,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(30),
-                              ),
+                      // _isLoading
+                      //     ? const CircularProgressIndicator(color: Colors.white)
+                      //     : ElevatedButton(
+                      //       onPressed: _isLoading ? null : _login,
+                      //       style: ElevatedButton.styleFrom(
+                      //         backgroundColor: Colors.white,
+                      //         foregroundColor: Colors.black,
+                      //         padding: const EdgeInsets.symmetric(
+                      //           horizontal: 32,
+                      //           vertical: 12,
+                      //         ),
+                      //         shape: RoundedRectangleBorder(
+                      //           borderRadius: BorderRadius.circular(30),
+                      //         ),
+                      //       ),
+                      //       child: const Text('Ingresar'),
+                      //     ),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        child: ElevatedButton(
+                          onPressed:
+                              (_isLoading ||
+                                      (_intentoFallido && !_formularioValido))
+                                  ? null
+                                  : _login,
+
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 32,
+                              vertical: 12,
                             ),
-                            child: const Text('Ingresar'),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
                           ),
+                          child:
+                              _isLoading
+                                  ? Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: const [
+                                      SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2.5,
+                                          color: Colors.black,
+                                        ),
+                                      ),
+                                      SizedBox(width: 12),
+                                      Text('Ingresando...'),
+                                    ],
+                                  )
+                                  : const Text('Ingresar'),
+                        ),
+                      ),
+
                       const SizedBox(height: 10),
                       TextButton(
                         onPressed:
@@ -305,37 +433,87 @@ class _LoginPageState extends State<LoginPage> {
     String? errorText,
     Widget? suffixIcon,
     bool isValid = false,
+    String? hintText,
+    String? helperText,
   }) {
     Icon? statusIcon;
+    final isEmailField = label.contains('Correo');
+    final isPasswordField = label.contains('Contraseña');
+
     if (controller.text.isNotEmpty) {
+      final isValidEmail =
+          isEmailField && _validateEmailFormat(controller.text);
+      final isValidPassword =
+          isPasswordField &&
+          controller.text.length >= 6 &&
+          controller.text.length <= 20;
+
+      final isValid = isEmailField ? isValidEmail : isValidPassword;
+
       statusIcon = Icon(
-        errorText != null ? Icons.close : Icons.check,
-        color: errorText != null ? Colors.red : Colors.green,
+        isValid ? Icons.check : Icons.close,
+        color: isValid ? Colors.green : Colors.red,
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('$label :', style: const TextStyle(color: Colors.white)),
-        const SizedBox(height: 6),
-        TextFormField(
-          controller: controller,
-          obscureText: obscure,
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: Colors.white,
-            suffixIcon: suffixIcon ?? statusIcon,
-            errorText: errorText,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 12,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
             ),
           ),
-        ),
-        const SizedBox(height: 14),
-      ],
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: controller,
+            obscureText: obscure,
+            style: const TextStyle(color: Colors.black),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Este campo es obligatorio.';
+              }
+              if (label.contains('Correo') && !_validateEmailFormat(value)) {
+                return 'Ingresa un correo válido. Ej: ejemplo@dominio.com';
+              }
+              if (label.contains('Contraseña') && value.length < 6) {
+                return 'La contraseña debe tener mínimo 6 caracteres.';
+              }
+              return null;
+            },
+            decoration: InputDecoration(
+              hintText: hintText,
+              hintStyle: const TextStyle(color: Colors.black45),
+              helperText: helperText,
+              helperStyle: const TextStyle(color: Colors.white70),
+              filled: true,
+              fillColor: Colors.white,
+              errorText: errorText,
+              suffixIcon: suffixIcon ?? statusIcon,
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Colors.white, width: 1),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Colors.cyan, width: 2),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Colors.redAccent, width: 2),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 16,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
