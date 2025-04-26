@@ -41,6 +41,8 @@ class _LoginPageState extends State<LoginPage>
 
   bool _intentoFallido = false;
 
+  bool _sacudiendoPassword = false;
+
   bool get _formularioValido {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
@@ -133,9 +135,15 @@ class _LoginPageState extends State<LoginPage>
       setState(() {
         _isLoading = false;
         _intentoFallido = true;
-        _shakeController.forward(from: 0); //  sacude después del error
-        _emailError = null;
-        _passwordError = null;
+        _sacudiendoPassword = true;
+        _shakeController.forward(from: 0).then((_) {
+          _shakeController.reverse(); // 🔁 Esto regresa la animación a 0
+          setState(() {
+            _sacudiendoPassword = false;
+            _emailError = null;
+            _passwordError = null;
+          });
+        });
       });
 
       String mensaje = 'Error desconocido';
@@ -316,9 +324,9 @@ class _LoginPageState extends State<LoginPage>
                           isValid:
                               _passwordError == null &&
                               _passwordController.text.isNotEmpty,
-                          hintText: 'Mínimo 6 caracteres',
+                          hintText: 'Mínimo 8 caracteres',
                           helperText:
-                              'Debe contener al menos 6 caracteres. Y máximo 20 caracteres.',
+                              'Debe contener al menos 8 caracteres. \n Y máximo 24 caracteres.',
                           suffixIcon: IconButton(
                             icon: Icon(
                               _obscurePassword
@@ -492,7 +500,9 @@ class _LoginPageState extends State<LoginPage>
               helperStyle: const TextStyle(color: Colors.white70),
               filled: true,
               fillColor: Colors.white,
-              errorText: errorText,
+              errorText:
+                  errorText ??
+                  (_sacudiendoPassword && isPasswordField ? '' : null),
               suffixIcon: suffixIcon ?? statusIcon,
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
