@@ -293,9 +293,13 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                                     calSnap.docs
                                         .map((d) => d['estrellas'] as int)
                                         .toList();
-                                final promedio =
-                                    ratings.reduce((a, b) => a + b) /
-                                    ratings.length;
+
+                                double promedio = 0.0;
+                                if (ratings.isNotEmpty) {
+                                  promedio =
+                                      ratings.reduce((a, b) => a + b) /
+                                      ratings.length;
+                                }
 
                                 await FirebaseFirestore.instance
                                     .collection('calculo')
@@ -381,25 +385,63 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: List.generate(5, (i) {
-          if (valor >= i + 1) {
-            return const Icon(Icons.star, color: Color(0xFFFFC107), size: 22);
-          } else if (valor > i) {
-            return const Icon(
-              Icons.star_half,
-              color: Color(0xFFFFC107),
-              size: 22,
-            );
-          } else {
-            return const Icon(
-              Icons.star_border,
-              color: Colors.black38,
-              size: 22,
-            );
-          }
+          double estrellaValor = valor - i;
+
+          return TweenAnimationBuilder<double>(
+            tween: Tween<double>(begin: 0, end: estrellaValor.clamp(0.0, 1.0)),
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.easeOut,
+            builder: (context, animValue, child) {
+              IconData icono;
+              if (animValue >= 0.75) {
+                icono = Icons.star;
+              } else if (animValue >= 0.25) {
+                icono = Icons.star_half;
+              } else {
+                icono = Icons.star_border;
+              }
+
+              final color = Color.lerp(
+                Colors.amber.withOpacity(0.5),
+                Colors.amber,
+                animValue,
+              );
+
+              return Transform.scale(
+                scale: 1.0 + (0.1 * animValue), // efecto de zoom
+                child: Icon(icono, color: color, size: 24),
+              );
+            },
+          );
         }),
       ),
     );
   }
+
+  //Widget _estrellaConDecimal(double valor) {
+  //  return Center(
+  //    child: Row(
+  //      mainAxisSize: MainAxisSize.min,
+  //      children: List.generate(5, (i) {
+  //        if (valor >= i + 1) {
+  //          return const Icon(Icons.star, color: Color(0xFFFFC107), size: 22);
+  //        } else if (valor > i) {
+  //          return const Icon(
+  //            Icons.star_half,
+  //            color: Color(0xFFFFC107),
+  //            size: 22,
+  //          );
+  //        } else {
+  //          return const Icon(
+  //            Icons.star_border,
+  //            color: Colors.black38,
+  //            size: 22,
+  //          );
+  //        }
+  //      }),
+  //    ),
+  //  );
+  //}
 
   Widget _botonAccion(String texto, IconData icono, VoidCallback onPressed) {
     return ElevatedButton.icon(
@@ -962,8 +1004,9 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
 
                                             await _cargarComentarios();
                                             await _cargarDatosDesdeFirestore(); //  Para actualizar calificación dinámica
-                                            // Mostrar AlertDialog que se cierra automáticamente
+
                                             showDialog(
+                                              // Mostrar AlertDialog que se cierra automáticamente
                                               context: context,
                                               barrierDismissible:
                                                   false, // no se puede cerrar tocando afuera
