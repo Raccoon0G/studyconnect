@@ -304,6 +304,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                                     .doc(widget.ejercicioId)
                                     .update({'CalPromedio': promedio});
 
+                                await _cargarDatosDesdeFirestore(); //Para actualizar estrellas en columna izquierda
                                 // MANDAR NOTIFICACIÓN AL AUTOR DEL EJERCICIO
                                 final autorId = ejercicioData?['AutorId'];
                                 final nombreEjer = ejercicioData?['Titulo'];
@@ -960,7 +961,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                                             }
 
                                             await _cargarComentarios();
-
+                                            await _cargarDatosDesdeFirestore(); //  Para actualizar calificación dinámica
                                             // Mostrar AlertDialog que se cierra automáticamente
                                             showDialog(
                                               context: context,
