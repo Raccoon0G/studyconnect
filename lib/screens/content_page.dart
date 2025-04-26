@@ -74,12 +74,14 @@ class ContentPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Contenidos',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+            Center(
+              child: const Text(
+                'Contenidos',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             ),
             const SizedBox(height: 20),
@@ -98,12 +100,12 @@ class ContentPage extends StatelessWidget {
                   CardTema(
                     titulo: 'Límites de funciones y Continuidad',
                     clave: 'Lim',
-                    imagen: 'limites.png',
+                    imagen: 'limites3.png',
                   ),
                   CardTema(
                     titulo: 'Derivada y optimización',
                     clave: 'Der',
-                    imagen: 'derivadas3.png',
+                    imagen: 'derivadas5.png',
                   ),
                   CardTema(
                     titulo: 'Técnicas de integración',
@@ -176,62 +178,6 @@ class ContentPage extends StatelessWidget {
               ],
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _boton(
-    BuildContext context,
-    String texto,
-    IconData icono,
-    Map<String, String> tema,
-  ) {
-    return ElevatedButton(
-      onPressed: () {
-        if (texto == 'Ver contenido') {
-          Navigator.pushNamed(
-            context,
-            '/exercise_list',
-            arguments: {'tema': tema['clave']!, 'titulo': tema['titulo']!},
-          );
-        } else if (texto == 'Agregar ejercicio') {
-          Navigator.pushNamed(context, '/exercise_upload');
-        } else if (texto == 'Agregar Material') {
-          Navigator.pushNamed(context, '/upload_material');
-        }
-      },
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1A1A1A),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(texto, style: const TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(width: 8),
-          Icon(icono, size: 18),
-        ],
-      ),
-    );
-  }
-
-  Widget _imagenIlustrativa({
-    required double ancho,
-    required double alto,
-    required String assetName,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 30),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Image.asset(
-          'assets/images/$assetName',
-          width: ancho,
-          height: alto,
-          fit: BoxFit.cover,
         ),
       ),
     );

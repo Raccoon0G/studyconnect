@@ -23,6 +23,7 @@ class MyApp extends StatelessWidget {
         '/chat': (context) => const ChatHomePage(),
         '/content': (context) => const ContentPage(),
         '/exercise_list': (context) => const ExerciseListPage(),
+        '/material_list': (context) => const MaterialListPage(),
         '/exercise_upload': (context) => const ExerciseUploadPage(),
         '/ranking': (context) => const RankingPage(),
         '/user_profile': (context) => const UserProfilePage(),

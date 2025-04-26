@@ -16,3 +16,4 @@ export 'package:study_connect/screens/faq_page.dart';
 export 'package:study_connect/screens/user_exercises_page.dart';
 export 'package:study_connect/screens/upload_material_page.dart';
 export 'package:study_connect/screens/autoevaluation_page.dart';
+export 'package:study_connect/screens/material_list_page.dart';
