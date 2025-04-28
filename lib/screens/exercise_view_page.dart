@@ -13,6 +13,8 @@ import 'package:study_connect/services/notification_service.dart';
 import 'package:study_connect/widgets/exercise_carousel.dart';
 import 'package:study_connect/widgets/notification_icon_widget.dart';
 
+import 'package:expansion_tile_card/expansion_tile_card.dart';
+
 class ExerciseViewPage extends StatefulWidget {
   final String tema;
   final String ejercicioId;
@@ -553,10 +555,21 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
         // la dividi en en 4 casos para que se desplieguen bien , descripcion y paso son iguales Solo se muestra uno una vez , si el paso y la descripcion son diferentes se muestran ambos uno arriba de otro , solo hay paso solo se muestra paso y si solo hay descripcion solo se muestra la descripcion :D
         //todo
         const SizedBox(height: 16),
-        ExpansionTile(
+        const Divider(color: Colors.black87, height: 20),
+
+        ExpansionTileCard(
+          elevation: 4,
+          baseColor: const Color(0xFFF6F3FA), // Tu mismo color pastel
+          expandedColor: const Color(0xFFF6F3FA),
+          borderRadius: BorderRadius.circular(16),
+          leading: const Icon(Icons.comment, color: Colors.black87),
           title: Text(
             'Comentarios (${comentarios.length})',
-            style: const TextStyle(color: Colors.black),
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+              color: Colors.black87,
+            ),
           ),
           children:
               comentarios.map((c) {
@@ -567,96 +580,122 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                         : '';
                 final editable =
                     c['usuarioId'] == FirebaseAuth.instance.currentUser?.uid;
-
-                return ListTile(
-                  leading: const Icon(Icons.person, color: Colors.black),
-                  title: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          c['nombre'] ?? 'Anónimo',
-                          style: const TextStyle(
-                            color: Colors.black,
-                            fontWeight: FontWeight.w600,
-                          ),
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 6,
+                          offset: const Offset(0, 3),
                         ),
+                      ],
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.blueGrey.shade100,
+                        child: const Icon(Icons.person, color: Colors.black87),
                       ),
-                      _estrellaConDecimal((c['estrellas'] ?? 0).toDouble()),
-                    ],
-                  ),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        formatted,
-                        style: const TextStyle(color: Colors.black54),
-                      ),
-                      Text(
-                        c['comentario'] ?? '',
-                        style: const TextStyle(color: Colors.black),
-                      ),
-                    ],
-                  ),
-                  trailing:
-                      editable
-                          ? IconButton(
-                            tooltip: 'Borrar comentario',
-                            icon: const Icon(
-                              Icons.delete,
-                              color: Colors.redAccent,
+                      title: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              c['nombre'] ?? 'Anónimo',
+                              style: const TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                              ),
                             ),
-                            onPressed: () async {
-                              final docs =
-                                  await FirebaseFirestore.instance
-                                      .collection('comentarios_ejercicios')
-                                      .where(
-                                        'usuarioId',
-                                        isEqualTo: c['usuarioId'],
-                                      )
-                                      .where(
-                                        'comentario',
-                                        isEqualTo: c['comentario'],
-                                      )
-                                      .where(
-                                        'timestamp',
-                                        isEqualTo: c['timestamp'],
-                                      )
-                                      .get();
+                          ),
+                          _estrellaConDecimal((c['estrellas'] ?? 0).toDouble()),
+                        ],
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 4),
+                          Text(
+                            formatted,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.black54,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            c['comentario'] ?? '',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                      trailing:
+                          editable
+                              ? IconButton(
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.redAccent,
+                                ),
+                                onPressed: () async {
+                                  final docs =
+                                      await FirebaseFirestore.instance
+                                          .collection('comentarios_ejercicios')
+                                          .where(
+                                            'usuarioId',
+                                            isEqualTo: c['usuarioId'],
+                                          )
+                                          .where(
+                                            'comentario',
+                                            isEqualTo: c['comentario'],
+                                          )
+                                          .where(
+                                            'timestamp',
+                                            isEqualTo: c['timestamp'],
+                                          )
+                                          .get();
 
-                              for (final d in docs.docs) {
-                                await d.reference.delete();
-                              }
+                                  for (final d in docs.docs) {
+                                    await d.reference.delete();
+                                  }
 
-                              await _cargarComentarios();
-                              await _cargarDatosDesdeFirestore(); //  Para actualizar calificación dinámica
+                                  await _cargarComentarios();
+                                  await _cargarDatosDesdeFirestore(); // actualizar calificación dinámica
 
-                              showDialog(
-                                // Mostrar AlertDialog que se cierra automáticamente
-                                context: context,
-                                barrierDismissible:
-                                    false, // no se puede cerrar tocando afuera
-                                builder: (context) {
-                                  // Cerrar automáticamente después de 2 segundos
-                                  Future.delayed(
-                                    const Duration(seconds: 2),
-                                    () {
-                                      if (Navigator.canPop(context)) {
-                                        Navigator.of(context).pop();
-                                      }
+                                  showDialog(
+                                    context: context,
+                                    barrierDismissible: false,
+                                    builder: (context) {
+                                      Future.delayed(
+                                        const Duration(seconds: 2),
+                                        () {
+                                          if (Navigator.canPop(context)) {
+                                            Navigator.of(context).pop();
+                                          }
+                                        },
+                                      );
+                                      return const AlertDialog(
+                                        title: Text('Comentario eliminado'),
+                                        content: Text(
+                                          'Tu comentario ha sido eliminado correctamente.',
+                                        ),
+                                      );
                                     },
                                   );
-
-                                  return const AlertDialog(
-                                    title: Text('Comentario eliminado'),
-                                    content: Text(
-                                      'Tu comentario ha sido eliminado correctamente.',
-                                    ),
-                                  );
                                 },
-                              );
-                            },
-                          )
-                          : null,
+                              )
+                              : null,
+                    ),
+                  ),
                 );
               }).toList(),
         ),
