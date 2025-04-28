@@ -1,0 +1,16 @@
+export 'package:study_connect/widgets/card_tema.dart';
+export 'package:study_connect/widgets/custom_latex_text.dart';
+export 'package:study_connect/widgets/custom_rating_widget.dart';
+export 'package:study_connect/widgets/custom_star_rating.dart';
+export 'package:study_connect/widgets/exercise_carousel.dart';
+export 'package:study_connect/widgets/hoverable_text.dart';
+export 'package:study_connect/widgets/login_carousel.dart';
+export 'package:study_connect/widgets/notification_icon_widget.dart';
+export 'package:study_connect/widgets/register_carousel.dart';
+export 'package:study_connect/widgets/comment_shimmer_placeholder.dart';
+export 'package:study_connect/widgets/info_with_icon.dart';
+export 'package:study_connect/widgets/custom_action_button.dart';
+export 'package:study_connect/widgets/custom_dropdown_version.dart';
+export 'package:study_connect/widgets/custom_expansion_tiles_comentarios.dart';
+export 'package:study_connect/widgets/custom_action_buttons_row.dart';
+export 'package:study_connect/widgets/custom_feedback_card.dart';

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+/// Dibuja estrellas para que el usuario pueda seleccionar una calificación (interactiva).
 class CustomRatingWidget extends StatelessWidget {
   final int rating;
   final void Function(int) onRatingChanged;
