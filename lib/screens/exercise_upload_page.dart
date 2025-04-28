@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:study_connect/widgets/exercise_carousel.dart';
 
 class ExerciseUploadPage extends StatefulWidget {
   const ExerciseUploadPage({super.key});
@@ -459,7 +460,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                     width: 300,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF48C9EF),
+                      color: const Color(0xFF055B84),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Column(
@@ -585,15 +586,22 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 14),
                         Center(
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(20),
-                            child: Image.asset(
-                              'assets/images/funciones.png',
-                              height: 300,
+                            borderRadius: BorderRadius.circular(12),
+                            child: SizedBox(
                               width: double.infinity,
-                              fit: BoxFit.cover,
+                              height: 300,
+                              child: AspectRatio(
+                                aspectRatio: 4 / 3,
+                                child: Container(
+                                  color:
+                                      Colors
+                                          .white10, // o un fondo bonito si quieres
+                                  child: const ExerciseCarousel(),
+                                ),
+                              ),
                             ),
                           ),
                         ),

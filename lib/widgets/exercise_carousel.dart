@@ -120,7 +120,6 @@ class _ExerciseCarouselState extends State<ExerciseCarousel> {
                             Text(
                               item.title,
                               style: GoogleFonts.ebGaramond(
-                                // <--- Nueva fuente bonita
                                 color: Colors.white,
                                 fontSize: 26,
                                 fontWeight: FontWeight.bold,
@@ -144,7 +143,7 @@ class _ExerciseCarouselState extends State<ExerciseCarousel> {
                 },
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(
@@ -185,7 +184,7 @@ class _ExerciseCarouselState extends State<ExerciseCarousel> {
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 10),
           ],
         );
       },
