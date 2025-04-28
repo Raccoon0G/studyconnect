@@ -12,8 +12,8 @@ import 'package:intl/intl.dart';
 import 'package:study_connect/services/notification_service.dart';
 import 'package:study_connect/widgets/exercise_carousel.dart';
 import 'package:study_connect/widgets/notification_icon_widget.dart';
-
 import 'package:expansion_tile_card/expansion_tile_card.dart';
+import 'package:study_connect/widgets/custom_rating_widget.dart';
 
 class ExerciseViewPage extends StatefulWidget {
   final String tema;
@@ -832,21 +832,6 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
         const SizedBox(height: 20),
       ],
     );
-
-    // return Container(
-    //   padding: const EdgeInsets.all(16),
-    //   decoration: BoxDecoration(
-    //     color: Colors.white,
-    //     borderRadius: BorderRadius.circular(16),
-    //     boxShadow: [
-    //       BoxShadow(
-    //         color: Colors.black.withOpacity(0.1),
-    //         blurRadius: 10,
-    //         offset: const Offset(0, 4),
-    //       ),
-    //     ],
-    //   ),
-
     if (esPantallaChica) {
       return SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -863,7 +848,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
               ),
             ],
           ),
-          child: contenido, // 👈 aquí va el contenido que ya armaste
+          child: contenido, //  aquí va el contenido
         ),
       );
     } else {
@@ -885,345 +870,280 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
 
   void _mostrarDialogoCalificacion() {
     final TextEditingController controller = TextEditingController();
-    bool comoAnonimo = false;
-    int rating = 0;
     bool enviando = false;
 
-    showDialog(
+    int rating = 0; //
+    bool comoAnonimo = false;
+
+    showGeneralDialog(
       context: context,
       barrierDismissible: true,
-      builder:
-          (_) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            contentPadding: const EdgeInsets.all(24),
-            content: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: 500, // 📏 Limitamos el ancho máximo
-              ),
-              child: StatefulBuilder(
-                builder:
-                    (context, setStateDialog) => SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  'Califica este ejercicio',
-                                  style: GoogleFonts.ebGaramond(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.close),
-                                tooltip: 'Cerrar',
-                                onPressed: () => Navigator.pop(context),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: List.generate(
-                              5,
-                              (i) => IconButton(
-                                tooltip: 'Calificación',
-                                icon: Icon(
-                                  i < rating ? Icons.star : Icons.star_border,
-                                  color: Colors.amber,
-                                  size: 30,
-                                ),
-                                onPressed:
-                                    () => setStateDialog(() => rating = i + 1),
-                              ),
-                            ),
-                          ),
-                          TextField(
-                            controller: controller,
-                            decoration: const InputDecoration(
-                              labelText: 'Comentario',
-                              border: OutlineInputBorder(),
-                            ),
-                            maxLines: 2,
-                          ),
-                          const SizedBox(height: 12),
-                          CheckboxListTile(
-                            value: comoAnonimo,
-                            onChanged:
-                                (val) =>
-                                    setStateDialog(() => comoAnonimo = val!),
-                            title: const Text('Comentar como anónimo'),
-                            controlAffinity: ListTileControlAffinity.leading,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          const SizedBox(height: 10),
-                          //
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF6F3FA),
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                              border: Border.all(color: Colors.grey.shade300),
-                            ),
-                            child: Semantics(
-                              label:
-                                  'Seleccionar la versión para calificar el ejercicio',
-                              child:
-                                  versiones.isEmpty
-                                      ? const Center(
-                                        child: CircularProgressIndicator(),
-                                      )
-                                      : DropdownButtonFormField<String>(
-                                        value:
-                                            versiones.any(
-                                                  (ver) =>
-                                                      ver['id'] ==
-                                                      versionSeleccionada,
-                                                )
-                                                ? versionSeleccionada
-                                                : versiones.isNotEmpty
-                                                ? versiones.first['id']
-                                                : null,
-                                        isExpanded: true,
-                                        items:
-                                            versiones.map<
-                                              DropdownMenuItem<String>
-                                            >((ver) {
-                                              final fecha =
-                                                  (ver['fecha'] as Timestamp?)
-                                                      ?.toDate();
-                                              final formatted =
-                                                  fecha != null
-                                                      ? DateFormat(
-                                                        'dd/MM/yyyy',
-                                                      ).format(fecha)
-                                                      : 'Sin fecha';
-                                              return DropdownMenuItem<String>(
-                                                value: ver['id'],
-                                                child: Text(
-                                                  'Versión ${ver['id']} - $formatted',
-                                                  style: GoogleFonts.ebGaramond(
-                                                    fontSize: 16,
-                                                    color: Colors.black87,
-                                                  ),
-                                                ),
-                                              );
-                                            }).toList(),
-                                        onChanged: (value) {
-                                          if (value != null) {
-                                            setState(
-                                              () => versionSeleccionada = value,
-                                            );
-                                            _cargarVersionSeleccionada(value);
-                                          }
-                                        },
-                                        decoration:
-                                            const InputDecoration.collapsed(
-                                              hintText: 'Seleccionar versión',
-                                            ),
-                                        dropdownColor: Colors.white,
-                                      ),
-                            ),
-                          ),
-
-                          //
-                          const SizedBox(height: 16),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text('Cancelar'),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton.icon(
-                                icon:
-                                    enviando
-                                        ? const SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: Colors.white,
-                                          ),
-                                        )
-                                        : const Icon(Icons.send),
-                                label: Text(
-                                  enviando ? 'Enviando...' : 'Enviar',
-                                ),
-                                onPressed:
-                                    enviando
-                                        ? null // 🔒 Mientras esté enviando, desactivar botón
-                                        : () async {
-                                          final user =
-                                              FirebaseAuth.instance.currentUser;
-                                          if (user == null ||
-                                              controller.text.trim().isEmpty ||
-                                              rating == 0) {
-                                            showDialog(
-                                              context: context,
-                                              builder:
-                                                  (context) => AlertDialog(
-                                                    title: const Text(
-                                                      'Campos incompletos',
-                                                    ),
-                                                    content: const Text(
-                                                      'Por favor ingresa un comentario y una calificación antes de enviar.',
-                                                    ),
-                                                    actions: [
-                                                      TextButton(
-                                                        onPressed:
-                                                            () =>
-                                                                Navigator.of(
-                                                                  context,
-                                                                ).pop(),
-                                                        child: const Text(
-                                                          'Aceptar',
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                            );
-                                            return;
-                                          }
-
-                                          setStateDialog(
-                                            () => enviando = true,
-                                          ); // ⬅️ Poner loading true
-
-                                          try {
-                                            final userData =
-                                                await FirebaseFirestore.instance
-                                                    .collection('usuarios')
-                                                    .doc(user.uid)
-                                                    .get();
-
-                                            final comentario = {
-                                              'usuarioId': user.uid,
-                                              'nombre':
-                                                  comoAnonimo
-                                                      ? 'Anónimo'
-                                                      : userData['Nombre'],
-                                              'comentario': controller.text,
-                                              'estrellas': rating,
-                                              'timestamp': Timestamp.now(),
-                                              'tema': widget.tema,
-                                              'ejercicioId': widget.ejercicioId,
-                                              'modificado': false,
-                                            };
-
-                                            await FirebaseFirestore.instance
-                                                .collection(
-                                                  'comentarios_ejercicios',
-                                                )
-                                                .add(comentario);
-
-                                            // 🔄 Actualizar promedio
-                                            final calSnap =
-                                                await FirebaseFirestore.instance
-                                                    .collection(
-                                                      'comentarios_ejercicios',
-                                                    )
-                                                    .where(
-                                                      'ejercicioId',
-                                                      isEqualTo:
-                                                          widget.ejercicioId,
-                                                    )
-                                                    .where(
-                                                      'tema',
-                                                      isEqualTo: widget.tema,
-                                                    )
-                                                    .get();
-
-                                            final ratings =
-                                                calSnap.docs
-                                                    .map(
-                                                      (d) =>
-                                                          d['estrellas'] as int,
-                                                    )
-                                                    .toList();
-                                            double promedio =
-                                                ratings.isNotEmpty
-                                                    ? ratings.reduce(
-                                                          (a, b) => a + b,
-                                                        ) /
-                                                        ratings.length
-                                                    : 0.0;
-
-                                            await FirebaseFirestore.instance
-                                                .collection('calculo')
-                                                .doc(widget.tema)
-                                                .collection(
-                                                  'Ejer${widget.tema}',
-                                                )
-                                                .doc(widget.ejercicioId)
-                                                .update({
-                                                  'CalPromedio': promedio,
-                                                });
-
-                                            await _cargarDatosDesdeFirestore();
-                                            await _cargarComentarios();
-
-                                            Navigator.pop(
-                                              context,
-                                            ); // Cerrar el diálogo después de enviar
-                                          } catch (e) {
-                                            showDialog(
-                                              context: context,
-                                              builder:
-                                                  (context) => AlertDialog(
-                                                    title: const Text('Error'),
-                                                    content: Text(
-                                                      'Ocurrió un error al enviar: $e',
-                                                    ),
-                                                    actions: [
-                                                      TextButton(
-                                                        onPressed:
-                                                            () =>
-                                                                Navigator.of(
-                                                                  context,
-                                                                ).pop(),
-                                                        child: const Text(
-                                                          'Aceptar',
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                            );
-                                          } finally {
-                                            setStateDialog(
-                                              () => enviando = false,
-                                            ); // ⬅️ Siempre apagar loading
-                                          }
-                                        },
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-              ),
+      barrierLabel: "Cerrar",
+      transitionDuration: const Duration(milliseconds: 400),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return const SizedBox();
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curvedValue = Curves.easeInOut.transform(animation.value);
+        return Opacity(
+          opacity: animation.value,
+          child: Transform.translate(
+            offset: Offset(0, (1 - curvedValue) * 100),
+            child: StatefulBuilder(
+              builder: (context, setStateDialog) {
+                return AlertDialog(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  contentPadding: const EdgeInsets.all(24),
+                  content: _buildContenidoDialogo(
+                    controller,
+                    () => comoAnonimo, //  lo pasamos como función getter
+                    (val) => setStateDialog(() => comoAnonimo = val),
+                    () => rating,
+                    (val) => setStateDialog(() => rating = val),
+                    enviando,
+                    (val) => setStateDialog(() => enviando = val),
+                  ),
+                );
+              },
             ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildContenidoDialogo(
+    TextEditingController controller,
+    bool Function() getComoAnonimo,
+    void Function(bool) setComoAnonimo,
+    int Function() getRating,
+    void Function(int) setRating,
+    bool enviando,
+    void Function(bool) setEnviando,
+  ) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 500),
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Califica este ejercicio',
+                    style: GoogleFonts.ebGaramond(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            CustomRatingWidget(
+              rating: getRating(),
+              onRatingChanged: (nuevoValor) => setRating(nuevoValor),
+              enableHoverEffect: true,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Comentario',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 12),
+            CheckboxListTile(
+              value: getComoAnonimo(),
+              onChanged: (val) {
+                if (val != null) setComoAnonimo(val);
+              },
+              title: const Text('Comentar como anónimo'),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+            ),
+            const SizedBox(height: 16),
+
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF6F3FA),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: DropdownButtonFormField<String>(
+                value: versionSeleccionada,
+                isExpanded: true,
+                items:
+                    versiones.map((ver) {
+                      final fecha = (ver['fecha'] as Timestamp?)?.toDate();
+                      final formatted =
+                          fecha != null
+                              ? DateFormat('dd/MM/yyyy').format(fecha)
+                              : 'Sin fecha';
+                      return DropdownMenuItem<String>(
+                        value: ver['id'],
+                        child: Text('Versión ${ver['id']} - $formatted'),
+                      );
+                    }).toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => versionSeleccionada = value);
+                  }
+                },
+                decoration: const InputDecoration.collapsed(
+                  hintText: 'Seleccionar versión',
+                ),
+                dropdownColor: Colors.white,
+              ),
+            ),
+
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed:
+                      enviando
+                          ? null
+                          : () async {
+                            if (controller.text.trim().isEmpty ||
+                                getRating() == 0) {
+                              showDialog(
+                                context: context,
+                                builder:
+                                    (context) => AlertDialog(
+                                      title: const Text('Campos incompletos'),
+                                      content: const Text(
+                                        'Por favor escribe un comentario y selecciona una calificación.',
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed:
+                                              () => Navigator.pop(context),
+                                          child: const Text('Aceptar'),
+                                        ),
+                                      ],
+                                    ),
+                              );
+                              return;
+                            }
+
+                            setEnviando(true);
+                            await _enviarComentario(
+                              controller.text.trim(),
+                              getRating(),
+                              getComoAnonimo(),
+                            );
+                            setEnviando(false);
+                            Navigator.pop(context);
+                          },
+                  icon:
+                      enviando
+                          ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                          : const Icon(Icons.send),
+                  label: Text(enviando ? 'Enviando...' : 'Enviar'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _enviarComentario(
+    String texto,
+    int rating,
+    bool comoAnonimo,
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || texto.isEmpty || rating == 0) return;
+
+    final userData =
+        await FirebaseFirestore.instance
+            .collection('usuarios')
+            .doc(user.uid)
+            .get();
+    final comentario = {
+      'usuarioId': user.uid,
+      'nombre': comoAnonimo ? 'Anónimo' : userData['Nombre'],
+      'comentario': texto,
+      'estrellas': rating,
+      'timestamp': Timestamp.now(),
+      'tema': widget.tema,
+      'ejercicioId': widget.ejercicioId,
+      'modificado': false,
+    };
+
+    await FirebaseFirestore.instance
+        .collection('comentarios_ejercicios')
+        .add(comentario);
+
+    final calSnap =
+        await FirebaseFirestore.instance
+            .collection('comentarios_ejercicios')
+            .where('ejercicioId', isEqualTo: widget.ejercicioId)
+            .where('tema', isEqualTo: widget.tema)
+            .get();
+
+    final ratings = calSnap.docs.map((d) => d['estrellas'] as int).toList();
+    double promedio = 0.0;
+    if (ratings.isNotEmpty) {
+      promedio = ratings.reduce((a, b) => a + b) / ratings.length;
+    }
+
+    await FirebaseFirestore.instance
+        .collection('calculo')
+        .doc(widget.tema)
+        .collection('Ejer${widget.tema}')
+        .doc(widget.ejercicioId)
+        .update({'CalPromedio': promedio});
+
+    await _cargarComentarios();
+    await _cargarDatosDesdeFirestore();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('✅ Comentario enviado exitosamente.'),
+        duration: const Duration(seconds: 3),
+        backgroundColor: Colors.green.shade600,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
     );
   }
 
