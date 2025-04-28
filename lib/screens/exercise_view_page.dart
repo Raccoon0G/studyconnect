@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:intl/intl.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:study_connect/services/notification_service.dart';
 import 'package:study_connect/widgets/exercise_carousel.dart';
 import 'package:study_connect/widgets/notification_icon_widget.dart';
@@ -138,6 +139,50 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     }
   }
 
+  Future<void> _eliminarComentario(Map<String, dynamic> comentario) async {
+    try {
+      final query =
+          await FirebaseFirestore.instance
+              .collection('comentarios_ejercicios')
+              .where('usuarioId', isEqualTo: comentario['usuarioId'])
+              .where('comentario', isEqualTo: comentario['comentario'])
+              .where('timestamp', isEqualTo: comentario['timestamp'])
+              .get();
+
+      for (final doc in query.docs) {
+        await doc.reference.delete();
+      }
+
+      await _cargarComentarios();
+      await _cargarDatosDesdeFirestore();
+
+      // 🎯 Mostrar SnackBar bonito
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('✅ Comentario eliminado exitosamente.'),
+            duration: const Duration(seconds: 3),
+            backgroundColor: Colors.green.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error al eliminar comentario: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _cargarTodo() async {
     try {
       final docRef = FirebaseFirestore.instance
@@ -197,8 +242,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
   }) {
     final autor = ejercicioData['Autor'] ?? 'Anónimo';
     final fecha = (ejercicioData['FechMod'] as Timestamp?)?.toDate();
-    final calificacion =
-        double.tryParse(ejercicioData['CalPromedio']?.toString() ?? '0') ?? 0.0;
+    final calificacion = _calcularPromedioEstrellas(comentarios);
 
     final Map<String, String> nombresTemas = {
       'FnAlg': 'Funciones algebraicas y trascendentes',
@@ -337,7 +381,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
             ),
           ),
           const SizedBox(height: 8),
-          _estrellaConDecimal(calificacion),
+          _mostrarEstrellasConDecimal(calificacion),
 
           const SizedBox(height: 8),
           Center(
@@ -597,146 +641,107 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
           ),
 
           children:
-              comentarios.map((c) {
-                final fecha = (c['timestamp'] as Timestamp?)?.toDate();
-                final formatted =
-                    fecha != null
-                        ? DateFormat('dd/MM/yyyy HH:mm').format(fecha)
-                        : '';
-                final editable =
-                    c['usuarioId'] == FirebaseAuth.instance.currentUser?.uid;
-                return AnimatedOpacity(
-                  opacity: 1.0,
-                  duration: Duration(
-                    milliseconds: 500 + (comentarios.indexOf(c) * 100),
-                  ),
-                  curve: Curves.easeOut,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 6,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                        border: Border.all(color: Colors.grey.shade300),
+              comentarios.isEmpty
+                  ? List.generate(
+                    3,
+                    (_) => _comentarioShimmer(),
+                  ) // 👈 shimmer mientras no haya comentarios
+                  : comentarios.map((c) {
+                    final fecha = (c['timestamp'] as Timestamp?)?.toDate();
+                    final formatted =
+                        fecha != null
+                            ? DateFormat('dd/MM/yyyy HH:mm').format(fecha)
+                            : '';
+                    final editable =
+                        c['usuarioId'] ==
+                        FirebaseAuth.instance.currentUser?.uid;
+                    return AnimatedOpacity(
+                      opacity: 1.0,
+                      duration: Duration(
+                        milliseconds: 500 + (comentarios.indexOf(c) * 100),
                       ),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.blueGrey.shade100,
-                          child: const Icon(
-                            Icons.person,
-                            color: Colors.black87,
+                      curve: Curves.easeOut,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 6,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                            border: Border.all(color: Colors.grey.shade300),
                           ),
-                        ),
-                        title: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                c['nombre'] ?? 'Anónimo',
-                                style: const TextStyle(
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ),
-                            _estrellaConDecimal(
-                              (c['estrellas'] ?? 0).toDouble(),
-                            ),
-                          ],
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 4),
-                            Text(
-                              formatted,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Colors.black54,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              c['comentario'] ?? '',
-                              style: const TextStyle(
-                                fontSize: 15,
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Colors.blueGrey.shade100,
+                              child: const Icon(
+                                Icons.person,
                                 color: Colors.black87,
                               ),
                             ),
-                          ],
-                        ),
-                        trailing:
-                            editable
-                                ? IconButton(
-                                  icon: const Icon(
-                                    Icons.delete_outline,
-                                    color: Colors.redAccent,
+                            title: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    c['nombre'] ?? 'Anónimo',
+                                    style: const TextStyle(
+                                      color: Colors.black,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 16,
+                                    ),
                                   ),
-                                  onPressed: () async {
-                                    final docs =
-                                        await FirebaseFirestore.instance
-                                            .collection(
-                                              'comentarios_ejercicios',
-                                            )
-                                            .where(
-                                              'usuarioId',
-                                              isEqualTo: c['usuarioId'],
-                                            )
-                                            .where(
-                                              'comentario',
-                                              isEqualTo: c['comentario'],
-                                            )
-                                            .where(
-                                              'timestamp',
-                                              isEqualTo: c['timestamp'],
-                                            )
-                                            .get();
-
-                                    for (final d in docs.docs) {
-                                      await d.reference.delete();
-                                    }
-
-                                    await _cargarComentarios();
-                                    await _cargarDatosDesdeFirestore(); // actualizar calificación dinámica
-
-                                    showDialog(
-                                      context: context,
-                                      barrierDismissible: false,
-                                      builder: (context) {
-                                        Future.delayed(
-                                          const Duration(seconds: 2),
-                                          () {
-                                            if (Navigator.canPop(context)) {
-                                              Navigator.of(context).pop();
-                                            }
-                                          },
-                                        );
-                                        return const AlertDialog(
-                                          title: Text('Comentario eliminado'),
-                                          content: Text(
-                                            'Tu comentario ha sido eliminado correctamente.',
-                                          ),
-                                        );
+                                ),
+                                _mostrarEstrellasConDecimal(
+                                  (c['estrellas'] ?? 0).toDouble(),
+                                ),
+                              ],
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 4),
+                                Text(
+                                  formatted,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.black54,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  c['comentario'] ?? '',
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            trailing:
+                                editable
+                                    ? IconButton(
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        color: Colors.redAccent,
+                                      ),
+                                      onPressed: () async {
+                                        await _eliminarComentario(c);
                                       },
-                                    );
-                                  },
-                                )
-                                : null,
+                                    )
+                                    : null,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                );
-              }).toList(),
+                    );
+                  }).toList(),
         ),
 
         const SizedBox(height: 16),
@@ -1147,40 +1152,94 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     );
   }
 
-  Widget _estrellaConDecimal(double valor) {
-    return Center(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: List.generate(5, (i) {
-          double estrellaValor = valor - i;
+  Widget _mostrarEstrellasConDecimal(double valor) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: valor),
+      duration: const Duration(milliseconds: 800),
+      curve: Curves.easeOut,
+      builder: (context, valueAnimado, child) {
+        return Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: List.generate(5, (i) {
+              double porcentaje = (valueAnimado - i).clamp(0.0, 1.0);
 
-          return TweenAnimationBuilder<double>(
-            tween: Tween<double>(begin: 0, end: estrellaValor.clamp(0.0, 1.0)),
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeOut,
-            builder: (context, animValue, child) {
-              IconData icono;
-              if (animValue >= 0.75) {
-                icono = Icons.star;
-              } else if (animValue >= 0.25) {
-                icono = Icons.star_half;
-              } else {
-                icono = Icons.star_border;
-              }
-
-              final color = Color.lerp(
-                Colors.amber.withOpacity(0.5),
-                Colors.amber,
-                animValue,
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                child: Stack(
+                  children: [
+                    Icon(
+                      Icons.star_border,
+                      size: 30,
+                      color: Colors.amber.shade300,
+                    ),
+                    ShaderMask(
+                      shaderCallback: (Rect bounds) {
+                        return LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          stops: [porcentaje, porcentaje],
+                          colors: [Colors.amber, Colors.transparent],
+                        ).createShader(bounds);
+                      },
+                      blendMode: BlendMode.srcATop,
+                      child: Icon(Icons.star, size: 30, color: Colors.white),
+                    ),
+                  ],
+                ),
               );
+            }),
+          ),
+        );
+      },
+    );
+  }
 
-              return Transform.scale(
-                scale: 1.0 + (0.1 * animValue), // efecto de zoom
-                child: Icon(icono, color: color, size: 24),
-              );
-            },
-          );
-        }),
+  Widget _comentarioShimmer() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade300,
+      highlightColor: Colors.grey.shade100,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              //  Simula el nombre y estrellas
+              Row(
+                children: [
+                  Container(
+                    width: 100,
+                    height: 16,
+                    color: Colors.grey.shade300,
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(Icons.star, color: Colors.amber.shade300, size: 20),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // 📝 Simula el comentario (varias líneas)
+              Container(
+                width: double.infinity,
+                height: 12,
+                color: Colors.grey.shade300,
+              ),
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                height: 12,
+                color: Colors.grey.shade300,
+              ),
+              const SizedBox(height: 6),
+              Container(width: 150, height: 12, color: Colors.grey.shade300),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1193,30 +1252,6 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     );
     return total / comentarios.length;
   }
-  //Widget _estrellaConDecimal(double valor) {
-  //  return Center(
-  //    child: Row(
-  //      mainAxisSize: MainAxisSize.min,
-  //      children: List.generate(5, (i) {
-  //        if (valor >= i + 1) {
-  //          return const Icon(Icons.star, color: Color(0xFFFFC107), size: 22);
-  //        } else if (valor > i) {
-  //          return const Icon(
-  //            Icons.star_half,
-  //            color: Color(0xFFFFC107),
-  //            size: 22,
-  //          );
-  //        } else {
-  //          return const Icon(
-  //            Icons.star_border,
-  //            color: Colors.black38,
-  //            size: 22,
-  //          );
-  //        }
-  //      }),
-  //    ),
-  //  );
-  //}
 
   Widget _botonAccion(String texto, IconData icono, VoidCallback onPressed) {
     return Semantics(
