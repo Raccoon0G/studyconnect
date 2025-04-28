@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:study_connect/utils/custom_dialog_type.dart';
+
 //Esta función muestra un diálogo personalizado con un título, un mensaje y un icono opcional.
 // El título y el mensaje se pueden personalizar con colores específicos.
 // El diálogo se puede cerrar al hacer clic en el botón "Aceptar".
 // También se pueden agregar botones personalizados con acciones específicas.
 /// Muestra un diálogo personalizado con un título, mensaje y botones opcionales.
 /// y ya se puede cerrar al hacer clic en el botón "Aceptar".
-
-enum CustomDialogType { success, error, warning, info }
 
 /// Función para mostrar un diálogo bonito y dinámico
 Future<void> showCustomDialog({

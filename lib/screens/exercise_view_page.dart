@@ -162,7 +162,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
           titulo: '¡Éxito!',
           mensaje: 'Comentario elimnado correctamente.',
           tipo: CustomDialogType.success,
-          snackbarMessage: '¡Comentario Eliminado!',
+          snackbarMessage: '✅ ¡Comentario Eliminado!',
           snackbarSuccess: true,
         );
         //Opcion 1 para mostrar snackbar mas facil sin tanto clic
@@ -913,7 +913,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
 
     await _cargarComentarios();
     await _cargarDatosDesdeFirestore();
-
+    //Opcion 1
     // if (context.mounted) {
     // Navigator.of(
     // context,
@@ -928,7 +928,14 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     //   snackbarMessage: '✅ Comentario enviado exitosamente.',
     //   snackbarSuccess: true,
     // );
+    // Opcion 2
+    // await closeDialogAndShowSnackbar(
+    // context: context,
+    // message: '✅ Comentario enviado exitosamente.',
+    // success: true,
+    // );
 
+    // Opción 3 para mostrar snackbar más fácil sin tanto clic
     showCustomSnackbar(
       context: context,
       message: '✅ Comentario enviado exitosamente.',
