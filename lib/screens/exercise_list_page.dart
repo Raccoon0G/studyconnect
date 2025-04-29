@@ -136,80 +136,95 @@ class ExerciseListPage extends StatelessWidget {
                                       padding: const EdgeInsets.symmetric(
                                         vertical: 12,
                                       ),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(16),
-                                        width: double.infinity,
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(
-                                            20,
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(20),
+                                        onTap: () {
+                                          Navigator.pushNamed(
+                                            context,
+                                            '/exercise_view',
+                                            arguments: {
+                                              'tema': temaKey,
+                                              'ejercicioId': doc.id,
+                                            },
+                                          );
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(12),
+                                          width: double.infinity,
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black12,
+                                                blurRadius: 8,
+                                                offset: Offset(0, 4),
+                                              ),
+                                            ],
                                           ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black12,
-                                              blurRadius: 8,
-                                              offset: Offset(0, 4),
-                                            ),
-                                          ],
-                                        ),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            CustomLatexText(
-                                              contenido: data['Titulo'] ?? '',
-                                              fontSize: 18,
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              data['DesEjercicio'] ?? '',
-                                              maxLines: 3,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                fontSize: 14,
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              CustomLatexText(
+                                                contenido: data['Titulo'] ?? '',
+                                                fontSize: 18,
                                               ),
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              "Autor: ${data['Autor'] ?? 'Anónimo'}",
-                                              style: const TextStyle(
-                                                fontSize: 13,
-                                                color: Colors.black54,
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                data['DesEjercicio'] ?? '',
+                                                maxLines: 3,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontSize: 14,
+                                                ),
                                               ),
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment
-                                                      .spaceBetween,
-                                              children: [
-                                                CustomStarRating(
-                                                  valor:
-                                                      (data['CalPromedio']
-                                                              is num)
-                                                          ? (data['CalPromedio']
-                                                                  as num)
-                                                              .toDouble()
-                                                          : 0.0,
-                                                  size: 22,
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                "Autor: ${data['Autor'] ?? 'Anónimo'}",
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  color: Colors.black54,
                                                 ),
-                                                CustomActionButton(
-                                                  text: 'Ver',
-                                                  icon: Icons.arrow_forward_ios,
-                                                  onPressed: () {
-                                                    Navigator.pushNamed(
-                                                      context,
-                                                      '/exercise_view',
-                                                      arguments: {
-                                                        'tema': temaKey,
-                                                        'ejercicioId': doc.id,
-                                                      },
-                                                    );
-                                                  },
-                                                ),
-                                              ],
-                                            ),
-                                          ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment
+                                                        .spaceBetween,
+                                                children: [
+                                                  CustomStarRating(
+                                                    valor:
+                                                        (data['CalPromedio']
+                                                                is num)
+                                                            ? (data['CalPromedio']
+                                                                    as num)
+                                                                .toDouble()
+                                                            : 0.0,
+                                                    size: 22,
+                                                  ),
+                                                  // 🎯 Puedes quitar el botón "Ver" si ahora todo el InkWell hace tap.
+                                                  CustomActionButton(
+                                                    text: 'Ver',
+                                                    icon:
+                                                        Icons.arrow_forward_ios,
+                                                    onPressed: () {
+                                                      Navigator.pushNamed(
+                                                        context,
+                                                        '/exercise_view',
+                                                        arguments: {
+                                                          'tema': temaKey,
+                                                          'ejercicioId': doc.id,
+                                                        },
+                                                      );
+                                                    },
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     );
