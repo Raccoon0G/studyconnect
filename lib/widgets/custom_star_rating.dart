@@ -7,6 +7,7 @@ class CustomStarRating extends StatelessWidget {
   final Duration duration;
 
   final dynamic color;
+  final Alignment geometryAlignment;
 
   const CustomStarRating({
     super.key,
@@ -14,21 +15,22 @@ class CustomStarRating extends StatelessWidget {
     this.size = 30,
     this.duration = const Duration(milliseconds: 800),
     this.color = Colors.amber,
+    this.geometryAlignment = Alignment.center,
   });
 
   @override
   Widget build(BuildContext context) {
     return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0, end: valor),
+      tween: Tween(begin: 0.0, end: valor),
       duration: duration,
       curve: Curves.easeOut,
       builder: (context, valueAnimado, child) {
-        return Center(
+        return Align(
+          alignment: geometryAlignment,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: List.generate(5, (i) {
-              double porcentaje = (valueAnimado - i).clamp(0.0, 1.0);
-
+              final porcentaje = (valueAnimado - i).clamp(0.0, 1.0);
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 2.0),
                 child: Stack(
@@ -39,14 +41,13 @@ class CustomStarRating extends StatelessWidget {
                       color: Colors.amber.shade300,
                     ),
                     ShaderMask(
-                      shaderCallback: (Rect bounds) {
-                        return LinearGradient(
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                          stops: [porcentaje, porcentaje],
-                          colors: [color, Colors.transparent],
-                        ).createShader(bounds);
-                      },
+                      shaderCallback:
+                          (bounds) => LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            stops: [porcentaje, porcentaje],
+                            colors: [color, Colors.transparent],
+                          ).createShader(bounds),
                       blendMode: BlendMode.srcATop,
                       child: Icon(Icons.star, size: size, color: Colors.white),
                     ),

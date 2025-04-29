@@ -9,6 +9,7 @@ class CustomLatexText extends StatelessWidget {
   final double fontSize;
   final Color color;
   final bool scrollHorizontal;
+  final int? maxWords;
 
   const CustomLatexText({
     super.key,
@@ -16,11 +17,20 @@ class CustomLatexText extends StatelessWidget {
     this.fontSize = 20,
     this.color = Colors.black,
     this.scrollHorizontal = true,
+    this.maxWords,
   });
 
   @override
   Widget build(BuildContext context) {
     final contenidoPreparado = prepararLaTeX(contenido);
+
+    String texto = contenido;
+    if (maxWords != null && texto.isNotEmpty) {
+      final partes = texto.split(' ');
+      if (partes.length > maxWords!) {
+        texto = partes.take(maxWords!).join(' ') + ' …';
+      }
+    }
 
     final latexWidget = Math.tex(
       contenidoPreparado,
