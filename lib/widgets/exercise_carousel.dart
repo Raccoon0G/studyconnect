@@ -9,6 +9,10 @@ class ExerciseCarousel extends StatefulWidget {
   State<ExerciseCarousel> createState() => _ExerciseCarouselState();
 }
 
+/// Este widget muestra un carrusel de imágenes, títulos y descripciones.
+/// El carrusel se desplaza automáticamente y permite la interacción del usuario.
+///Lomodifique para que el carrusel se desplace automáticamente y permita la interacción del usuario.
+/// El carrusel se adapta a diferentes tamaños de pantalla, incluyendo móviles y tabletas.
 class _ExerciseCarouselState extends State<ExerciseCarousel> {
   final PageController _pageController = PageController();
   late final Timer _autoScrollTimer;
