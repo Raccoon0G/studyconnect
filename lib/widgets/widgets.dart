@@ -9,6 +9,7 @@ export 'package:study_connect/widgets/notification_icon_widget.dart';
 export 'package:study_connect/widgets/register_carousel.dart';
 export 'package:study_connect/widgets/comment_shimmer_placeholder.dart';
 export 'package:study_connect/widgets/info_with_icon.dart';
+export 'package:study_connect/widgets/hover_tooltip.dart';
 export 'package:study_connect/widgets/custom_action_button.dart';
 export 'package:study_connect/widgets/custom_dropdown_version.dart';
 export 'package:study_connect/widgets/custom_expansion_tiles_comentarios.dart';

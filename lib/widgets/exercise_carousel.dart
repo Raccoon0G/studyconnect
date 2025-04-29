@@ -14,49 +14,6 @@ class _ExerciseCarouselState extends State<ExerciseCarousel> {
   late final Timer _autoScrollTimer;
   int _currentPage = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    _pageController.addListener(() {
-      final page = _pageController.page?.round() ?? 0;
-      if (page != _currentPage) {
-        setState(() {
-          _currentPage = page;
-        });
-      }
-    });
-
-    // _autoScrollTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
-    //   if (_pageController.hasClients) {
-    //     final nextPage = (_currentPage + 1) % _items.length;
-    //     _pageController.animateToPage(
-    //       nextPage,
-    //       duration: const Duration(milliseconds: 600),
-    //       curve: Curves.easeInOut,
-    //     );
-    //   }
-    // });
-    //tarda un poco mas la animacion pero es mas suave
-    _autoScrollTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
-      if (_pageController.hasClients) {
-        final isLastPage = _currentPage == _items.length - 1;
-        final nextPage = isLastPage ? 0 : _currentPage + 1;
-        _pageController.animateToPage(
-          nextPage,
-          duration: Duration(milliseconds: isLastPage ? 1200 : 600),
-          curve: Curves.easeInOut,
-        );
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _autoScrollTimer.cancel();
-    _pageController.dispose();
-    super.dispose();
-  }
-
   final List<_CarouselItem> _items = const [
     _CarouselItem(
       image: 'assets/images/slide1.png',
@@ -87,13 +44,55 @@ class _ExerciseCarouselState extends State<ExerciseCarousel> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _pageController.addListener(() {
+      final page = _pageController.page?.round() ?? 0;
+      if (page != _currentPage) {
+        setState(() => _currentPage = page);
+      }
+    });
+
+    _autoScrollTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+      if (_pageController.hasClients) {
+        final isLastPage = _currentPage == _items.length - 1;
+        final nextPage = isLastPage ? 0 : _currentPage + 1;
+        _pageController.animateToPage(
+          nextPage,
+          duration: Duration(milliseconds: isLastPage ? 1200 : 600),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoScrollTimer.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bool isSmallScreen = screenWidth < 600;
+    final bool isTablet = screenWidth >= 600 && screenWidth <= 1024;
+
     return LayoutBuilder(
       builder: (context, constraints) {
+        final double imageHeight =
+            isSmallScreen
+                ? constraints.maxHeight * 0.3
+                : isTablet
+                ? constraints.maxHeight * 0.4
+                : constraints.maxHeight * 0.45;
+
         return Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Expanded(
+            Flexible(
               child: PageView.builder(
                 controller: _pageController,
                 itemCount: _items.length,
@@ -107,13 +106,13 @@ class _ExerciseCarouselState extends State<ExerciseCarousel> {
                       scale: isCurrent ? 1.0 : 0.9,
                       duration: const Duration(milliseconds: 400),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Image.asset(
                               item.image,
-                              height: constraints.maxHeight * 0.4,
+                              height: imageHeight,
                               fit: BoxFit.contain,
                             ),
                             const SizedBox(height: 20),
@@ -121,7 +120,7 @@ class _ExerciseCarouselState extends State<ExerciseCarousel> {
                               item.title,
                               style: GoogleFonts.ebGaramond(
                                 color: Colors.white,
-                                fontSize: 26,
+                                fontSize: 24,
                                 fontWeight: FontWeight.bold,
                               ),
                               textAlign: TextAlign.center,
@@ -143,7 +142,7 @@ class _ExerciseCarouselState extends State<ExerciseCarousel> {
                 },
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(
@@ -168,8 +167,8 @@ class _ExerciseCarouselState extends State<ExerciseCarousel> {
                         scale: scale,
                         child: Container(
                           margin: const EdgeInsets.symmetric(horizontal: 4),
-                          width: 10,
-                          height: 10,
+                          width: 6,
+                          height: 6,
                           decoration: BoxDecoration(
                             color:
                                 _currentPage == index
@@ -184,7 +183,7 @@ class _ExerciseCarouselState extends State<ExerciseCarousel> {
                 ),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
           ],
         );
       },

@@ -270,33 +270,39 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           InfoWithIcon(
-            icon: Icons.info,
+            icon: Icons.person_outlined,
             text: 'Autor: $autor',
             alignment: MainAxisAlignment.center,
+            iconAlignment: Alignment.center,
             textColor: Colors.white,
             textSize: 20,
+            //maxWidthText: 335,
           ),
           const SizedBox(height: 8),
           InfoWithIcon(
-            icon: Icons.info,
+            icon: Icons.book,
             text: 'Tema: ${nombresTemas[tema] ?? tema}',
             alignment: MainAxisAlignment.center,
+            iconAlignment: Alignment.center,
             textColor: Colors.white,
             textSize: 17,
+            //maxWidthText: 280,
           ),
           const SizedBox(height: 8),
           InfoWithIcon(
-            icon: Icons.info,
+            icon: Icons.assignment,
             text: 'Ejercicio: $ejercicioId',
             alignment: MainAxisAlignment.center,
+            iconAlignment: Alignment.center,
             textColor: Colors.white,
             textSize: 17,
           ),
           const SizedBox(height: 8),
           InfoWithIcon(
-            icon: Icons.info_sharp,
+            icon: Icons.update,
             text: 'Versión actual: $versionSeleccionada',
             alignment: MainAxisAlignment.center,
+            iconAlignment: Alignment.center,
             textColor: Colors.white,
             textSize: 17,
           ),
@@ -335,34 +341,36 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                 ),
               ),
             ),
-
-          Center(
-            child: Text(
-              'Última actualización :',
-              style: GoogleFonts.ebGaramond(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
+          const SizedBox(height: 8),
+          InfoWithIcon(
+            icon: Icons.change_circle,
+            text: 'Última modificación:',
+            alignment: MainAxisAlignment.center,
+            iconAlignment: Alignment.center,
+            textColor: Colors.white,
+            textSize: 17,
           ),
           const SizedBox(height: 4),
-          Center(
-            child: Text(
-              fecha != null ? DateFormat('dd/MM/yy').format(fecha) : '---',
-              style: const TextStyle(color: Colors.white, fontSize: 16),
-            ),
+          InfoWithIcon(
+            icon: Icons.calendar_today,
+            text:
+                fecha != null
+                    ? DateFormat('dd/MM/yyyy').format(fecha)
+                    : 'Sin fecha',
+            alignment: MainAxisAlignment.center,
+            iconAlignment: Alignment.center,
+            textColor: Colors.white,
+            textSize: 17,
           ),
+
           const SizedBox(height: 12),
-          Center(
-            child: Text(
-              'Calificación :',
-              style: GoogleFonts.ebGaramond(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
+          InfoWithIcon(
+            icon: Icons.task_sharp,
+            text: 'Calificación promedio:',
+            alignment: MainAxisAlignment.center,
+            iconAlignment: Alignment.center,
+            textColor: Colors.white,
+            textSize: 17,
           ),
           const SizedBox(height: 8),
           CustomStarRating(
@@ -386,12 +394,12 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
               style: const TextStyle(color: Colors.white60),
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(50),
             child: SizedBox(
               width: double.infinity,
-              height: 375,
+              height: 320,
               child: AspectRatio(
                 aspectRatio: 4 / 3,
                 child: Container(
@@ -963,7 +971,12 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final bool esPantallaChica = screenWidth < 800; //  800
+
+    final bool esMovilMuyPequeno = screenWidth <= 480;
+    final bool esMovilGrande = screenWidth > 480 && screenWidth <= 800;
+    final bool esTabletOLaptopChica = screenWidth > 800 && screenWidth <= 1200;
+    final bool esLaptopGrande = screenWidth > 1200 && screenWidth <= 1900;
+    final bool esUltraWide = screenWidth > 1900;
 
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
@@ -972,154 +985,126 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
         title: const Text('Study Connect'),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.pushNamed(context, '/');
-            },
-            child: Tooltip(
+            onPressed: () => Navigator.pushNamed(context, '/'),
+            child: const Tooltip(
               message: 'Ir a Inicio',
-              child: const Text(
-                'Inicio',
-                style: TextStyle(color: Colors.white),
-              ),
+              child: Text('Inicio', style: TextStyle(color: Colors.white)),
             ),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.pushNamed(context, '/ranking');
-            },
-            child: Tooltip(
+            onPressed: () => Navigator.pushNamed(context, '/ranking'),
+            child: const Tooltip(
               message: 'Ir a Ranking',
-              child: const Text(
-                'Ranking',
-                style: TextStyle(color: Colors.white),
-              ),
+              child: Text('Ranking', style: TextStyle(color: Colors.white)),
             ),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.pushNamed(context, '/content');
-            },
-            child: Tooltip(
+            onPressed: () => Navigator.pushNamed(context, '/content'),
+            child: const Tooltip(
               message: 'Ir a Contenido',
-              child: const Text(
-                'Contenido',
-                style: TextStyle(color: Colors.white),
-              ),
+              child: Text('Contenido', style: TextStyle(color: Colors.white)),
             ),
           ),
           const NotificationIconWidget(),
           TextButton(
-            onPressed: () {
-              Navigator.pushNamed(context, '/user_profile');
-            },
+            onPressed: () => Navigator.pushNamed(context, '/user_profile'),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.white),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Tooltip(
+              child: const Tooltip(
                 message: 'Ir a perfil',
-                child: const Text(
-                  'Perfil',
-                  style: TextStyle(color: Colors.white),
-                ),
+                child: Text('Perfil', style: TextStyle(color: Colors.white)),
               ),
             ),
           ),
           const SizedBox(width: 16),
         ],
       ),
-
       body: Screenshot(
         controller: _screenshotController,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            // final screenWidth = constraints.maxWidth;
-            // final bool esPantallaChica = screenWidth < 800;
-
-            if (esPantallaChica) {
-              // 📱 Para móviles y pantallas pequeñas: Column + Scroll
-              return Padding(
-                padding: const EdgeInsets.all(20),
-                child: CustomScrollView(
-                  slivers: [
-                    SliverToBoxAdapter(
-                      child: _columnaIzquierda(
-                        ejercicioData: ejercicioData ?? {},
-                        tema: widget.tema,
-                        ejercicioId: widget.ejercicioId,
-                        versiones: versiones,
-                        versionSeleccionada: versionSeleccionada,
-                        comentarios: comentarios,
-                        onVersionChanged: (newVersion) {
-                          setState(() {
-                            versionSeleccionada = newVersion;
-                          });
-                          _cargarVersionSeleccionada(newVersion);
-                        },
-                      ),
-                    ),
-                    SliverPadding(padding: const EdgeInsets.only(top: 20)),
-                    SliverToBoxAdapter(
-                      child: _columnaDerecha(
-                        ejercicioData: ejercicioData ?? {},
-                        pasos: pasos,
-                        descripciones: descripciones,
-                        comentarios: comentarios,
-                        esPantallaChica: esPantallaChica,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            } else {
-              // 🖥️ Para computadoras: Row + Expanded
-              return Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      flex: 1,
-                      child: _columnaIzquierda(
-                        ejercicioData: ejercicioData ?? {},
-                        tema: widget.tema,
-                        ejercicioId: widget.ejercicioId,
-                        versiones: versiones,
-                        versionSeleccionada: versionSeleccionada,
-                        comentarios: comentarios,
-                        onVersionChanged: (newVersion) {
-                          setState(() {
-                            versionSeleccionada = newVersion;
-                          });
-                          _cargarVersionSeleccionada(newVersion);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      flex: 3,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: _columnaDerecha(
-                              ejercicioData: ejercicioData ?? {},
-                              pasos: pasos,
-                              descripciones: descripciones,
-                              comentarios: comentarios,
-                              esPantallaChica: esPantallaChica,
-                            ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 2500),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (esMovilMuyPequeno || esMovilGrande) {
+                  return Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: CustomScrollView(
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: _columnaIzquierda(
+                            ejercicioData: ejercicioData ?? {},
+                            tema: widget.tema,
+                            ejercicioId: widget.ejercicioId,
+                            versiones: versiones,
+                            versionSeleccionada: versionSeleccionada,
+                            comentarios: comentarios,
+                            onVersionChanged: (newVersion) {
+                              setState(() {
+                                versionSeleccionada = newVersion;
+                              });
+                              _cargarVersionSeleccionada(newVersion);
+                            },
                           ),
-                        ],
-                      ),
+                        ),
+                        SliverPadding(padding: const EdgeInsets.only(top: 20)),
+                        SliverToBoxAdapter(
+                          child: _columnaDerecha(
+                            ejercicioData: ejercicioData ?? {},
+                            pasos: pasos,
+                            descripciones: descripciones,
+                            comentarios: comentarios,
+                            esPantallaChica: true,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              );
-            }
-          },
+                  );
+                } else {
+                  return Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: esTabletOLaptopChica ? 2 : 1,
+                          child: _columnaIzquierda(
+                            ejercicioData: ejercicioData ?? {},
+                            tema: widget.tema,
+                            ejercicioId: widget.ejercicioId,
+                            versiones: versiones,
+                            versionSeleccionada: versionSeleccionada,
+                            comentarios: comentarios,
+                            onVersionChanged: (newVersion) {
+                              setState(() {
+                                versionSeleccionada = newVersion;
+                              });
+                              _cargarVersionSeleccionada(newVersion);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 20),
+                        Expanded(
+                          flex: esTabletOLaptopChica ? 2 : 3,
+                          child: _columnaDerecha(
+                            ejercicioData: ejercicioData ?? {},
+                            pasos: pasos,
+                            descripciones: descripciones,
+                            comentarios: comentarios,
+                            esPantallaChica: false,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+              },
+            ),
+          ),
         ),
       ),
     );

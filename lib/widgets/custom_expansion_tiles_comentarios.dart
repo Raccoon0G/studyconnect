@@ -7,14 +7,6 @@ import 'package:study_connect/widgets/comment_shimmer_placeholder.dart';
 import 'package:study_connect/widgets/custom_star_rating.dart';
 import 'package:study_connect/utils/utils.dart';
 
-// Un custom ExpansionTile que muestra los comentarios de un usuario
-// y permite eliminar los comentarios si el usuario es el autor del comentario
-// El widget recibe una lista de comentarios y una función para eliminar el comentario
-// La función se llama cuando el usuario presiona el botón de eliminar
-// El widget también muestra la cantidad de comentarios y el promedio de estrellas
-//Aqui dentro se ocupa customShimmerComment para mostrar un shimmer mientras se cargan los comentarios
-// y customStarRating para mostrar las estrellas del comentario
-
 class CustomExpansionTileComentarios extends StatelessWidget {
   final List<Map<String, dynamic>> comentarios;
   final Future<void> Function(Map<String, dynamic> comentario)
@@ -65,10 +57,7 @@ class CustomExpansionTileComentarios extends StatelessWidget {
       ),
       children:
           comentarios.isEmpty
-              ? List.generate(
-                3,
-                (_) => const CustomShimmerComment(),
-              ) // Si no hay comentarios, muestra un shimmer de carga de 3 elementos
+              ? List.generate(3, (_) => const CustomShimmerComment())
               : comentarios.map((c) {
                 final fecha = (c['timestamp'] as Timestamp?)?.toDate();
                 final formatted =
@@ -104,30 +93,70 @@ class CustomExpansionTileComentarios extends StatelessWidget {
                       ),
                       child: ListTile(
                         leading: CircleAvatar(
-                          // Avatar del usuario
                           backgroundColor: Colors.blueGrey.shade100,
                           child: const Icon(
                             Icons.person,
                             color: Colors.black87,
                           ),
                         ),
-                        title: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                c['nombre'] ?? 'Anónimo',
-                                style: const TextStyle(
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ),
-                            CustomStarRating(
-                              valor: (c['estrellas'] ?? 0).toDouble(),
-                              size: 24,
-                            ),
-                          ],
+                        title: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isMobile =
+                                MediaQuery.of(context).size.width < 500;
+                            return isMobile
+                                ? Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        c['nombre'] ?? 'Anónimo',
+                                        style: const TextStyle(
+                                          color: Colors.black,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                    ),
+                                    Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.star,
+                                          color: Colors.amber,
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          (c['estrellas'] ?? 0).toString(),
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                )
+                                : Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      c['nombre'] ?? 'Anónimo',
+                                      style: const TextStyle(
+                                        color: Colors.black,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    CustomStarRating(
+                                      valor: (c['estrellas'] ?? 0).toDouble(),
+                                      size: 24,
+                                    ),
+                                  ],
+                                );
+                          },
                         ),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -157,9 +186,8 @@ class CustomExpansionTileComentarios extends StatelessWidget {
                                     Icons.delete_outline,
                                     color: Colors.redAccent,
                                   ),
-                                  onPressed: () async {
-                                    await onEliminarComentario(c);
-                                  },
+                                  onPressed:
+                                      () async => await onEliminarComentario(c),
                                 )
                                 : null,
                       ),
