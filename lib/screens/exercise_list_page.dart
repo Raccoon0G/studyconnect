@@ -122,98 +122,198 @@ class ExerciseListPage extends StatelessWidget {
                     LayoutBuilder(
                       builder: (context, constraints) {
                         final double totalWidth = constraints.maxWidth;
-                        return SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(minWidth: totalWidth),
-                            child: DataTable(
-                              headingRowColor: WidgetStateProperty.all(
-                                const Color(0xFF48C9EF),
-                              ),
-                              columnSpacing: 24,
-                              columns: [
-                                DataColumn(label: Text('Ejercicio')),
-                                DataColumn(label: Text('Descripción')),
-                                DataColumn(label: Text('Autor')),
-                                DataColumn(label: Text('Calificación')),
-                                DataColumn(label: Text('')),
-                              ],
-                              rows:
+
+                        final isMobile =
+                            MediaQuery.of(context).size.width < 1200;
+
+                        return isMobile
+                            ? Column(
+                              children:
                                   ejercicios.map((doc) {
                                     final data =
                                         doc.data() as Map<String, dynamic>;
-                                    return DataRow(
-                                      cells: [
-                                        // Ejercicio
-                                        DataCell(
-                                          SizedBox(
-                                            width: totalWidth * 0.18,
-                                            child: CustomLatexText(
-                                              contenido: data['Titulo'] ?? '',
-                                              fontSize: 16,
-                                            ),
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(16),
+                                        width: double.infinity,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(
+                                            20,
                                           ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black12,
+                                              blurRadius: 8,
+                                              offset: Offset(0, 4),
+                                            ),
+                                          ],
                                         ),
-
-                                        // Descripción
-                                        DataCell(
-                                          SizedBox(
-                                            width: totalWidth * 0.32,
-                                            child: Text(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            CustomLatexText(
+                                              contenido: data['Titulo'] ?? '',
+                                              fontSize: 18,
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
                                               data['DesEjercicio'] ?? '',
-                                              maxLines: 2,
+                                              maxLines: 3,
                                               overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              "Autor: ${data['Autor'] ?? 'Anónimo'}",
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.black54,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                CustomStarRating(
+                                                  valor:
+                                                      (data['CalPromedio']
+                                                              is num)
+                                                          ? (data['CalPromedio']
+                                                                  as num)
+                                                              .toDouble()
+                                                          : 0.0,
+                                                  size: 22,
+                                                ),
+                                                CustomActionButton(
+                                                  text: 'Ver',
+                                                  icon: Icons.arrow_forward_ios,
+                                                  onPressed: () {
+                                                    Navigator.pushNamed(
+                                                      context,
+                                                      '/exercise_view',
+                                                      arguments: {
+                                                        'tema': temaKey,
+                                                        'ejercicioId': doc.id,
+                                                      },
+                                                    );
+                                                  },
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                            )
+                            : // 👇 tabla existente
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  minWidth: totalWidth,
+                                ),
+                                child: DataTable(
+                                  headingRowColor: WidgetStateProperty.all(
+                                    const Color(0xFF48C9EF),
+                                  ),
+                                  columnSpacing: 24,
+                                  columns: [
+                                    DataColumn(label: Text('Ejercicio')),
+                                    DataColumn(label: Text('Descripción')),
+                                    DataColumn(label: Text('Autor')),
+                                    DataColumn(label: Text('Calificación')),
+                                    DataColumn(label: Text('')),
+                                  ],
+                                  rows:
+                                      ejercicios.map((doc) {
+                                        final data =
+                                            doc.data() as Map<String, dynamic>;
+                                        return DataRow(
+                                          cells: [
+                                            // Ejercicio
+                                            DataCell(
+                                              SizedBox(
+                                                width: totalWidth * 0.18,
+                                                child: CustomLatexText(
+                                                  contenido:
+                                                      data['Titulo'] ?? '',
+                                                  fontSize: 16,
+                                                ),
+                                              ),
+                                            ),
+
+                                            // Descripción
+                                            DataCell(
+                                              SizedBox(
+                                                width: totalWidth * 0.32,
+                                                child: Text(
+                                                  data['DesEjercicio'] ?? '',
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    fontSize: 16,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            DataCell(
+                                              CustomLatexText(
+                                                contenido:
+                                                    data['Autor'] ?? 'Anónimo',
                                                 fontSize: 16,
                                               ),
                                             ),
-                                          ),
-                                        ),
-                                        DataCell(
-                                          CustomLatexText(
-                                            contenido:
-                                                data['Autor'] ?? 'Anónimo',
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Center(
-                                            child: CustomStarRating(
-                                              valor:
-                                                  (data['CalPromedio'] is num)
-                                                      ? (data['CalPromedio']
-                                                              as num)
-                                                          .toDouble()
-                                                      : 0.0,
-                                              size: 25,
+                                            DataCell(
+                                              Center(
+                                                child: CustomStarRating(
+                                                  valor:
+                                                      (data['CalPromedio']
+                                                              is num)
+                                                          ? (data['CalPromedio']
+                                                                  as num)
+                                                              .toDouble()
+                                                          : 0.0,
+                                                  size: 25,
+                                                ),
+                                              ),
                                             ),
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Align(
-                                            alignment: Alignment.centerRight,
-                                            child: CustomActionButton(
-                                              text: 'Ver',
-                                              icon: Icons.arrow_forward_ios,
-                                              onPressed: () {
-                                                Navigator.pushNamed(
-                                                  context,
-                                                  '/exercise_view',
-                                                  arguments: {
-                                                    'tema': temaKey,
-                                                    'ejercicioId': doc.id,
+                                            DataCell(
+                                              Align(
+                                                alignment:
+                                                    Alignment.centerRight,
+                                                child: CustomActionButton(
+                                                  text: 'Ver',
+                                                  icon: Icons.arrow_forward_ios,
+                                                  onPressed: () {
+                                                    Navigator.pushNamed(
+                                                      context,
+                                                      '/exercise_view',
+                                                      arguments: {
+                                                        'tema': temaKey,
+                                                        'ejercicioId': doc.id,
+                                                      },
+                                                    );
                                                   },
-                                                );
-                                              },
+                                                ),
+                                              ),
                                             ),
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  }).toList(),
-                            ),
-                          ),
-                        );
+                                          ],
+                                        );
+                                      }).toList(),
+                                ),
+                              ),
+                            );
                       },
                     ),
                   ],
