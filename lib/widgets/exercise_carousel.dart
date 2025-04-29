@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -9,10 +10,6 @@ class ExerciseCarousel extends StatefulWidget {
   State<ExerciseCarousel> createState() => _ExerciseCarouselState();
 }
 
-/// Este widget muestra un carrusel de imágenes, títulos y descripciones.
-/// El carrusel se desplaza automáticamente y permite la interacción del usuario.
-///Lomodifique para que el carrusel se desplace automáticamente y permita la interacción del usuario.
-/// El carrusel se adapta a diferentes tamaños de pantalla, incluyendo móviles y tabletas.
 class _ExerciseCarouselState extends State<ExerciseCarousel> {
   final PageController _pageController = PageController();
   late final Timer _autoScrollTimer;
@@ -47,23 +44,33 @@ class _ExerciseCarouselState extends State<ExerciseCarousel> {
     ),
   ];
 
+  final List<Color> _backgroundColors = [
+    const Color(0xFF0D47A1), // azul profundo
+    const Color(0xFF1565C0), // azul intermedio
+    const Color(0xFF1E88E5), // azul cielo
+    const Color(0xFF5E35B1), // morado elegante
+    const Color(0xFF3949AB), // azul violeta
+  ];
+
   @override
   void initState() {
     super.initState();
+
     _pageController.addListener(() {
       final page = _pageController.page?.round() ?? 0;
       if (page != _currentPage) {
-        setState(() => _currentPage = page);
+        setState(() {
+          _currentPage = page;
+        });
       }
     });
 
-    _autoScrollTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+    _autoScrollTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (_pageController.hasClients) {
-        final isLastPage = _currentPage == _items.length - 1;
-        final nextPage = isLastPage ? 0 : _currentPage + 1;
+        final nextPage = (_currentPage + 1) % _items.length;
         _pageController.animateToPage(
           nextPage,
-          duration: Duration(milliseconds: isLastPage ? 1200 : 600),
+          duration: const Duration(milliseconds: 700),
           curve: Curves.easeInOut,
         );
       }
@@ -79,118 +86,136 @@ class _ExerciseCarouselState extends State<ExerciseCarousel> {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final bool isSmallScreen = screenWidth < 600;
-    final bool isTablet = screenWidth >= 600 && screenWidth <= 1024;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(32),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Fondo dinámico según el slide
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.easeInOut,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  _backgroundColors[_currentPage].withAlpha(
+                    (0.85 * 255).toInt(),
+                  ),
+                  Colors.black.withAlpha((0.3 * 255).toInt()),
+                ],
+              ),
+            ),
+          ),
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final double imageHeight =
-            isSmallScreen
-                ? constraints.maxHeight * 0.3
-                : isTablet
-                ? constraints.maxHeight * 0.4
-                : constraints.maxHeight * 0.45;
-
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Flexible(
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: _items.length,
-                itemBuilder: (context, index) {
-                  final item = _items[index];
-                  final isCurrent = index == _currentPage;
-                  return AnimatedOpacity(
-                    opacity: isCurrent ? 1.0 : 0.5,
-                    duration: const Duration(milliseconds: 400),
-                    child: AnimatedScale(
-                      scale: isCurrent ? 1.0 : 0.9,
+          // Efecto de blur en el fondo
+          BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+            child: Container(
+              color: Colors.black.withAlpha((0.2 * 255).toInt()),
+            ),
+          ),
+          // Contenido principal
+          Column(
+            children: [
+              Expanded(
+                child: PageView.builder(
+                  controller: _pageController,
+                  itemCount: _items.length,
+                  itemBuilder: (context, index) {
+                    final item = _items[index];
+                    final isCurrent = index == _currentPage;
+                    return AnimatedOpacity(
+                      opacity: isCurrent ? 1.0 : 0.6,
                       duration: const Duration(milliseconds: 400),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Image.asset(
-                              item.image,
-                              height: imageHeight,
-                              fit: BoxFit.contain,
-                            ),
-                            const SizedBox(height: 20),
-                            Text(
-                              item.title,
-                              style: GoogleFonts.ebGaramond(
-                                color: Colors.white,
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
+                      child: AnimatedScale(
+                        scale: isCurrent ? 1.0 : 0.9,
+                        duration: const Duration(milliseconds: 400),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Flexible(
+                                flex: 6,
+                                child: Image.asset(
+                                  item.image,
+                                  fit: BoxFit.contain,
+                                  width: double.infinity,
+                                ),
                               ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              item.description,
-                              style: GoogleFonts.ebGaramond(
-                                color: Colors.white70,
-                                fontSize: 16,
+                              const SizedBox(height: 16),
+                              Flexible(
+                                flex: 2,
+                                child: Text(
+                                  item.title,
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.ebGaramond(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
                               ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
+                              const SizedBox(height: 10),
+                              Flexible(
+                                flex: 2,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                  ),
+                                  child: Text(
+                                    item.description,
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.ebGaramond(
+                                      fontSize: 16,
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(_items.length, (index) {
+                  return GestureDetector(
+                    onTap: () {
+                      _pageController.animateToPage(
+                        index,
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeInOut,
+                      );
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 400),
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      width: _currentPage == index ? 12 : 8,
+                      height: _currentPage == index ? 12 : 8,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color:
+                            _currentPage == index
+                                ? Colors.white
+                                : Colors.white30,
                       ),
                     ),
                   );
-                },
+                }),
               ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(
-                _items.length,
-                (index) => GestureDetector(
-                  onTap: () {
-                    _pageController.animateToPage(
-                      index,
-                      duration: const Duration(milliseconds: 400),
-                      curve: Curves.easeInOut,
-                    );
-                  },
-                  child: TweenAnimationBuilder<double>(
-                    tween: Tween<double>(
-                      begin: 1.0,
-                      end: _currentPage == index ? 1.4 : 1.0,
-                    ),
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.elasticOut,
-                    builder: (context, scale, child) {
-                      return Transform.scale(
-                        scale: scale,
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color:
-                                _currentPage == index
-                                    ? Colors.white
-                                    : Colors.white38,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-        );
-      },
+              const SizedBox(height: 16),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

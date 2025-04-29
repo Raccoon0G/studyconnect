@@ -394,20 +394,11 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
               style: const TextStyle(color: Colors.white60),
             ),
           ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(50),
-            child: SizedBox(
-              width: double.infinity,
-              height: 320,
-              child: AspectRatio(
-                aspectRatio: 4 / 3,
-                child: Container(
-                  color: Colors.white10, // o un fondo bonito si quieres
-                  child: const ExerciseCarousel(),
-                ),
-              ),
-            ),
+          const SizedBox(height: 38),
+
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 285, minHeight: 220),
+            child: const ExerciseCarousel(),
           ),
         ],
       ),
