@@ -301,7 +301,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           Text(
-            'Potencia tu aprendizaje y\nAlcanza tus objetivos académicos.',
+            'Potencia tu aprendizaje y\nAlcanza tus objetivos académicos',
             textAlign: TextAlign.center,
             style: GoogleFonts.roboto(
               color: Colors.white,
@@ -312,7 +312,7 @@ class _HomePageState extends State<HomePage> {
           ),
           const SizedBox(height: 40),
           Text(
-            'A través de ejercicios colaborativos\ncreados por estudiantes como tú.',
+            'A través de ejercicios colaborativos\ncreados por estudiantes como tú',
             textAlign: TextAlign.center,
             style: GoogleFonts.roboto(
               color: const Color(0xFFB0E0FF),
@@ -325,7 +325,7 @@ class _HomePageState extends State<HomePage> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
-              'Sube tus propios ejercicios, estudia los de otros y compite por el\nreconocimiento en nuestro sistema de ranking \u00danete a una comunidad\nde aprendizaje que recompensa tu esfuerzo y colaboraci\u00f3n',
+              'Sube tus propios ejercicios, estudia los de otros y compite por el\nreconocimiento en nuestro sistema de ranking únete a una comunidad\nde aprendizaje que recompensa tu esfuerzo y colaboración',
               textAlign: TextAlign.center,
               style: GoogleFonts.roboto(
                 color: Colors.white,

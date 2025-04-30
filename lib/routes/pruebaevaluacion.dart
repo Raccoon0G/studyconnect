@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 class AutoevaluacionInteractivaPage extends StatefulWidget {
+  const AutoevaluacionInteractivaPage({super.key});
+
   @override
   _AutoevaluacionInteractivaPageState createState() =>
       _AutoevaluacionInteractivaPageState();
@@ -17,7 +19,7 @@ class _AutoevaluacionInteractivaPageState
   int puntaje = 0;
   bool cargando = false;
 
-  Future<void> obtenerPreguntas() async {
+  Future<void> obtenerPreguntasConTema(String tema) async {
     setState(() {
       cargando = true;
       yaCalificado = false;
@@ -25,37 +27,42 @@ class _AutoevaluacionInteractivaPageState
       puntaje = 0;
     });
 
-    final response = await http.post(
-      Uri.parse(
-        "https://hook.us2.make.com/a760asb3qutpa3q7jmupef6s4geu2unl",
-      ), // tu URL
-    );
+    try {
+      final response = await http.post(
+        Uri.parse("https://hook.us2.make.com/2tx6w48rcjsco7o6ki24v8ecztiqyywf"),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "temas": [tema],
+        }),
+      );
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final Map<String, List<dynamic>> organizado = {};
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final Map<String, List<dynamic>> organizado = {};
 
-      data.forEach((key, value) {
-        organizado[key] = List<Map<String, dynamic>>.from(value);
-      });
+        data.forEach((key, value) {
+          organizado[key] = List<Map<String, dynamic>>.from(value);
+        });
 
-      setState(() {
-        preguntasPorTema = organizado;
-        temaSeleccionado = organizado.keys.first;
-        cargando = false;
-      });
-    } else {
+        setState(() {
+          preguntasPorTema = organizado;
+          temaSeleccionado = organizado.keys.first;
+          cargando = false;
+        });
+      } else {
+        throw Exception("Error HTTP: ${response.statusCode}");
+      }
+    } catch (e) {
       setState(() => cargando = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text("Error al obtener preguntas")));
+      ).showSnackBar(SnackBar(content: Text("Error al obtener preguntas: $e")));
     }
   }
 
   @override
   void initState() {
     super.initState();
-    obtenerPreguntas();
   }
 
   void calificar() {
