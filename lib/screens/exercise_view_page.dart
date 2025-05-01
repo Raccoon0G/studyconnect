@@ -80,6 +80,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
 
       versionSeleccionada = versionId;
     } catch (e) {
+      print('Error al cargar datos: $e');
       _mostrarError('Error al cargar datos', e.toString());
     }
   }

@@ -21,25 +21,13 @@ class DefaultFirebaseOptions {
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for android - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return android;
       case TargetPlatform.iOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for ios - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return ios;
       case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return macos;
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -53,13 +41,48 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyAA-EnePIWW9inHqJJFSWcAq6czI0fSSyo',
-    appId: '1:302167588693:web:788cedea067092d6ba39dc',
-    messagingSenderId: '302167588693',
-    projectId: 'studyconnect-68d53',
-    authDomain: 'studyconnect-68d53.firebaseapp.com',
-    databaseURL: 'https://studyconnect-68d53-default-rtdb.firebaseio.com',
-    storageBucket: 'studyconnect-68d53.firebasestorage.app',
-    measurementId: 'G-D65ZN9260Z',
+    apiKey: 'AIzaSyD-7cQ-xiq6Pukq1pi06RqDHMAj15wiiU4',
+    appId: '1:1064497156958:web:77b2b66173596da96035cf',
+    messagingSenderId: '1064497156958',
+    projectId: 'studyconnect-ea76d',
+    authDomain: 'studyconnect-ea76d.firebaseapp.com',
+    storageBucket: 'studyconnect-ea76d.firebasestorage.app',
+    measurementId: 'G-X7TXQLYHE9',
+  );
+
+  static const FirebaseOptions android = FirebaseOptions(
+    apiKey: 'AIzaSyBPynwS1dOXdm7Uh69hKT971auW9GjT2TQ',
+    appId: '1:1064497156958:android:5bdc77aa17e300b56035cf',
+    messagingSenderId: '1064497156958',
+    projectId: 'studyconnect-ea76d',
+    storageBucket: 'studyconnect-ea76d.firebasestorage.app',
+  );
+
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyBfdmIXoPsJtZg0UKCm9FY1IqY6WsKvvFU',
+    appId: '1:1064497156958:ios:a52a3b022248740d6035cf',
+    messagingSenderId: '1064497156958',
+    projectId: 'studyconnect-ea76d',
+    storageBucket: 'studyconnect-ea76d.firebasestorage.app',
+    iosBundleId: 'com.example.studyConnect',
+  );
+
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyBfdmIXoPsJtZg0UKCm9FY1IqY6WsKvvFU',
+    appId: '1:1064497156958:ios:a52a3b022248740d6035cf',
+    messagingSenderId: '1064497156958',
+    projectId: 'studyconnect-ea76d',
+    storageBucket: 'studyconnect-ea76d.firebasestorage.app',
+    iosBundleId: 'com.example.studyConnect',
+  );
+
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyD-7cQ-xiq6Pukq1pi06RqDHMAj15wiiU4',
+    appId: '1:1064497156958:web:0f7e8036249136276035cf',
+    messagingSenderId: '1064497156958',
+    projectId: 'studyconnect-ea76d',
+    authDomain: 'studyconnect-ea76d.firebaseapp.com',
+    storageBucket: 'studyconnect-ea76d.firebasestorage.app',
+    measurementId: 'G-1V646V06T7',
   );
 }

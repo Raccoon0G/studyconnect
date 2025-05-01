@@ -64,7 +64,7 @@ Future<void> showCustomDialog({
               ),
             ],
           ),
-          content: Text(
+          content: SelectableText(
             mensaje,
             style: const TextStyle(fontSize: 16, color: Colors.black87),
           ),

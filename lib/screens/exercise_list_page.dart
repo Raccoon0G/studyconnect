@@ -279,10 +279,13 @@ class ExerciseListPage extends StatelessWidget {
                                           ),
                                         ),
                                         DataCell(
-                                          CustomLatexText(
-                                            contenido:
-                                                data['Autor'] ?? 'Anónimo',
-                                            fontSize: 16,
+                                          SizedBox(
+                                            width: totalWidth * 0.14,
+                                            child: CustomLatexText(
+                                              contenido:
+                                                  data['Autor'] ?? 'Anónimo',
+                                              fontSize: 16,
+                                            ),
                                           ),
                                         ),
                                         DataCell(
@@ -298,27 +301,35 @@ class ExerciseListPage extends StatelessWidget {
                                                             as num)
                                                         .toDouble()
                                                     : 0.0,
-                                            size: 25,
+                                            size: 30,
                                             geometryAlignment:
                                                 Alignment.centerLeft,
                                           ),
                                         ),
                                         DataCell(
-                                          Align(
+                                          // 1) usamos FRactionallySizedBox para darle al botón
+                                          //    un ancho relativo al ancho de la tabla
+                                          FractionallySizedBox(
+                                            widthFactor:
+                                                0.10, // 10% de totalWidth
                                             alignment: Alignment.centerLeft,
-                                            child: CustomActionButton(
-                                              text: 'Ver',
-                                              icon: Icons.arrow_forward_ios,
-                                              onPressed: () {
-                                                Navigator.pushNamed(
-                                                  context,
-                                                  '/exercise_view',
-                                                  arguments: {
-                                                    'tema': temaKey,
-                                                    'ejercicioId': doc.id,
-                                                  },
-                                                );
-                                              },
+                                            child: FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              alignment: Alignment.centerLeft,
+                                              child: CustomActionButton(
+                                                text: 'Ver',
+                                                icon: Icons.arrow_forward_ios,
+                                                onPressed: () {
+                                                  Navigator.pushNamed(
+                                                    context,
+                                                    '/exercise_view',
+                                                    arguments: {
+                                                      'tema': temaKey,
+                                                      'ejercicioId': doc.id,
+                                                    },
+                                                  );
+                                                },
+                                              ),
                                             ),
                                           ),
                                         ),

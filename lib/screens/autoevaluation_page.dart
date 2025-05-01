@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../services/evaluacion_service.dart';
+import '../services/services.dart';
 import '../models/pregunta_model.dart';
 import '../widgets/widgets.dart';
 import 'dart:convert';
@@ -32,6 +32,8 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
   bool cargando = false;
   bool mostrarBotonGenerarNuevas = false;
   final FirebaseFirestore firestore = FirebaseFirestore.instance;
+  final EvaluacionService evaluacionService = EvaluacionService();
+
   User? user;
 
   @override
@@ -102,6 +104,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
       });
     } catch (e) {
       setState(() => cargando = false);
+      print("Error al obtener preguntas: $e");
       _mostrarError("Error al obtener preguntas de Firestore:\n$e");
     }
   }
@@ -155,20 +158,26 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
   Future<void> generarPreguntasExternas() async {
     try {
       setState(() => cargando = true);
-      final response = await http.post(
-        Uri.parse("https://hook.us2.make.com/2tx6w48rcjsco7o6ki24v8ecztiqyywf"),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "temas": [temaSeleccionado],
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        await obtenerPreguntas([temaSeleccionado!]);
-      } else {
-        throw Exception("Make devolvió ${response.statusCode}");
-      }
+      final nuevasPreguntas = await evaluacionService.obtenerPreguntas([
+        temaSeleccionado!,
+      ]);
+      setState(() {
+        preguntasPorTema = {
+          temaSeleccionado!:
+              nuevasPreguntas[temaSeleccionado!]!
+                  .map(
+                    (p) => {
+                      'pregunta': p.pregunta,
+                      'opciones': p.opciones,
+                      'respuesta_correcta': p.respuestaCorrecta,
+                    },
+                  )
+                  .toList(),
+        };
+        cargando = false;
+      });
     } catch (e) {
+      setState(() => cargando = false);
       _mostrarError("Error al generar preguntas automáticamente:\n$e");
     }
   }

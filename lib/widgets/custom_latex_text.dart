@@ -24,6 +24,7 @@ class CustomLatexText extends StatelessWidget {
   Widget build(BuildContext context) {
     final contenidoPreparado = prepararLaTeX(contenido);
 
+    // Limitar el número de palabras si se especifica
     String texto = contenido;
     if (maxWords != null && texto.isNotEmpty) {
       final partes = texto.split(' ');

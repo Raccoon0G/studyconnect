@@ -17,23 +17,22 @@ class CustomRatingWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(5, (index) {
-        final isFilled = index < rating;
-        return MouseRegion(
-          onEnter: enableHoverEffect ? (_) => onRatingChanged(index + 1) : null,
-          child: IconButton(
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: List.generate(5, (index) {
+          final isFilled = index < rating;
+          return IconButton(
             icon: Icon(
               isFilled ? Icons.star : Icons.star_border,
               color: Colors.amber,
-              size: size,
+              size: size, // sigue recibiendo el size que le pases
             ),
-            tooltip: '${index + 1} estrella${index == 0 ? '' : 's'}',
             onPressed: () => onRatingChanged(index + 1),
-          ),
-        );
-      }),
+          );
+        }),
+      ),
     );
   }
 }
