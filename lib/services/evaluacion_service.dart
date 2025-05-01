@@ -1,34 +1,36 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/pregunta_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class EvaluacionService {
   static const _url =
       "https://hook.us2.make.com/2tx6w48rcjsco7o6ki24v8ecztiqyywf";
 
-  Future<Map<String, List<Pregunta>>> obtenerPreguntas(
-    List<String> temas,
+  final FirebaseFirestore firestore = FirebaseFirestore.instance;
+
+  Future<Map<String, List<Pregunta>>> obtenerPreguntasDesdeFirestore(
+    String tema,
   ) async {
-    final response = await http.post(
-      Uri.parse(_url),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({"temas": temas}),
-    );
+    final snapshot =
+        await firestore
+            .collection('preguntas_por_tema')
+            .where('tema', isEqualTo: tema)
+            .orderBy('timestamp', descending: true)
+            .limit(25)
+            .get();
 
-    if (response.statusCode != 200) {
-      throw Exception("Error en la solicitud: ${response.body}");
-    }
+    final preguntas =
+        snapshot.docs.map((doc) {
+          final data = doc.data();
+          return Pregunta(
+            pregunta: data['pregunta'] ?? '',
+            opciones: Map<String, String>.from(data['opciones']),
+            respuestaCorrecta: data['respuestaCorrecta'] ?? '',
+            dificultad: data['dificultad'] ?? '',
+          );
+        }).toList();
 
-    final data = jsonDecode(response.body);
-
-    final Map<String, List<Pregunta>> resultado = {};
-    data.forEach((key, value) {
-      resultado[key] =
-          (value as List)
-              .map((item) => Pregunta.fromJson(item as Map<String, dynamic>))
-              .toList();
-    });
-
-    return resultado;
+    return {tema: preguntas};
   }
 }

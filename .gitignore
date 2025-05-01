@@ -32,7 +32,6 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 
-
 # Symbolication related
 app.*.symbols
 
@@ -43,3 +42,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Firebase configuration (ignorar para evitar subir a GitHub)
+**/firebase.json
+**/firestore.rules
+**/firestore.indexes.json
+
+# Firebase generated Dart file with API keys
+lib/firebase_options.dart

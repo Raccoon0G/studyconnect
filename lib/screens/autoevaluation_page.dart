@@ -104,7 +104,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
       });
     } catch (e) {
       setState(() => cargando = false);
-      print("Error al obtener preguntas: $e");
+      //print("Error al obtener preguntas: $e");
       _mostrarError("Error al obtener preguntas de Firestore:\n$e");
     }
   }
@@ -158,9 +158,21 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
   Future<void> generarPreguntasExternas() async {
     try {
       setState(() => cargando = true);
-      final nuevasPreguntas = await evaluacionService.obtenerPreguntas([
-        temaSeleccionado!,
-      ]);
+      if (user == null || user!.uid.isEmpty) {
+        _mostrarError("No se pudo identificar al usuario.");
+        return;
+      }
+
+      final uid = user!.uid;
+      final nombre =
+          (user!.displayName == null || user!.displayName!.isEmpty)
+              ? "Anónimo"
+              : user!.displayName!;
+
+      final tema = temasSeleccionados.first;
+      final nuevasPreguntas = await evaluacionService
+          .obtenerPreguntasDesdeFirestore(tema);
+
       setState(() {
         preguntasPorTema = {
           temaSeleccionado!:
@@ -292,6 +304,65 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                   const SizedBox(height: 16),
                   _avisoGenerarNuevas(),
                 ],
+
+                const SizedBox(height: 8), // espaciado
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.amber, // color llamativo de prueba
+                    foregroundColor: Colors.black,
+                  ),
+                  icon: const Icon(Icons.bolt),
+                  label: const Text("Prueba: generar preguntas con IA (Make)"),
+                  onPressed: () async {
+                    if (temasSeleccionados.isEmpty) {
+                      _mostrarError(
+                        "Debes seleccionar al menos un tema antes de generar preguntas con IA.",
+                      );
+                      return;
+                    }
+
+                    setState(() => cargando = true);
+                    try {
+                      final tema = temasSeleccionados.first;
+                      final nuevasPreguntas = await evaluacionService
+                          .obtenerPreguntasDesdeFirestore(tema);
+                      if (nuevasPreguntas.isEmpty) {
+                        _mostrarError(
+                          "No se encontraron preguntas generadas por IA.",
+                        );
+                        return;
+                      }
+
+                      setState(() {
+                        preguntasPorTema = {
+                          for (var tema in nuevasPreguntas.keys)
+                            tema:
+                                nuevasPreguntas[tema]!
+                                    .map(
+                                      (p) => {
+                                        'pregunta': p.pregunta,
+                                        'opciones': p.opciones,
+                                        'respuesta_correcta':
+                                            p.respuestaCorrecta,
+                                      },
+                                    )
+                                    .toList(),
+                        };
+                        temaSeleccionado = nuevasPreguntas.keys.first;
+                        cargando = false;
+                        yaCalificado = false;
+                        respuestasUsuario.clear();
+                        puntaje = 0;
+                      });
+                    } catch (e) {
+                      setState(() => cargando = false);
+                      _mostrarError(
+                        "Error al generar preguntas desde Make:\n$e",
+                      );
+                    }
+                  },
+                ),
+
                 const SizedBox(height: 20),
                 if (cargando)
                   const Center(child: CircularProgressIndicator())
