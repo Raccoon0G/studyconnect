@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/utils.dart';
 import 'package:confetti/confetti.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 class AutoevaluationPage extends StatefulWidget {
   const AutoevaluationPage({super.key});
@@ -37,6 +38,8 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
   late ConfettiController _confettiRightController;
   late ConfettiController _confettiBottomController;
 
+  final AudioPlayer _audioPlayer = AudioPlayer();
+
   User? user;
   int cantidadPreguntas = 25; // Default
 
@@ -64,6 +67,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
     _confettiLeftController.dispose();
     _confettiRightController.dispose();
     _confettiBottomController.dispose();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
@@ -209,6 +213,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
     final aprobado = calificacionFinal >= 6.0;
 
     // 🎉 Mostrar diálogo dinámico con emoji
+
     await showCustomDialog(
       context: context,
       titulo: aprobado ? "¡Felicidades, $nombre! 🎉" : "Ánimo, $nombre 😢",
@@ -220,6 +225,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
     );
 
     if (aprobado) {
+      await _audioPlayer.play(AssetSource('audio/applause.mp3'));
       _confettiController.play(); // solo si aprobó
       _confettiLeftController.play();
       _confettiRightController.play();
