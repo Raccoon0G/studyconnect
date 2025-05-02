@@ -1,5 +1,8 @@
 export 'package:study_connect/widgets/card_tema.dart';
 export 'package:study_connect/widgets/custom_latex_text.dart';
+export 'package:study_connect/widgets/custom_latex_radio_option.dart';
+export 'package:study_connect/widgets/custom_latex_questioncard.dart';
+export 'package:study_connect/widgets/custom_score_card.dart';
 export 'package:study_connect/widgets/custom_data_column.dart';
 export 'package:study_connect/widgets/custom_rating_widget.dart';
 export 'package:study_connect/widgets/custom_star_rating.dart';

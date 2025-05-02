@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/services.dart';
-import '../models/pregunta_model.dart';
 import '../widgets/widgets.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -35,6 +32,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
   final EvaluacionService evaluacionService = EvaluacionService();
 
   User? user;
+  int cantidadPreguntas = 25; // Default
 
   @override
   void initState() {
@@ -57,15 +55,24 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
       temaSeleccionado = null;
     });
 
-    try {
-      final temaKey = temas.first;
+    Map<String, List<Map<String, dynamic>>> nuevasPreguntas = {};
+    bool activarGenerarNuevas = false;
+
+    for (String tema in temas) {
       final snapshot =
           await firestore
-              .collection('banco_preguntas')
-              .doc(temaKey)
-              .collection('preguntas')
-              .limit(25)
+              .collection('preguntas_por_tema')
+              .where('tema', isEqualTo: tema)
+              .orderBy('timestamp', descending: true)
+              .limit(cantidadPreguntas)
               .get();
+
+      if (snapshot.size < cantidadPreguntas) {
+        await _mostrarError(
+          "No hay suficientes preguntas disponibles para '$tema'. Se encontraron solo ${snapshot.size}.",
+        );
+        continue; // O puedes saltar o poner las que haya
+      }
 
       final preguntas =
           snapshot.docs.map((doc) {
@@ -74,11 +81,12 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
             return data;
           }).toList();
 
+      // Revisar última evaluación del usuario
       final lastEval =
           await firestore
               .collection('evaluaciones_realizadas')
               .where('uid_usuario', isEqualTo: user?.uid)
-              .where('tema', isEqualTo: temaKey)
+              .where('tema', isEqualTo: tema)
               .orderBy('fecha_realizacion', descending: true)
               .limit(1)
               .get();
@@ -94,19 +102,19 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
       final repetidas =
           idsActuales.where((id) => preguntasAnteriores.contains(id)).length;
 
-      setState(() {
-        preguntasPorTema = {
-          temaKey: List<Map<String, dynamic>>.from(preguntas),
-        };
-        temaSeleccionado = temaKey;
-        cargando = false;
-        mostrarBotonGenerarNuevas = repetidas >= 13;
-      });
-    } catch (e) {
-      setState(() => cargando = false);
-      //print("Error al obtener preguntas: $e");
-      _mostrarError("Error al obtener preguntas de Firestore:\n$e");
+      nuevasPreguntas[tema] = preguntas;
+
+      if (repetidas >= 13) {
+        activarGenerarNuevas = true;
+      }
     }
+
+    setState(() {
+      preguntasPorTema = nuevasPreguntas;
+      temaSeleccionado = nuevasPreguntas.keys.first;
+      mostrarBotonGenerarNuevas = activarGenerarNuevas;
+      cargando = false;
+    });
   }
 
   Future<void> _mostrarError(String mensaje) async {
@@ -126,12 +134,15 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
     );
   }
 
-  void _calificar() {
+  void _calificar() async {
     final preguntas = preguntasPorTema[temaSeleccionado] ?? [];
     int score = 0;
 
     for (int i = 0; i < preguntas.length; i++) {
-      final correcta = preguntas[i]["respuesta_correcta"];
+      final correcta =
+          preguntas[i]["respuestaCorrecta"] ??
+          preguntas[i]["respuesta_correcta"];
+
       final respuesta = respuestasUsuario[i];
       if (respuesta != null && respuesta == correcta) {
         score++;
@@ -139,12 +150,15 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
     }
 
     final preguntasIds = preguntas.map((p) => p['id'] ?? '').toList();
-    firestore.collection('evaluaciones_realizadas').add({
+
+    await firestore.collection('evaluaciones_realizadas').add({
       'uid_usuario': user?.uid,
       'nombre_usuario': user?.displayName ?? '',
       'tema': temaSeleccionado,
       'preguntas_ids': preguntasIds,
-      'respuestas_usuario': respuestasUsuario,
+      'respuestas_usuario': respuestasUsuario.map(
+        (k, v) => MapEntry(k.toString(), v),
+      ),
       'calificacion': score,
       'fecha_realizacion': FieldValue.serverTimestamp(),
     });
@@ -171,7 +185,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
 
       final tema = temasSeleccionados.first;
       final nuevasPreguntas = await evaluacionService
-          .obtenerPreguntasDesdeFirestore(tema);
+          .obtenerPreguntasDesdeFirestore(tema, cantidad: cantidadPreguntas);
 
       setState(() {
         preguntasPorTema = {
@@ -213,6 +227,20 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
     );
   }
 
+  Map<String, String> _convertirOpciones(dynamic rawOpciones) {
+    if (rawOpciones is Map) {
+      return Map<String, String>.from(rawOpciones);
+    } else if (rawOpciones is List) {
+      final letras = ['A', 'B', 'C', 'D', 'E'];
+      return {
+        for (int i = 0; i < rawOpciones.length; i++)
+          letras[i]: rawOpciones[i].toString(),
+      };
+    } else {
+      return {};
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final preguntas = preguntasPorTema[temaSeleccionado] ?? [];
@@ -239,13 +267,14 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
           ),
           const NotificationIconWidget(),
           TextButton(
-            onPressed: () {},
+            onPressed: () => Navigator.pushNamed(context, '/user_profile'),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.white),
                 borderRadius: BorderRadius.circular(20),
               ),
+
               child: const Text(
                 'Perfil',
                 style: TextStyle(color: Colors.white),
@@ -269,6 +298,31 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<int>(
+                  value: cantidadPreguntas,
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        cantidadPreguntas = value;
+                      });
+                    }
+                  },
+                  items:
+                      [5, 10, 15, 20, 25, 30]
+                          .map(
+                            (n) => DropdownMenuItem(
+                              value: n,
+                              child: Text('$n preguntas'),
+                            ),
+                          )
+                          .toList(),
+                  decoration: const InputDecoration(
+                    labelText: "Cantidad de preguntas",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -314,9 +368,16 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                   icon: const Icon(Icons.bolt),
                   label: const Text("Prueba: generar preguntas con IA (Make)"),
                   onPressed: () async {
-                    if (temasSeleccionados.isEmpty) {
+                    // if (temasSeleccionados.isEmpty) {
+                    //   _mostrarError(
+                    //     "Debes seleccionar al menos un tema antes de generar preguntas con IA.",
+                    //   );
+                    //   return;
+                    // }
+
+                    if (temasSeleccionados.length != 1) {
                       _mostrarError(
-                        "Debes seleccionar al menos un tema antes de generar preguntas con IA.",
+                        "Para generar preguntas con IA, selecciona solo un tema.",
                       );
                       return;
                     }
@@ -325,7 +386,11 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                     try {
                       final tema = temasSeleccionados.first;
                       final nuevasPreguntas = await evaluacionService
-                          .obtenerPreguntasDesdeFirestore(tema);
+                          .obtenerPreguntasDesdeFirestore(
+                            tema,
+                            cantidad: cantidadPreguntas,
+                          );
+
                       if (nuevasPreguntas.isEmpty) {
                         _mostrarError(
                           "No se encontraron preguntas generadas por IA.",
@@ -355,7 +420,9 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                         puntaje = 0;
                       });
                     } catch (e) {
+                      print("Error al generar preguntas: $e");
                       setState(() => cargando = false);
+
                       _mostrarError(
                         "Error al generar preguntas desde Make:\n$e",
                       );
@@ -400,51 +467,27 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                             itemCount: preguntas.length,
                             itemBuilder: (context, index) {
                               final pregunta = preguntas[index];
-                              return Card(
-                                margin: const EdgeInsets.symmetric(vertical: 8),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12.0),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        "Pregunta ${index + 1}: ${pregunta["pregunta"]}",
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Column(
-                                        children:
-                                            (pregunta["opciones"]
-                                                    as Map<String, String>)
-                                                .entries
-                                                .map((entry) {
-                                                  return RadioListTile<String>(
-                                                    title: Text(
-                                                      "${entry.key}) ${entry.value}",
-                                                    ),
-                                                    value: entry.key,
-                                                    groupValue:
-                                                        respuestasUsuario[index],
-                                                    onChanged: (value) {
-                                                      setState(() {
-                                                        respuestasUsuario[index] =
-                                                            value!;
-                                                      });
-                                                    },
-                                                  );
-                                                })
-                                                .toList(),
-                                      ),
-                                    ],
-                                  ),
+                              return CustomLatexQuestionCard(
+                                numero: index + 1,
+                                pregunta: pregunta["pregunta"],
+                                opciones: _convertirOpciones(
+                                  pregunta["opciones"],
                                 ),
+                                seleccionada: respuestasUsuario[index],
+                                onChanged: (value) {
+                                  setState(() {
+                                    respuestasUsuario[index] = value;
+                                  });
+                                },
+                                respuestaCorrecta:
+                                    pregunta["respuestaCorrecta"] ??
+                                    pregunta["respuesta_correcta"],
+                                mostrarRespuesta: yaCalificado,
                               );
                             },
                           ),
                         ),
+
                         const SizedBox(height: 8),
                         ElevatedButton(
                           onPressed:
@@ -462,15 +505,9 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                           ),
                         ),
                         if (yaCalificado)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 12.0),
-                            child: Text(
-                              "Tu puntaje: $puntaje / ${preguntas.length}",
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                          CustomScoreCard(
+                            puntaje: puntaje,
+                            total: preguntas.length,
                           ),
                       ],
                     ),
