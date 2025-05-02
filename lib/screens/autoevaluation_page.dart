@@ -4,6 +4,8 @@ import '../services/services.dart';
 import '../widgets/widgets.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../utils/utils.dart';
+import 'package:confetti/confetti.dart';
 
 class AutoevaluationPage extends StatefulWidget {
   const AutoevaluationPage({super.key});
@@ -30,6 +32,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
   bool mostrarBotonGenerarNuevas = false;
   final FirebaseFirestore firestore = FirebaseFirestore.instance;
   final EvaluacionService evaluacionService = EvaluacionService();
+  late ConfettiController _confettiController;
 
   User? user;
   int cantidadPreguntas = 25; // Default
@@ -38,6 +41,15 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
   void initState() {
     super.initState();
     user = FirebaseAuth.instance.currentUser;
+    _confettiController = ConfettiController(
+      duration: const Duration(seconds: 3),
+    );
+  }
+
+  @override
+  void dispose() {
+    _confettiController.dispose();
+    super.dispose();
   }
 
   Future<void> obtenerPreguntas(List<String> temas) async {
@@ -140,20 +152,30 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
 
     for (int i = 0; i < preguntas.length; i++) {
       final correcta =
-          preguntas[i]["respuestaCorrecta"] ??
-          preguntas[i]["respuesta_correcta"];
-
+          preguntas[i]["respuesta_correcta"] ??
+          preguntas[i]["respuestaCorrecta"];
       final respuesta = respuestasUsuario[i];
-      if (respuesta != null && respuesta == correcta) {
+      if (respuesta != null && respuesta.trim() == correcta.trim()) {
         score++;
       }
     }
 
     final preguntasIds = preguntas.map((p) => p['id'] ?? '').toList();
 
+    // 🔄 Obtener nombre real del usuario desde la colección `usuarios`
+    final uid = user?.uid;
+    String nombre = user?.displayName ?? "Anónimo";
+
+    if (uid != null) {
+      final doc = await firestore.collection('usuarios').doc(uid).get();
+      if (doc.exists && doc.data()?['Nombre'] != null) {
+        nombre = doc['Nombre'];
+      }
+    }
+
     await firestore.collection('evaluaciones_realizadas').add({
-      'uid_usuario': user?.uid,
-      'nombre_usuario': user?.displayName ?? '',
+      'uid_usuario': uid,
+      'nombre_usuario': nombre,
       'tema': temaSeleccionado,
       'preguntas_ids': preguntasIds,
       'respuestas_usuario': respuestasUsuario.map(
@@ -167,6 +189,24 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
       yaCalificado = true;
       puntaje = score;
     });
+
+    final calificacionFinal = (score / preguntas.length) * 10;
+    final aprobado = calificacionFinal >= 6.0;
+
+    // 🎉 Mostrar diálogo dinámico con emoji
+    await showCustomDialog(
+      context: context,
+      titulo: aprobado ? "¡Felicidades, $nombre! 🎉" : "Ánimo, $nombre 😢",
+      mensaje:
+          aprobado
+              ? "Aprobaste con una calificación de ${calificacionFinal.toStringAsFixed(1)}."
+              : "Obtuviste ${calificacionFinal.toStringAsFixed(1)}. No te preocupes, sigue practicando y lo lograrás.",
+      tipo: aprobado ? CustomDialogType.success : CustomDialogType.error,
+    );
+
+    if (aprobado) {
+      _confettiController.play(); // solo si aprobó
+    }
   }
 
   Future<void> generarPreguntasExternas() async {
@@ -245,278 +285,311 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
   Widget build(BuildContext context) {
     final preguntas = preguntasPorTema[temaSeleccionado] ?? [];
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF048DD2),
-        title: const Text('Study Connect'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/'),
-            child: const Text('Inicio', style: TextStyle(color: Colors.white)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/ranking'),
-            child: const Text('Ranking', style: TextStyle(color: Colors.white)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/content'),
-            child: const Text(
-              'Contenidos',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-          const NotificationIconWidget(),
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/user_profile'),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white),
-                borderRadius: BorderRadius.circular(20),
+    return Stack(
+      children: [
+        Scaffold(
+          appBar: AppBar(
+            backgroundColor: const Color(0xFF048DD2),
+            title: const Text('Study Connect'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pushNamed(context, '/'),
+                child: const Text(
+                  'Inicio',
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
-
-              child: const Text(
-                'Perfil',
-                style: TextStyle(color: Colors.white),
+              TextButton(
+                onPressed: () => Navigator.pushNamed(context, '/ranking'),
+                child: const Text(
+                  'Ranking',
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
-            ),
+              TextButton(
+                onPressed: () => Navigator.pushNamed(context, '/content'),
+                child: const Text(
+                  'Contenidos',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+              const NotificationIconWidget(),
+              TextButton(
+                onPressed: () => Navigator.pushNamed(context, '/user_profile'),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.white),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    'Perfil',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+            ],
           ),
-          const SizedBox(width: 16),
-        ],
-      ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          return Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Temas disponibles",
-                  style: GoogleFonts.roboto(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<int>(
-                  value: cantidadPreguntas,
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() {
-                        cantidadPreguntas = value;
-                      });
-                    }
-                  },
-                  items:
-                      [5, 10, 15, 20, 25, 30]
-                          .map(
-                            (n) => DropdownMenuItem(
-                              value: n,
-                              child: Text('$n preguntas'),
-                            ),
-                          )
-                          .toList(),
-                  decoration: const InputDecoration(
-                    labelText: "Cantidad de preguntas",
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children:
-                      temasDisponibles.map((tema) {
-                        final seleccionado = temasSeleccionados.contains(tema);
-                        return FilterChip(
-                          label: Text(tema),
-                          selected: seleccionado,
-                          onSelected: (value) {
-                            setState(() {
-                              if (value) {
-                                temasSeleccionados.add(tema);
-                              } else {
-                                temasSeleccionados.remove(tema);
-                              }
-                            });
-                          },
-                        );
-                      }).toList(),
-                ),
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  onPressed:
-                      temasSeleccionados.isNotEmpty
-                          ? () => obtenerPreguntas(temasSeleccionados)
-                          : null,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text("Generar evaluación"),
-                ),
-                if (mostrarBotonGenerarNuevas) ...[
-                  const SizedBox(height: 16),
-                  _avisoGenerarNuevas(),
-                ],
-
-                const SizedBox(height: 8), // espaciado
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.amber, // color llamativo de prueba
-                    foregroundColor: Colors.black,
-                  ),
-                  icon: const Icon(Icons.bolt),
-                  label: const Text("Prueba: generar preguntas con IA (Make)"),
-                  onPressed: () async {
-                    // if (temasSeleccionados.isEmpty) {
-                    //   _mostrarError(
-                    //     "Debes seleccionar al menos un tema antes de generar preguntas con IA.",
-                    //   );
-                    //   return;
-                    // }
-
-                    if (temasSeleccionados.length != 1) {
-                      _mostrarError(
-                        "Para generar preguntas con IA, selecciona solo un tema.",
-                      );
-                      return;
-                    }
-
-                    setState(() => cargando = true);
-                    try {
-                      final tema = temasSeleccionados.first;
-                      final nuevasPreguntas = await evaluacionService
-                          .obtenerPreguntasDesdeFirestore(
-                            tema,
-                            cantidad: cantidadPreguntas,
-                          );
-
-                      if (nuevasPreguntas.isEmpty) {
-                        _mostrarError(
-                          "No se encontraron preguntas generadas por IA.",
-                        );
-                        return;
-                      }
-
-                      setState(() {
-                        preguntasPorTema = {
-                          for (var tema in nuevasPreguntas.keys)
-                            tema:
-                                nuevasPreguntas[tema]!
-                                    .map(
-                                      (p) => {
-                                        'pregunta': p.pregunta,
-                                        'opciones': p.opciones,
-                                        'respuesta_correcta':
-                                            p.respuestaCorrecta,
-                                      },
-                                    )
-                                    .toList(),
-                        };
-                        temaSeleccionado = nuevasPreguntas.keys.first;
-                        cargando = false;
-                        yaCalificado = false;
-                        respuestasUsuario.clear();
-                        puntaje = 0;
-                      });
-                    } catch (e) {
-                      print("Error al generar preguntas: $e");
-                      setState(() => cargando = false);
-
-                      _mostrarError(
-                        "Error al generar preguntas desde Make:\n$e",
-                      );
-                    }
-                  },
-                ),
-
-                const SizedBox(height: 20),
-                if (cargando)
-                  const Center(child: CircularProgressIndicator())
-                else if (preguntasPorTema.isEmpty)
-                  const Text("Selecciona temas y presiona 'Generar evaluación'")
-                else
-                  Expanded(
-                    child: Column(
-                      children: [
-                        DropdownButtonFormField<String>(
-                          value: temaSeleccionado,
-                          items:
-                              preguntasPorTema.keys.map((tema) {
-                                return DropdownMenuItem(
-                                  value: tema,
-                                  child: Text(tema),
-                                );
-                              }).toList(),
-                          onChanged: (nuevoTema) {
-                            setState(() {
-                              temaSeleccionado = nuevoTema;
-                              respuestasUsuario.clear();
-                              yaCalificado = false;
-                              puntaje = 0;
-                            });
-                          },
-                          decoration: const InputDecoration(
-                            labelText: "Selecciona un tema",
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Expanded(
-                          child: ListView.builder(
-                            itemCount: preguntas.length,
-                            itemBuilder: (context, index) {
-                              final pregunta = preguntas[index];
-                              return CustomLatexQuestionCard(
-                                numero: index + 1,
-                                pregunta: pregunta["pregunta"],
-                                opciones: _convertirOpciones(
-                                  pregunta["opciones"],
-                                ),
-                                seleccionada: respuestasUsuario[index],
-                                onChanged: (value) {
-                                  setState(() {
-                                    respuestasUsuario[index] = value;
-                                  });
-                                },
-                                respuestaCorrecta:
-                                    pregunta["respuestaCorrecta"] ??
-                                    pregunta["respuesta_correcta"],
-                                mostrarRespuesta: yaCalificado,
-                              );
-                            },
-                          ),
-                        ),
-
-                        const SizedBox(height: 8),
-                        ElevatedButton(
-                          onPressed:
-                              yaCalificado
-                                  ? () {
-                                    setState(() {
-                                      respuestasUsuario.clear();
-                                      yaCalificado = false;
-                                      puntaje = 0;
-                                    });
-                                  }
-                                  : _calificar,
-                          child: Text(
-                            yaCalificado ? "Reiniciar evaluación" : "Calificar",
-                          ),
-                        ),
-                        if (yaCalificado)
-                          CustomScoreCard(
-                            puntaje: puntaje,
-                            total: preguntas.length,
-                          ),
-                      ],
+          body: LayoutBuilder(
+            builder: (context, constraints) {
+              return Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Temas disponibles",
+                      style: GoogleFonts.roboto(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-              ],
-            ),
-          );
-        },
-      ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<int>(
+                      value: cantidadPreguntas,
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            cantidadPreguntas = value;
+                          });
+                        }
+                      },
+                      items:
+                          [5, 10, 15, 20, 25, 30]
+                              .map(
+                                (n) => DropdownMenuItem(
+                                  value: n,
+                                  child: Text('$n preguntas'),
+                                ),
+                              )
+                              .toList(),
+                      decoration: const InputDecoration(
+                        labelText: "Cantidad de preguntas",
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children:
+                          temasDisponibles.map((tema) {
+                            final seleccionado = temasSeleccionados.contains(
+                              tema,
+                            );
+                            return FilterChip(
+                              label: Text(tema),
+                              selected: seleccionado,
+                              onSelected: (value) {
+                                setState(() {
+                                  if (value) {
+                                    temasSeleccionados.add(tema);
+                                  } else {
+                                    temasSeleccionados.remove(tema);
+                                  }
+                                });
+                              },
+                            );
+                          }).toList(),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed:
+                          temasSeleccionados.isNotEmpty
+                              ? () => obtenerPreguntas(temasSeleccionados)
+                              : null,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text("Generar evaluación"),
+                    ),
+                    if (mostrarBotonGenerarNuevas) ...[
+                      const SizedBox(height: 16),
+                      _avisoGenerarNuevas(),
+                    ],
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.amber,
+                        foregroundColor: Colors.black,
+                      ),
+                      icon: const Icon(Icons.bolt),
+                      label: const Text(
+                        "Prueba: generar preguntas con IA (Make)",
+                      ),
+                      onPressed: () async {
+                        if (temasSeleccionados.length != 1) {
+                          _mostrarError(
+                            "Para generar preguntas con IA, selecciona solo un tema.",
+                          );
+                          return;
+                        }
+
+                        setState(() => cargando = true);
+                        try {
+                          final tema = temasSeleccionados.first;
+                          final nuevasPreguntas = await evaluacionService
+                              .obtenerPreguntasDesdeFirestore(
+                                tema,
+                                cantidad: cantidadPreguntas,
+                              );
+
+                          if (nuevasPreguntas.isEmpty) {
+                            _mostrarError(
+                              "No se encontraron preguntas generadas por IA.",
+                            );
+                            return;
+                          }
+
+                          setState(() {
+                            preguntasPorTema = {
+                              for (var tema in nuevasPreguntas.keys)
+                                tema:
+                                    nuevasPreguntas[tema]!
+                                        .map(
+                                          (p) => {
+                                            'pregunta': p.pregunta,
+                                            'opciones': p.opciones,
+                                            'respuesta_correcta':
+                                                p.respuestaCorrecta,
+                                          },
+                                        )
+                                        .toList(),
+                            };
+                            temaSeleccionado = nuevasPreguntas.keys.first;
+                            cargando = false;
+                            yaCalificado = false;
+                            respuestasUsuario.clear();
+                            puntaje = 0;
+                          });
+                        } catch (e) {
+                          print("Error al generar preguntas: $e");
+                          setState(() => cargando = false);
+                          _mostrarError(
+                            "Error al generar preguntas desde Make:\n$e",
+                          );
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    if (cargando)
+                      const Center(child: CircularProgressIndicator())
+                    else if (preguntasPorTema.isEmpty)
+                      const Text(
+                        "Selecciona temas y presiona 'Generar evaluación'",
+                      )
+                    else
+                      Expanded(
+                        child: Column(
+                          children: [
+                            DropdownButtonFormField<String>(
+                              value: temaSeleccionado,
+                              items:
+                                  preguntasPorTema.keys
+                                      .map(
+                                        (tema) => DropdownMenuItem(
+                                          value: tema,
+                                          child: Text(tema),
+                                        ),
+                                      )
+                                      .toList(),
+                              onChanged: (nuevoTema) {
+                                setState(() {
+                                  temaSeleccionado = nuevoTema;
+                                  respuestasUsuario.clear();
+                                  yaCalificado = false;
+                                  puntaje = 0;
+                                });
+                              },
+                              decoration: const InputDecoration(
+                                labelText: "Selecciona un tema",
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Expanded(
+                              child: ListView.builder(
+                                itemCount: preguntas.length,
+                                itemBuilder: (context, index) {
+                                  final pregunta = preguntas[index];
+                                  return CustomLatexQuestionCard(
+                                    numero: index + 1,
+                                    pregunta: pregunta["pregunta"],
+                                    opciones: _convertirOpciones(
+                                      pregunta["opciones"],
+                                    ),
+                                    seleccionada: respuestasUsuario[index],
+                                    onChanged: (value) {
+                                      setState(() {
+                                        respuestasUsuario[index] = value;
+                                      });
+                                    },
+                                    mostrarCorrecta: yaCalificado,
+                                    respuestaCorrecta:
+                                        pregunta["respuesta_correcta"] ??
+                                        pregunta["respuestaCorrecta"],
+                                    respuestaUsuario: respuestasUsuario[index],
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            ElevatedButton(
+                              onPressed:
+                                  yaCalificado
+                                      ? () {
+                                        setState(() {
+                                          respuestasUsuario.clear();
+                                          yaCalificado = false;
+                                          puntaje = 0;
+                                        });
+                                      }
+                                      : _calificar,
+                              child: Text(
+                                yaCalificado
+                                    ? "Reiniciar evaluación"
+                                    : "Calificar",
+                              ),
+                            ),
+                            if (yaCalificado)
+                              CustomScoreCard(
+                                puntaje: puntaje,
+                                total: preguntas.length,
+                              ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+
+        // 🎊 Confetti flotante (fuera del Scaffold)
+        Align(
+          alignment: Alignment.topCenter,
+          child: ConfettiWidget(
+            confettiController: _confettiController,
+            blastDirectionality: BlastDirectionality.explosive,
+            emissionFrequency: 0.05,
+            numberOfParticles: 30,
+            maxBlastForce: 20,
+            minBlastForce: 8,
+            gravity: 0.3,
+            shouldLoop: false,
+            colors: const [
+              Colors.green,
+              Colors.blue,
+              Colors.purple,
+              Colors.orange,
+              Colors.pink,
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

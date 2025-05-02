@@ -29,6 +29,7 @@ environment:
 # versions available, run `flutter pub outdated`.
 dependencies:
   cloud_firestore: ^5.6.6
+  confetti: ^0.8.0
   cupertino_icons: ^1.0.8
   expansion_tile_card: ^3.0.0
   file_picker: ^10.1.2
