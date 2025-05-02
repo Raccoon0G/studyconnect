@@ -33,6 +33,9 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
   final FirebaseFirestore firestore = FirebaseFirestore.instance;
   final EvaluacionService evaluacionService = EvaluacionService();
   late ConfettiController _confettiController;
+  late ConfettiController _confettiLeftController;
+  late ConfettiController _confettiRightController;
+  late ConfettiController _confettiBottomController;
 
   User? user;
   int cantidadPreguntas = 25; // Default
@@ -44,11 +47,23 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
     _confettiController = ConfettiController(
       duration: const Duration(seconds: 3),
     );
+    _confettiLeftController = ConfettiController(
+      duration: const Duration(seconds: 2),
+    );
+    _confettiRightController = ConfettiController(
+      duration: const Duration(seconds: 2),
+    );
+    _confettiBottomController = ConfettiController(
+      duration: const Duration(seconds: 2),
+    );
   }
 
   @override
   void dispose() {
     _confettiController.dispose();
+    _confettiLeftController.dispose();
+    _confettiRightController.dispose();
+    _confettiBottomController.dispose();
     super.dispose();
   }
 
@@ -206,6 +221,9 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
 
     if (aprobado) {
       _confettiController.play(); // solo si aprobó
+      _confettiLeftController.play();
+      _confettiRightController.play();
+      _confettiBottomController.play();
     }
   }
 
@@ -587,6 +605,53 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
               Colors.orange,
               Colors.pink,
             ],
+          ),
+        ),
+        // Lado izquierdo
+        Align(
+          alignment: Alignment.centerLeft,
+          child: ConfettiWidget(
+            confettiController: _confettiLeftController,
+            blastDirection: 0, // Hacia la derecha
+            emissionFrequency: 0.05,
+            numberOfParticles: 10,
+            maxBlastForce: 15,
+            minBlastForce: 5,
+            gravity: 0.3,
+            shouldLoop: false,
+            colors: const [Colors.green, Colors.pink, Colors.blue],
+          ),
+        ),
+
+        // Lado derecho
+        Align(
+          alignment: Alignment.centerRight,
+          child: ConfettiWidget(
+            confettiController: _confettiRightController,
+            blastDirection: 3.14, // Hacia la izquierda
+            emissionFrequency: 0.05,
+            numberOfParticles: 10,
+            maxBlastForce: 15,
+            minBlastForce: 5,
+            gravity: 0.3,
+            shouldLoop: false,
+            colors: const [Colors.orange, Colors.purple, Colors.yellow],
+          ),
+        ),
+
+        // Desde abajo
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: ConfettiWidget(
+            confettiController: _confettiBottomController,
+            blastDirection: -3.14 / 2, // Hacia arriba
+            emissionFrequency: 0.08,
+            numberOfParticles: 20,
+            maxBlastForce: 18,
+            minBlastForce: 8,
+            gravity: 0.2,
+            shouldLoop: false,
+            colors: const [Colors.cyan, Colors.red, Colors.lime],
           ),
         ),
       ],
