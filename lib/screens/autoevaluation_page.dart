@@ -214,6 +214,47 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
     return "Anónimo";
   }
 
+  Future<List<Map<String, dynamic>>> obtenerEvaluacionesPasadas() async {
+    if (user == null) return [];
+
+    final snapshot =
+        await FirebaseFirestore.instance
+            .collection('evaluaciones_realizadas')
+            .where('uid_usuario', isEqualTo: user!.uid)
+            .orderBy('fecha_realizacion', descending: true)
+            .limit(10)
+            .get();
+
+    return snapshot.docs.map((doc) {
+      final data = doc.data();
+
+      // Campos que esperas
+      final tema = data['tema'] ?? 'Sin tema';
+      final calificacion = data['calificacion'] ?? 0;
+
+      // Manejo especial para fecha
+      final rawFecha = data['fecha_realizacion'];
+      String fechaFormateada = 'Sin fecha';
+
+      // ✅ Solo conviertes si ES un Timestamp
+      if (rawFecha is Timestamp) {
+        final fecha = rawFecha.toDate();
+        fechaFormateada =
+            "${fecha.day}/${fecha.month}/${fecha.year} ${fecha.hour}:${fecha.minute.toString().padLeft(2, '0')}";
+      } else {
+        // 🔎 Si no es Timestamp, solo mostramos 'Sin fecha' y avisamos en consola
+        print("⚠️ 'fecha_realizacion' no es Timestamp: $rawFecha");
+      }
+
+      // Resultado que regresa esta función
+      return {
+        'tema': tema,
+        'calificacion': calificacion,
+        'fecha': fechaFormateada,
+      };
+    }).toList();
+  }
+
   Future<void> _mostrarError(String mensaje) async {
     await showDialog(
       context: context,
@@ -523,6 +564,59 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                         label: const Text("Generar evaluación"),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.history),
+                      label: const Text("Ver resultados pasados"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey[800],
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () async {
+                        final historial = await obtenerEvaluacionesPasadas();
+
+                        if (historial.isEmpty) {
+                          _mostrarError("No tienes evaluaciones anteriores.");
+                          return;
+                        }
+
+                        await showDialog(
+                          context: context,
+                          builder:
+                              (_) => AlertDialog(
+                                title: const Text("Tus evaluaciones pasadas"),
+                                content: SizedBox(
+                                  width: double.maxFinite,
+                                  child: ListView(
+                                    shrinkWrap: true,
+                                    children:
+                                        historial.map((eval) {
+                                          return ListTile(
+                                            leading: const Icon(
+                                              Icons.check_circle_outline,
+                                            ),
+                                            title: Text(
+                                              "Tema: ${eval['tema']}",
+                                            ),
+                                            subtitle: Text(
+                                              "Calificación: ${eval['calificacion']}",
+                                            ),
+                                            trailing: Text(eval['fecha']),
+                                          );
+                                        }).toList(),
+                                  ),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: const Text("Cerrar"),
+                                  ),
+                                ],
+                              ),
+                        );
+                      },
+                    ),
+
                     if (mostrarBotonGenerarNuevas) ...[
                       const SizedBox(height: 16),
                       _avisoGenerarNuevas(),
@@ -577,7 +671,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                             );
                         final nuevasPreguntas = nuevasPreguntasMap[tema] ?? [];
 
-                        if (nuevasPreguntas.isEmpty) {
+                        if (nuevasPreguntasMap.isEmpty) {
                           setState(() => cargando = false);
                           _mostrarError(
                             "No se pudieron generar las preguntas por IA.",
