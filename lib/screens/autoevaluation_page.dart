@@ -37,6 +37,8 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
   late ConfettiController _confettiLeftController;
   late ConfettiController _confettiRightController;
   late ConfettiController _confettiBottomController;
+  bool yaSeNotificoIA = false;
+  bool envioExitoso = false;
 
   final AudioPlayer _audioPlayer = AudioPlayer();
 
@@ -59,6 +61,8 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
     _confettiBottomController = ConfettiController(
       duration: const Duration(seconds: 2),
     );
+
+    cargarTotalesPorTema();
   }
 
   @override
@@ -69,6 +73,21 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
     _confettiBottomController.dispose();
     _audioPlayer.dispose();
     super.dispose();
+  }
+
+  Map<String, int> totalPreguntasPorTema = {};
+
+  Future<void> cargarTotalesPorTema() async {
+    for (final tema in temasDisponibles) {
+      final snapshot =
+          await firestore
+              .collection('preguntas_por_tema')
+              .where('tema', isEqualTo: tema)
+              .get();
+
+      totalPreguntasPorTema[tema] = snapshot.size;
+    }
+    setState(() {}); // Actualiza UI
   }
 
   Future<void> obtenerPreguntas(List<String> temas) async {
@@ -86,7 +105,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
       temaSeleccionado = null;
     });
 
-    Map<String, List<Map<String, dynamic>>> nuevasPreguntas = {};
+    Map<String, List<Map<String, dynamic>>> nuevasPreguntasPorTema = {};
     bool activarGenerarNuevas = false;
 
     for (String tema in temas) {
@@ -100,9 +119,9 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
 
       if (snapshot.size < cantidadPreguntas) {
         await _mostrarError(
-          "No hay suficientes preguntas disponibles para '$tema'. Se encontraron solo ${snapshot.size}.",
+          "No hay suficientes preguntas disponibles para '$tema'. Solo se encontraron ${snapshot.size}.",
         );
-        continue; // O puedes saltar o poner las que haya
+        continue;
       }
 
       final preguntas =
@@ -112,7 +131,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
             return data;
           }).toList();
 
-      // Revisar última evaluación del usuario
+      // 📜 Revisión del historial
       final lastEval =
           await firestore
               .collection('evaluaciones_realizadas')
@@ -129,11 +148,46 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
         );
       }
 
-      final idsActuales = preguntas.map((p) => p['id']).toList();
-      final repetidas =
-          idsActuales.where((id) => preguntasAnteriores.contains(id)).length;
+      final preguntasFiltradas =
+          preguntas
+              .where((p) => !preguntasAnteriores.contains(p['id']))
+              .toList();
 
-      nuevasPreguntas[tema] = preguntas;
+      if (preguntasFiltradas.length < cantidadPreguntas / 2) {
+        preguntasFiltradas.clear();
+        preguntasFiltradas.addAll(
+          preguntas,
+        ); // usar todas si hay muchas repetidas
+      }
+
+      final preguntasMapeadas =
+          preguntasFiltradas
+              .map(
+                (p) => {
+                  'pregunta': p['pregunta'],
+                  'opciones': p['opciones'],
+                  'respuesta_correcta':
+                      p['respuesta_correcta'] ?? p['respuestaCorrecta'],
+                  'id': p['id'],
+                },
+              )
+              .toList();
+
+      nuevasPreguntasPorTema[tema] = preguntasMapeadas;
+
+      // 📦 Guardar evaluación generada
+      await firestore.collection('evaluaciones_realizadas').add({
+        'uid_usuario': user!.uid,
+        'nombre_usuario': await _obtenerNombreDesdeUsuarios(user!.uid),
+        'tema': tema,
+        'preguntas_ids': preguntasFiltradas.map((p) => p['id']).toList(),
+        'respuestas_usuario': {},
+        'calificacion': 0,
+        'fecha_realizacion': FieldValue.serverTimestamp(),
+      });
+
+      final repetidas =
+          preguntas.where((p) => preguntasAnteriores.contains(p['id'])).length;
 
       if (repetidas >= 13) {
         activarGenerarNuevas = true;
@@ -141,11 +195,23 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
     }
 
     setState(() {
-      preguntasPorTema = nuevasPreguntas;
-      temaSeleccionado = nuevasPreguntas.keys.first;
+      preguntasPorTema = nuevasPreguntasPorTema;
+      temaSeleccionado = nuevasPreguntasPorTema.keys.first;
       mostrarBotonGenerarNuevas = activarGenerarNuevas;
       cargando = false;
     });
+  }
+
+  Future<String> _obtenerNombreDesdeUsuarios(String uid) async {
+    try {
+      final doc = await firestore.collection('usuarios').doc(uid).get();
+      if (doc.exists && doc.data()?['Nombre'] != null) {
+        return doc['Nombre'];
+      }
+    } catch (e) {
+      print("Error al obtener nombre desde colección usuarios: $e");
+    }
+    return "Anónimo";
   }
 
   Future<void> _mostrarError(String mensaje) async {
@@ -181,7 +247,6 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
 
     final preguntasIds = preguntas.map((p) => p['id'] ?? '').toList();
 
-    // 🔄 Obtener nombre real del usuario desde la colección `usuarios`
     final uid = user?.uid;
     String nombre = user?.displayName ?? "Anónimo";
 
@@ -192,17 +257,42 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
       }
     }
 
-    await firestore.collection('evaluaciones_realizadas').add({
-      'uid_usuario': uid,
-      'nombre_usuario': nombre,
-      'tema': temaSeleccionado,
-      'preguntas_ids': preguntasIds,
-      'respuestas_usuario': respuestasUsuario.map(
-        (k, v) => MapEntry(k.toString(), v),
-      ),
-      'calificacion': score,
-      'fecha_realizacion': FieldValue.serverTimestamp(),
-    });
+    // ✅ Buscar la evaluación más reciente del tema actual (guardada al generar)
+    final lastEval =
+        await firestore
+            .collection('evaluaciones_realizadas')
+            .where('uid_usuario', isEqualTo: uid)
+            .where('tema', isEqualTo: temaSeleccionado)
+            .orderBy('fecha_realizacion', descending: true)
+            .limit(1)
+            .get();
+
+    if (lastEval.docs.isNotEmpty) {
+      await lastEval.docs.first.reference.update({
+        'respuestas_usuario': respuestasUsuario.map(
+          (k, v) => MapEntry(k.toString(), v),
+        ),
+        'calificacion': score,
+        'fecha_realizacion': FieldValue.serverTimestamp(),
+      });
+    }
+
+    await showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text("✅ Evaluación guardada"),
+            content: const Text(
+              "Tus respuestas y calificación han sido guardadas exitosamente.",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Aceptar"),
+              ),
+            ],
+          ),
+    );
 
     setState(() {
       yaCalificado = true;
@@ -211,8 +301,6 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
 
     final calificacionFinal = (score / preguntas.length) * 10;
     final aprobado = calificacionFinal >= 6.0;
-
-    // 🎉 Mostrar diálogo dinámico con emoji
 
     await showCustomDialog(
       context: context,
@@ -226,7 +314,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
 
     if (aprobado) {
       await _audioPlayer.play(AssetSource('audio/applause.mp3'));
-      _confettiController.play(); // solo si aprobó
+      _confettiController.play();
       _confettiLeftController.play();
       _confettiRightController.play();
       _confettiBottomController.play();
@@ -397,37 +485,43 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      children:
-                          temasDisponibles.map((tema) {
-                            final seleccionado = temasSeleccionados.contains(
-                              tema,
-                            );
-                            return FilterChip(
-                              label: Text(tema),
-                              selected: seleccionado,
-                              onSelected: (value) {
-                                setState(() {
-                                  if (value) {
-                                    temasSeleccionados.add(tema);
-                                  } else {
-                                    temasSeleccionados.remove(tema);
-                                  }
-                                });
-                              },
-                            );
-                          }).toList(),
+                    Center(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children:
+                            temasDisponibles.map((tema) {
+                              final seleccionado = temasSeleccionados.contains(
+                                tema,
+                              );
+                              return FilterChip(
+                                label: Text(
+                                  "$tema (${totalPreguntasPorTema[tema] ?? 0})",
+                                ),
+                                selected: seleccionado,
+                                onSelected: (value) {
+                                  setState(() {
+                                    if (value) {
+                                      temasSeleccionados.add(tema);
+                                    } else {
+                                      temasSeleccionados.remove(tema);
+                                    }
+                                  });
+                                },
+                              );
+                            }).toList(),
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    ElevatedButton.icon(
-                      onPressed:
-                          temasSeleccionados.isNotEmpty
-                              ? () => obtenerPreguntas(temasSeleccionados)
-                              : null,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text("Generar evaluación"),
+                    Center(
+                      child: ElevatedButton.icon(
+                        onPressed:
+                            temasSeleccionados.isNotEmpty
+                                ? () => obtenerPreguntas(temasSeleccionados)
+                                : null,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text("Generar evaluación"),
+                      ),
                     ),
                     if (mostrarBotonGenerarNuevas) ...[
                       const SizedBox(height: 16),
@@ -446,57 +540,117 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                       onPressed: () async {
                         if (temasSeleccionados.length != 1) {
                           _mostrarError(
-                            "Para generar preguntas con IA, selecciona solo un tema.",
+                            "Selecciona solo un tema para usar IA.",
                           );
                           return;
                         }
 
-                        setState(() => cargando = true);
-                        try {
-                          final tema = temasSeleccionados.first;
-                          final nuevasPreguntas = await evaluacionService
-                              .obtenerPreguntasDesdeFirestore(
-                                tema,
-                                cantidad: cantidadPreguntas,
-                              );
+                        final tema = temasSeleccionados.first;
+                        setState(() {
+                          cargando = true;
+                          yaCalificado = false;
+                          respuestasUsuario.clear();
+                          puntaje = 0;
+                          yaSeNotificoIA = false;
+                          envioExitoso = false;
+                        });
 
-                          if (nuevasPreguntas.isEmpty) {
-                            _mostrarError(
-                              "No se encontraron preguntas generadas por IA.",
+                        // 🔔 Notificar a Make
+                        final notificado = await evaluacionService
+                            .notificarGeneracionPreguntas(tema);
+                        setState(() => yaSeNotificoIA = notificado);
+
+                        if (!notificado) {
+                          setState(() => cargando = false);
+                          _mostrarError("No se pudo notificar a Make.");
+                          return;
+                        }
+
+                        // 🕒 Esperar generación
+                        await Future.delayed(const Duration(seconds: 5));
+
+                        // 📥 Obtener preguntas generadas
+                        final nuevasPreguntasMap = await evaluacionService
+                            .obtenerPreguntasDesdeFirestore(
+                              tema,
+                              cantidad: cantidadPreguntas,
                             );
-                            return;
-                          }
+                        final nuevasPreguntas = nuevasPreguntasMap[tema] ?? [];
 
-                          setState(() {
-                            preguntasPorTema = {
-                              for (var tema in nuevasPreguntas.keys)
-                                tema:
-                                    nuevasPreguntas[tema]!
-                                        .map(
-                                          (p) => {
-                                            'pregunta': p.pregunta,
-                                            'opciones': p.opciones,
-                                            'respuesta_correcta':
-                                                p.respuestaCorrecta,
-                                          },
-                                        )
-                                        .toList(),
-                            };
-                            temaSeleccionado = nuevasPreguntas.keys.first;
-                            cargando = false;
-                            yaCalificado = false;
-                            respuestasUsuario.clear();
-                            puntaje = 0;
-                          });
-                        } catch (e) {
-                          print("Error al generar preguntas: $e");
+                        if (nuevasPreguntas.isEmpty) {
                           setState(() => cargando = false);
                           _mostrarError(
-                            "Error al generar preguntas desde Make:\n$e",
+                            "No se pudieron generar las preguntas por IA.",
+                          );
+                          return;
+                        }
+
+                        // 📜 Revisar historial
+                        final historial =
+                            await firestore
+                                .collection('evaluaciones_realizadas')
+                                .where('uid_usuario', isEqualTo: user!.uid)
+                                .where('tema', isEqualTo: tema)
+                                .orderBy('fecha_realizacion', descending: true)
+                                .limit(1)
+                                .get();
+
+                        List<String> idsPrevios = [];
+                        if (historial.docs.isNotEmpty) {
+                          idsPrevios = List<String>.from(
+                            historial.docs.first['preguntas_ids'] ?? [],
                           );
                         }
+
+                        // 🚫 Filtrar preguntas repetidas
+                        final preguntasFiltradas =
+                            nuevasPreguntas
+                                .where((p) => !idsPrevios.contains(p.id))
+                                .toList();
+
+                        if (preguntasFiltradas.length < cantidadPreguntas / 2) {
+                          // Si hay muchas repetidas, mejor usar todo
+                          preguntasFiltradas.clear();
+                          preguntasFiltradas.addAll(nuevasPreguntas);
+                        }
+
+                        // 🧠 Armar estructura para la pantalla
+                        final preguntasMapeadas =
+                            preguntasFiltradas
+                                .map(
+                                  (p) => {
+                                    'pregunta': p.pregunta,
+                                    'opciones': p.opciones,
+                                    'respuesta_correcta': p.respuestaCorrecta,
+                                    'id': p.id,
+                                  },
+                                )
+                                .toList();
+
+                        // ✅ Guardar evaluación en Firestore
+                        await firestore
+                            .collection('evaluaciones_realizadas')
+                            .add({
+                              'uid_usuario': user!.uid,
+                              'nombre_usuario': user!.displayName ?? 'Anónimo',
+                              'tema': tema,
+                              'preguntas_ids':
+                                  preguntasFiltradas.map((p) => p.id).toList(),
+                              'respuestas_usuario': {}, // vacío al inicio
+                              'calificacion': 0,
+                              'fecha_realizacion': FieldValue.serverTimestamp(),
+                            });
+
+                        // 🔄 Actualizar estado UI
+                        setState(() {
+                          preguntasPorTema = {tema: preguntasMapeadas};
+                          temaSeleccionado = tema;
+                          envioExitoso = true;
+                          cargando = false;
+                        });
                       },
                     ),
+
                     const SizedBox(height: 20),
                     if (cargando)
                       const Center(child: CircularProgressIndicator())
@@ -525,6 +679,8 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                                   respuestasUsuario.clear();
                                   yaCalificado = false;
                                   puntaje = 0;
+                                  bool yaSeNotificoIA = false;
+                                  bool envioExitoso = false;
                                 });
                               },
                               decoration: const InputDecoration(

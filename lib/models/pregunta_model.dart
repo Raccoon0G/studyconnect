@@ -1,11 +1,11 @@
-class Pregunta {
+class PreguntaModel {
   final String id;
   final String pregunta;
   final Map<String, String> opciones;
   final String respuestaCorrecta;
   final String dificultad;
 
-  Pregunta({
+  PreguntaModel({
     required this.id,
     required this.pregunta,
     required this.opciones,
@@ -13,8 +13,8 @@ class Pregunta {
     required this.dificultad,
   });
 
-  factory Pregunta.fromJson(Map<String, dynamic> json) {
-    return Pregunta(
+  factory PreguntaModel.fromJson(Map<String, dynamic> json) {
+    return PreguntaModel(
       id: json['id'] ?? '',
       pregunta: json['pregunta'],
       opciones: Map<String, String>.from(json['opciones']),
