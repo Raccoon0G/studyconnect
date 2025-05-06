@@ -171,12 +171,11 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
               .where((p) => preguntasAnteriores.contains(p['id']))
               .length;
 
-      final limiteRepetidas = cantidadPreguntas ~/ 2;
+      final limiteRepetidas = cantidadPreguntas ~/ 10; // 10% de repetidas
       if (repetidas >= limiteRepetidas) {
-        activarGenerarNuevas = true;
-        print("🔁 Se encontraron $repetidas repetidas de $cantidadPreguntas.");
+        print("⚠️ Alta cantidad de repetidas: $repetidas");
+        // Solo sirve como mensaje informativo ahora
       }
-
       // Mapear para usar en UI
       final preguntasMapeadas =
           seleccionadas.map((p) {
@@ -209,6 +208,110 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
       mostrarBotonGenerarNuevas = activarGenerarNuevas;
       cargando = false;
     });
+  }
+
+  Widget _botonGenerarConIA() {
+    return Card(
+      color: Colors.yellow[100],
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Text(
+                "⚠️ ¿Preguntas agotadas o repetidas?",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange[800],
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Center(
+              child: Center(
+                child: const Text(
+                  "Puedes generar un nuevo conjunto de preguntas mediante IA (ChatGPT). "
+                  "Este proceso puede tardar unos segundos y tiene un costo en recursos. "
+                  "Úsalo solo si crees que ya no hay preguntas nuevas disponibles.",
+                  style: TextStyle(fontSize: 14),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Center(
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.amber,
+                  foregroundColor: Colors.black,
+                ),
+                icon: const Icon(Icons.bolt),
+                label: const Text("Generar con IA (Make)"),
+                onPressed: () async {
+                  if (temasSeleccionados.length != 1) {
+                    _mostrarError("Selecciona solo un tema para usar IA.");
+                    return;
+                  }
+
+                  final tema = temasSeleccionados.first;
+
+                  setState(() {
+                    cargando = true;
+                    yaCalificado = false;
+                    respuestasUsuario.clear();
+                    puntaje = 0;
+                    yaSeNotificoIA = false;
+                    envioExitoso = false;
+                  });
+
+                  final notificado = await evaluacionService
+                      .notificarGeneracionPreguntas(tema);
+
+                  setState(() {
+                    cargando = false;
+                    yaSeNotificoIA = notificado;
+                  });
+
+                  if (notificado) {
+                    await showDialog(
+                      context: context,
+                      builder:
+                          (_) => AlertDialog(
+                            title: const Text(
+                              "✅ Preguntas generadas con éxito",
+                            ),
+                            content: const Text(
+                              "Las preguntas han sido enviadas correctamente para generarse con IA. El banco de preguntas se actualizará.",
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () async {
+                                  Navigator.of(context).pop();
+                                  setState(() => cargando = true);
+                                  await Future.delayed(
+                                    const Duration(seconds: 3),
+                                  ); // ⏳ espera breve
+                                  await cargarTotalesPorTema(); // 🔄 refresca contador
+                                  setState(() => cargando = false);
+                                },
+                                child: const Text("Aceptar"),
+                              ),
+                            ],
+                          ),
+                    );
+                  } else {
+                    _mostrarError("No se pudo notificar a Make.");
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<String> _obtenerNombreDesdeUsuarios(String uid) async {
@@ -660,10 +763,8 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    if (mostrarBotonGenerarNuevas) ...[
-                      const SizedBox(height: 12),
-                      _avisoGenerarNuevas(),
-                    ],
+                    if (temasSeleccionados.isNotEmpty) _botonGenerarConIA(),
+
                     const SizedBox(height: 12),
                     Center(
                       child: ElevatedButton.icon(
