@@ -189,6 +189,8 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
       final repetidas =
           preguntas.where((p) => preguntasAnteriores.contains(p['id'])).length;
 
+      print("🧠 Preguntas repetidas encontradas para $tema: $repetidas");
+
       if (repetidas >= 13) {
         activarGenerarNuevas = true;
       }
@@ -433,16 +435,60 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
   Widget _avisoGenerarNuevas() {
     return Column(
       children: [
-        const Text(
-          "Se han encontrado preguntas repetidas. ¿Deseas generar nuevas preguntas?",
-          style: TextStyle(color: Colors.red),
+        Center(
+          child: const Text(
+            "Se han encontrado preguntas repetidas. ¿Deseas generar nuevas preguntas con IA?",
+            style: TextStyle(color: Colors.red),
+            textAlign: TextAlign.center,
+          ),
         ),
         const SizedBox(height: 8),
-        ElevatedButton(
-          onPressed: () async {
-            await generarPreguntasExternas();
-          },
-          child: const Text("Generar nuevas preguntas"),
+        Center(
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.amber,
+              foregroundColor: Colors.black,
+            ),
+            icon: const Icon(Icons.bolt),
+            label: const Text("Generar con IA (Make)"),
+            onPressed: () async {
+              if (temasSeleccionados.length != 1) {
+                _mostrarError("Selecciona solo un tema para usar IA.");
+                return;
+              }
+
+              final tema = temasSeleccionados.first;
+
+              setState(() {
+                cargando = true;
+                yaCalificado = false;
+                respuestasUsuario.clear();
+                puntaje = 0;
+                yaSeNotificoIA = false;
+                envioExitoso = false;
+              });
+
+              final notificado = await evaluacionService
+                  .notificarGeneracionPreguntas(tema);
+
+              setState(() {
+                cargando = false;
+                yaSeNotificoIA = notificado;
+              });
+
+              if (notificado) {
+                await showCustomDialog(
+                  context: context,
+                  titulo: "Preguntas generadas con IA",
+                  mensaje:
+                      "Se enviaron correctamente a Make para que se generen nuevas preguntas.",
+                  tipo: CustomDialogType.success,
+                );
+              } else {
+                _mostrarError("No se pudo notificar a Make.");
+              }
+            },
+          ),
         ),
       ],
     );
@@ -908,56 +954,56 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                       _avisoGenerarNuevas(),
                     ],
                     const SizedBox(height: 8),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.amber,
-                        foregroundColor: Colors.black,
-                      ),
-                      icon: const Icon(Icons.bolt),
-                      label: const Text(
-                        "Prueba: generar preguntas con IA (Make)",
-                      ),
-                      onPressed: () async {
-                        if (temasSeleccionados.length != 1) {
-                          _mostrarError(
-                            "Selecciona solo un tema para usar IA.",
-                          );
-                          return;
-                        }
+                    // ElevatedButton.icon(
+                    //   style: ElevatedButton.styleFrom(
+                    //     backgroundColor: Colors.amber,
+                    //     foregroundColor: Colors.black,
+                    //   ),
+                    //   icon: const Icon(Icons.bolt),
+                    //   label: const Text(
+                    //     "Prueba: generar preguntas con IA (Make)",
+                    //   ),
+                    //   onPressed: () async {
+                    //     if (temasSeleccionados.length != 1) {
+                    //       _mostrarError(
+                    //         "Selecciona solo un tema para usar IA.",
+                    //       );
+                    //       return;
+                    //     }
 
-                        final tema = temasSeleccionados.first;
+                    //     final tema = temasSeleccionados.first;
 
-                        setState(() {
-                          cargando = true;
-                          yaCalificado = false;
-                          respuestasUsuario.clear();
-                          puntaje = 0;
-                          yaSeNotificoIA = false;
-                          envioExitoso = false;
-                        });
+                    //     setState(() {
+                    //       cargando = true;
+                    //       yaCalificado = false;
+                    //       respuestasUsuario.clear();
+                    //       puntaje = 0;
+                    //       yaSeNotificoIA = false;
+                    //       envioExitoso = false;
+                    //     });
 
-                        // 🔔 Notificar a Make
-                        final notificado = await evaluacionService
-                            .notificarGeneracionPreguntas(tema);
+                    //     // 🔔 Notificar a Make
+                    //     final notificado = await evaluacionService
+                    //         .notificarGeneracionPreguntas(tema);
 
-                        setState(() {
-                          cargando = false;
-                          yaSeNotificoIA = notificado;
-                        });
+                    //     setState(() {
+                    //       cargando = false;
+                    //       yaSeNotificoIA = notificado;
+                    //     });
 
-                        if (notificado) {
-                          await showCustomDialog(
-                            context: context,
-                            titulo: "Preguntas generadas con IA",
-                            mensaje:
-                                "Las preguntas fueron generadas correctamente por Make.\n Por",
-                            tipo: CustomDialogType.success,
-                          );
-                        } else {
-                          _mostrarError("No se pudo notificar a Make.");
-                        }
-                      },
-                    ),
+                    //     if (notificado) {
+                    //       await showCustomDialog(
+                    //         context: context,
+                    //         titulo: "Preguntas generadas con IA",
+                    //         mensaje:
+                    //             "Las preguntas fueron generadas correctamente por Make.\n Por",
+                    //         tipo: CustomDialogType.success,
+                    //       );
+                    //     } else {
+                    //       _mostrarError("No se pudo notificar a Make.");
+                    //     }
+                    //   },
+                    // ),
                     const SizedBox(height: 20),
 
                     if (cargando)
