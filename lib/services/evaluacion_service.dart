@@ -29,12 +29,24 @@ class EvaluacionService {
       );
 
       if (response.statusCode == 200) {
-        print("✅ Webhook recibido correctamente.");
-        return true;
+        try {
+          final decoded = jsonDecode(response.body);
+          final mensaje = decoded["mensaje"]?.toString().toLowerCase() ?? "";
+
+          print("✅ Webhook respondió: $mensaje");
+
+          // Considera éxito si contiene "creadas" o "generadas"
+          final exito =
+              mensaje.contains("creadas") || mensaje.contains("generadas");
+          return exito;
+        } catch (e) {
+          print("⚠️ Error al decodificar la respuesta JSON: $e");
+          // Acepta como éxito si el código HTTP fue 200, aunque falle el parsing
+          return true;
+        }
       } else {
-        print(
-          "❌ Error HTTP ${response.statusCode}: ${response.reasonPhrase}\nCuerpo: ${response.body}",
-        );
+        print("❌ Error HTTP ${response.statusCode}: ${response.reasonPhrase}");
+        print("Cuerpo: ${response.body}");
         return false;
       }
     } catch (e) {

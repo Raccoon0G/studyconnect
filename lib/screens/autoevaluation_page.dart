@@ -926,6 +926,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                         }
 
                         final tema = temasSeleccionados.first;
+
                         setState(() {
                           cargando = true;
                           yaCalificado = false;
@@ -938,105 +939,34 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                         // 🔔 Notificar a Make
                         final notificado = await evaluacionService
                             .notificarGeneracionPreguntas(tema);
-                        setState(() => yaSeNotificoIA = notificado);
 
-                        if (!notificado) {
-                          setState(() => cargando = false);
-                          _mostrarError("No se pudo notificar a Make.");
-                          return;
-                        }
-
-                        // 🕒 Esperar generación
-                        await Future.delayed(const Duration(seconds: 5));
-
-                        // 📥 Obtener preguntas generadas
-                        final nuevasPreguntasMap = await evaluacionService
-                            .obtenerPreguntasDesdeFirestore(
-                              tema,
-                              cantidad: cantidadPreguntas,
-                            );
-                        final nuevasPreguntas = nuevasPreguntasMap[tema] ?? [];
-
-                        if (nuevasPreguntasMap.isEmpty) {
-                          setState(() => cargando = false);
-                          _mostrarError(
-                            "No se pudieron generar las preguntas por IA.",
-                          );
-                          return;
-                        }
-
-                        // 📜 Revisar historial
-                        final historial =
-                            await firestore
-                                .collection('evaluaciones_realizadas')
-                                .where('uid_usuario', isEqualTo: user!.uid)
-                                .where('tema', isEqualTo: tema)
-                                .orderBy('fecha_realizacion', descending: true)
-                                .limit(1)
-                                .get();
-
-                        List<String> idsPrevios = [];
-                        if (historial.docs.isNotEmpty) {
-                          idsPrevios = List<String>.from(
-                            historial.docs.first['preguntas_ids'] ?? [],
-                          );
-                        }
-
-                        // 🚫 Filtrar preguntas repetidas
-                        final preguntasFiltradas =
-                            nuevasPreguntas
-                                .where((p) => !idsPrevios.contains(p.id))
-                                .toList();
-
-                        if (preguntasFiltradas.length < cantidadPreguntas / 2) {
-                          // Si hay muchas repetidas, mejor usar todo
-                          preguntasFiltradas.clear();
-                          preguntasFiltradas.addAll(nuevasPreguntas);
-                        }
-
-                        // 🧠 Armar estructura para la pantalla
-                        final preguntasMapeadas =
-                            preguntasFiltradas
-                                .map(
-                                  (p) => {
-                                    'pregunta': p.pregunta,
-                                    'opciones': p.opciones,
-                                    'respuesta_correcta': p.respuestaCorrecta,
-                                    'id': p.id,
-                                  },
-                                )
-                                .toList();
-
-                        // ✅ Guardar evaluación en Firestore
-                        await firestore
-                            .collection('evaluaciones_realizadas')
-                            .add({
-                              'uid_usuario': user!.uid,
-                              'nombre_usuario': user!.displayName ?? 'Anónimo',
-                              'tema': tema,
-                              'preguntas_ids':
-                                  preguntasFiltradas.map((p) => p.id).toList(),
-                              'respuestas_usuario': {}, // vacío al inicio
-                              'calificacion': 0,
-                              'fecha_realizacion': FieldValue.serverTimestamp(),
-                            });
-
-                        // 🔄 Actualizar estado UI
                         setState(() {
-                          preguntasPorTema = {tema: preguntasMapeadas};
-                          temaSeleccionado = tema;
-                          envioExitoso = true;
                           cargando = false;
+                          yaSeNotificoIA = notificado;
                         });
+
+                        if (notificado) {
+                          await showCustomDialog(
+                            context: context,
+                            titulo: "Preguntas generadas con IA",
+                            mensaje:
+                                "Las preguntas fueron generadas correctamente por Make.\n Por",
+                            tipo: CustomDialogType.success,
+                          );
+                        } else {
+                          _mostrarError("No se pudo notificar a Make.");
+                        }
                       },
                     ),
-
                     const SizedBox(height: 20),
+
                     if (cargando)
                       const Center(child: CircularProgressIndicator())
                     else if (preguntasPorTema.isEmpty)
-                      const Text(
-                        "Selecciona temas y presiona 'Generar evaluación'",
+                      Center(
+                        child: const Text(
+                          "Selecciona temas y presiona 'Generar evaluación'",
+                        ),
                       )
                     else
                       Expanded(
