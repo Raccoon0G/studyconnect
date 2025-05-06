@@ -113,25 +113,19 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
           await firestore
               .collection('preguntas_por_tema')
               .where('tema', isEqualTo: tema)
-              .orderBy('timestamp', descending: true)
-              .limit(cantidadPreguntas)
               .get();
 
-      if (snapshot.size < cantidadPreguntas) {
-        await _mostrarError(
-          "No hay suficientes preguntas disponibles para '$tema'. Solo se encontraron ${snapshot.size}.",
-        );
-        continue;
-      }
-
-      final preguntas =
+      List<Map<String, dynamic>> todas =
           snapshot.docs.map((doc) {
             final data = doc.data();
             data['id'] = doc.id;
             return data;
           }).toList();
 
-      // 📜 Revisión del historial
+      // Shuffle aleatorio (esto mejora aleatoriedad)
+      todas.shuffle();
+
+      // Revisión del historial
       final lastEval =
           await firestore
               .collection('evaluaciones_realizadas')
@@ -148,52 +142,65 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
         );
       }
 
-      final preguntasFiltradas =
-          preguntas
-              .where((p) => !preguntasAnteriores.contains(p['id']))
-              .toList();
+      // Filtra las nuevas primero
+      List<Map<String, dynamic>> noRepetidas =
+          todas.where((p) => !preguntasAnteriores.contains(p['id'])).toList();
 
-      if (preguntasFiltradas.length < cantidadPreguntas / 2) {
-        preguntasFiltradas.clear();
-        preguntasFiltradas.addAll(
-          preguntas,
-        ); // usar todas si hay muchas repetidas
+      // Si no hay suficientes nuevas, rellena aleatoriamente
+      List<Map<String, dynamic>> seleccionadas = [];
+
+      if (noRepetidas.length >= cantidadPreguntas) {
+        seleccionadas = noRepetidas.take(cantidadPreguntas).toList();
+      } else {
+        seleccionadas = [...noRepetidas];
+        List<Map<String, dynamic>> restantes =
+            todas
+                .where(
+                  (p) => !seleccionadas.map((e) => e['id']).contains(p['id']),
+                )
+                .toList();
+
+        restantes.shuffle();
+        int faltantes = cantidadPreguntas - seleccionadas.length;
+        seleccionadas.addAll(restantes.take(faltantes));
       }
 
+      // Contar cuántas están repetidas
+      final repetidas =
+          seleccionadas
+              .where((p) => preguntasAnteriores.contains(p['id']))
+              .length;
+
+      final limiteRepetidas = cantidadPreguntas ~/ 2;
+      if (repetidas >= limiteRepetidas) {
+        activarGenerarNuevas = true;
+        print("🔁 Se encontraron $repetidas repetidas de $cantidadPreguntas.");
+      }
+
+      // Mapear para usar en UI
       final preguntasMapeadas =
-          preguntasFiltradas
-              .map(
-                (p) => {
-                  'pregunta': p['pregunta'],
-                  'opciones': p['opciones'],
-                  'respuesta_correcta':
-                      p['respuesta_correcta'] ?? p['respuestaCorrecta'],
-                  'id': p['id'],
-                },
-              )
-              .toList();
+          seleccionadas.map((p) {
+            return {
+              'pregunta': p['pregunta'],
+              'opciones': p['opciones'],
+              'respuesta_correcta':
+                  p['respuesta_correcta'] ?? p['respuestaCorrecta'],
+              'id': p['id'],
+            };
+          }).toList();
 
       nuevasPreguntasPorTema[tema] = preguntasMapeadas;
 
-      // 📦 Guardar evaluación generada
+      // Guardar evaluación generada
       await firestore.collection('evaluaciones_realizadas').add({
         'uid_usuario': user!.uid,
         'nombre_usuario': await _obtenerNombreDesdeUsuarios(user!.uid),
         'tema': tema,
-        'preguntas_ids': preguntasFiltradas.map((p) => p['id']).toList(),
+        'preguntas_ids': seleccionadas.map((p) => p['id']).toList(),
         'respuestas_usuario': {},
         'calificacion': 0,
         'fecha_realizacion': FieldValue.serverTimestamp(),
       });
-
-      final repetidas =
-          preguntas.where((p) => preguntasAnteriores.contains(p['id'])).length;
-
-      print("🧠 Preguntas repetidas encontradas para $tema: $repetidas");
-
-      if (repetidas >= 13) {
-        activarGenerarNuevas = true;
-      }
     }
 
     setState(() {
@@ -381,6 +388,19 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
               ? "Aprobaste con una calificación de ${calificacionFinal.toStringAsFixed(1)}."
               : "Obtuviste ${calificacionFinal.toStringAsFixed(1)}. No te preocupes, sigue practicando y lo lograrás.",
       tipo: aprobado ? CustomDialogType.success : CustomDialogType.error,
+    );
+
+    // 🔔 Enviar notificación al calificar
+    await NotificationService.crearNotificacion(
+      uidDestino: user!.uid, // o el UID del tutor si lo deseas
+      tipo: 'calificacion',
+      titulo: "✅ Evaluación completada",
+      contenido:
+          "$nombre has terminado una autoevaluación del tema '$temaSeleccionado'.",
+      referenciaId: temaSeleccionado ?? '',
+      tema: temaSeleccionado,
+      uidEmisor: user?.uid,
+      nombreEmisor: nombre,
     );
 
     if (aprobado) {
@@ -639,6 +659,11 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                         label: const Text("Generar evaluación"),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    if (mostrarBotonGenerarNuevas) ...[
+                      const SizedBox(height: 12),
+                      _avisoGenerarNuevas(),
+                    ],
                     const SizedBox(height: 12),
                     Center(
                       child: ElevatedButton.icon(
