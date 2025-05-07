@@ -3,11 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 
-// 1) IMPORT para flutter_chat_bubble
-import 'package:flutter_chat_bubble/chat_bubble.dart';
-import 'package:flutter_chat_bubble/bubble_type.dart';
-import 'package:flutter_chat_bubble/clippers/chat_bubble_clipper_1.dart';
-
 import 'package:study_connect/services/services.dart';
 import 'package:study_connect/widgets/widgets.dart';
 
@@ -1035,70 +1030,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
                 ),
               ],
             );
-            // return Column(
-            //   crossAxisAlignment:
-            //       esMio ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-            //   children: [
-            //     if (showDateSeparator) DateSeparator(fecha),
-            //     ChatBubble(
-            //       clipper: ChatBubbleClipper1(
-            //         type:
-            //             esMio
-            //                 ? BubbleType.sendBubble
-            //                 : BubbleType.receiverBubble,
-            //       ),
-            //       alignment: esMio ? Alignment.topRight : Alignment.topLeft,
-            //       margin: const EdgeInsets.symmetric(
-            //         vertical: 4,
-            //         horizontal: 8,
-            //       ),
-            //       backGroundColor:
-            //           esMio ? Colors.purple.shade200 : Colors.grey.shade300,
-            //       child: ConstrainedBox(
-            //         constraints: const BoxConstraints(maxWidth: 240),
-            //         child: Column(
-            //           crossAxisAlignment: CrossAxisAlignment.start,
-            //           children: [
-            //             if (showName)
-            //               Padding(
-            //                 padding: const EdgeInsets.only(bottom: 4),
-            //                 child: Text(
-            //                   autorInfo['nombre']!,
-            //                   style: const TextStyle(
-            //                     fontWeight: FontWeight.bold,
-            //                     fontSize: 12,
-            //                   ),
-            //                 ),
-            //               ),
-            //             Text(data['Contenido'] as String),
-            //             const SizedBox(height: 4),
-            //             Row(
-            //               mainAxisSize: MainAxisSize.min,
-            //               children: [
-            //                 Text(
-            //                   DateFormat.Hm().format(fecha),
-            //                   style: const TextStyle(
-            //                     fontSize: 10,
-            //                     color: Colors.black54,
-            //                   ),
-            //                 ),
-            //                 if (esMio) ...[
-            //                   const SizedBox(width: 4),
-            //                   Icon(
-            //                     readByPeer ? Icons.done_all : Icons.check,
-            //                     size: 12,
-            //                     color:
-            //                         readByPeer ? Colors.blue : Colors.black54,
-            //                   ),
-            //                 ],
-            //               ],
-            //             ),
-            //           ],
-            //         ),
-            //       ),
-            //     ),
-            //   ],
-            // );
           },
         );
       },
