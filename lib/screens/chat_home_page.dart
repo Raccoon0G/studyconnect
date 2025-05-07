@@ -26,6 +26,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey listViewKey = GlobalKey();
   bool _isTyping = false;
+  String filtro = '';
 
   @override
   void initState() {
@@ -84,8 +85,17 @@ class _ChatHomePageState extends State<ChatHomePage> {
     // 2) Precargamos datos del otro usuario en caché
     await _obtenerUsuario(otroId);
 
+    // ── BONUS: creamos/mergeamos el documento Chats/{chatId}
+    await FirebaseFirestore.instance.collection('Chats').doc(nuevoChatId).set({
+      'ids': [uid, otroId],
+      'UltimaAct': FieldValue.serverTimestamp(),
+      'typing': {uid: false, otroId: false},
+    }, SetOptions(merge: true));
+
     // 3) Disparamos el cambio de chat
     setState(() {
+      filtro = ''; // reset del filtro
+      _busquedaController.clear(); // limpiamos la caja de texto
       chatIdSeleccionado = nuevoChatId;
       otroUid = otroId;
     });
@@ -274,12 +284,14 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
       body: Row(
         children: [
+          // ─── Panel izquierdo ───
           Expanded(
             flex: 1,
             child: Container(
               color: Colors.lightBlue.shade300,
               child: Column(
                 children: [
+                  // 1) Barra de búsqueda
                   Padding(
                     padding: const EdgeInsets.all(8.0),
                     child: TextField(
@@ -291,41 +303,139 @@ class _ChatHomePageState extends State<ChatHomePage> {
                       ),
                       onChanged: (texto) async {
                         final lower = texto.trim().toLowerCase();
-                        final all =
-                            await FirebaseFirestore.instance
-                                .collection('usuarios')
-                                .get();
-                        setState(() {
-                          _usuarios =
-                              all.docs.where((u) {
-                                final nombre =
-                                    (u['Nombre'] ?? '')
-                                        .toString()
-                                        .toLowerCase();
-                                return nombre.contains(lower) && u.id != uid;
-                              }).toList();
-                        });
+                        setState(() => filtro = lower);
+
+                        if (filtro.isNotEmpty) {
+                          // Buscamos sólo usuarios
+                          final snapshot =
+                              await FirebaseFirestore.instance
+                                  .collection('usuarios')
+                                  .get();
+                          setState(() {
+                            _usuarios =
+                                snapshot.docs.where((u) {
+                                  final nombre =
+                                      (u['Nombre'] ?? '')
+                                          .toString()
+                                          .toLowerCase();
+                                  return nombre.contains(filtro) && u.id != uid;
+                                }).toList();
+                          });
+                        }
                       },
                     ),
                   ),
+
+                  // 2) Lista de resultados
                   Expanded(
-                    child: ListView(
-                      children:
-                          _usuarios.map((userDoc) {
-                            final nombre = userDoc['Nombre'] ?? 'Usuario';
-                            return ListTile(
-                              leading: const Icon(Icons.search),
-                              title: Text(nombre),
-                              onTap: () => _iniciarChat(userDoc.id),
-                            );
-                          }).toList(),
-                    ),
+                    child:
+                        filtro.isNotEmpty
+                            // —— MOSTRAR USUARIOS FILTRADOS ——
+                            ? (_usuarios.isEmpty
+                                ? const Center(
+                                  child: Text('No se encontraron usuarios'),
+                                )
+                                : ListView(
+                                  children:
+                                      _usuarios.map((userDoc) {
+                                        final nombre =
+                                            userDoc['Nombre'] ?? 'Usuario';
+                                        return ListTile(
+                                          leading: const Icon(Icons.person),
+                                          title: Text(nombre),
+                                          onTap: () => _iniciarChat(userDoc.id),
+                                        );
+                                      }).toList(),
+                                ))
+                            // —— MOSTRAR LISTA DE CHATS ——
+                            : StreamBuilder<QuerySnapshot>(
+                              stream:
+                                  FirebaseFirestore.instance
+                                      .collection('Chats')
+                                      .where('ids', arrayContains: uid)
+                                      .orderBy('UltimaAct', descending: true)
+                                      .snapshots(),
+                              builder: (context, snap) {
+                                if (snap.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return const Center(
+                                    child: CircularProgressIndicator(),
+                                  );
+                                }
+                                if (!snap.hasData || snap.data!.docs.isEmpty) {
+                                  return const Center(
+                                    child: Text('Sin conversaciones'),
+                                  );
+                                }
+
+                                final chats = snap.data!.docs;
+
+                                // 1) Precargar en caché datos de "otros"
+                                for (var chatDoc in chats) {
+                                  final ids = List<String>.from(
+                                    (chatDoc.data()! as Map)['ids'] ?? [],
+                                  );
+                                  final other = ids.firstWhere((m) => m != uid);
+                                  if (!cacheUsuarios.containsKey(other)) {
+                                    _obtenerUsuario(other);
+                                  }
+                                }
+
+                                // 2) Renderizar
+                                return ListView.builder(
+                                  itemCount: chats.length,
+                                  itemBuilder: (context, idx) {
+                                    final chatDoc = chats[idx];
+                                    final data =
+                                        chatDoc.data()! as Map<String, dynamic>;
+                                    final ids = List<String>.from(
+                                      data['ids'] ?? [],
+                                    );
+                                    final other = ids.firstWhere(
+                                      (m) => m != uid,
+                                    );
+                                    final ts = data['UltimaAct'] as Timestamp?;
+                                    final hora =
+                                        ts == null
+                                            ? ''
+                                            : DateFormat.Hm().format(
+                                              ts.toDate(),
+                                            );
+
+                                    final userInfo = cacheUsuarios[other];
+                                    final nombre =
+                                        userInfo?['nombre'] ?? 'Cargando…';
+                                    final foto = userInfo?['foto'] ?? '';
+
+                                    return ListTile(
+                                      leading: CircleAvatar(
+                                        backgroundImage:
+                                            foto.isNotEmpty
+                                                ? NetworkImage(foto)
+                                                : const AssetImage(
+                                                      'assets/images/avatar1.png',
+                                                    )
+                                                    as ImageProvider,
+                                      ),
+                                      title: Text(nombre),
+                                      subtitle: Text(hora),
+                                      onTap:
+                                          userInfo == null
+                                              ? null
+                                              : () => _iniciarChat(other),
+                                    );
+                                  },
+                                );
+                              },
+                            ),
                   ),
                 ],
               ),
             ),
           ),
+
           Expanded(
+            //Panel Derecho
             flex: 3,
             child: Column(
               children: [
@@ -415,40 +525,37 @@ class _ChatHomePageState extends State<ChatHomePage> {
                             .doc(chatIdSeleccionado)
                             .snapshots(),
                     builder: (context, snap) {
-                      // Si aún no hay datos o no hemos seleccionado un peer, no mostramos nada
-                      if (!snap.hasData || otroUid == null) {
+                      // 1) Si no hay Snapshot aún, o no hay peer, o el doc no existe/no tiene data
+                      if (!snap.hasData ||
+                          otroUid == null ||
+                          !snap.data!.exists ||
+                          snap.data!.data() == null) {
                         return const SizedBox.shrink();
                       }
 
-                      final data = snap.data!.data() as Map<String, dynamic>;
-                      // 'typing' es un mapa en el doc Chats/{chatId}: { uid1: true/false, uid2: ... }
+                      // 2) Ahora SÍ tenemos un Map<String,dynamic>
+                      final dataMap =
+                          snap.data!.data()! as Map<String, dynamic>;
+
+                      // 3) Extraemos typing con fallback a {}
                       final typingMap =
-                          (data['typing'] as Map<String, dynamic>?) ?? {};
+                          (dataMap['typing'] as Map<String, dynamic>?) ?? {};
                       final otherTyping = typingMap[otroUid] == true;
 
-                      // Si la otra persona no está escribiendo, nada que pintar
-                      if (!otherTyping) {
-                        return const SizedBox.shrink();
-                      }
+                      if (!otherTyping) return const SizedBox.shrink();
 
-                      // Si aquí, el peer está escribiendo: mostramos indicador visible
                       return Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
                           vertical: 6.0,
                           horizontal: 12.0,
                         ),
-                        color: Colors.grey.withOpacity(
-                          0.1,
-                        ), // fondo suave y diferenciado
+                        color: Colors.grey.withOpacity(0.1),
                         child: Text(
                           '${cacheUsuarios[otroUid]!['nombre']} está escribiendo…',
                           style: TextStyle(
                             fontStyle: FontStyle.italic,
-                            color:
-                                Colors
-                                    .blue
-                                    .shade900, // texto oscuro para contraste
+                            color: Colors.blue.shade900,
                           ),
                         ),
                       );
@@ -475,15 +582,15 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                 );
                               }
 
-                              // 0) Marcamos como leídos los mensajes que NO SON MÍOS
+                              // 0) Marcar como leídos los mensajes que NO SON MÍOS
                               WidgetsBinding.instance.addPostFrameCallback((_) {
                                 final docs = snapshot.data!.docs;
                                 for (final doc in docs) {
                                   final data =
                                       doc.data()! as Map<String, dynamic>;
                                   final autor = data['AutorID'] as String;
-                                  // Solo marcamos lectura en los mensajes del otro:
-                                  if (autor == uid) continue;
+                                  if (autor == uid)
+                                    continue; // solo marcamos los de él
                                   final leidoPor = List<String>.from(
                                     data['leidoPor'] ?? [],
                                   );
@@ -502,7 +609,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                 }
                               });
 
-                              // 1) Obtenemos la lista normal e invertida
+                              // 1) Preparamos lista ascendente/invertida
                               final asc = snapshot.data!.docs;
                               final inv = asc.reversed.toList();
 
@@ -512,7 +619,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                 padding: const EdgeInsets.all(12),
                                 itemCount: inv.length,
                                 itemBuilder: (context, i) {
-                                  // índice en ascendente para el separador de fecha
                                   final ascIndex = asc.length - 1 - i;
                                   final doc = inv[i];
                                   final data =
@@ -534,7 +640,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                         {},
                                   );
 
-                                  // 2) showName
+                                  // 2) ¿Mostrar nombre?
                                   final total = inv.length;
                                   final showName =
                                       i == total - 1 ||
@@ -546,27 +652,27 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                                   >)['AutorID'] !=
                                               data['AutorID']);
 
-                                  // 3) separador de fecha
-                                  bool showDateSeparator;
+                                  // 3) Separador de fecha
+                                  bool showDateSeparator = false;
                                   if (ascIndex == 0) {
                                     showDateSeparator = true;
                                   } else {
-                                    final currTs =
+                                    final curr =
                                         (asc[ascIndex].data() as Map)['Fecha']
                                             as Timestamp;
-                                    final prevTs =
+                                    final prev =
                                         (asc[ascIndex - 1].data()
                                                 as Map)['Fecha']
                                             as Timestamp;
-                                    final curr = currTs.toDate();
-                                    final prev = prevTs.toDate();
+                                    final cd = curr.toDate();
+                                    final pd = prev.toDate();
                                     showDateSeparator =
-                                        curr.year != prev.year ||
-                                        curr.month != prev.month ||
-                                        curr.day != prev.day;
+                                        cd.year != pd.year ||
+                                        cd.month != pd.month ||
+                                        cd.day != pd.day;
                                   }
 
-                                  // 4) Estado de lectura de **mis** mensajes por el peer
+                                  // 4) ¿Lo leyó el peer?
                                   final leidoPor = List<String>.from(
                                     data['leidoPor'] ?? [],
                                   );
@@ -580,7 +686,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                   final foto =
                                       cacheUsuarios[data['AutorID']]!['foto']!;
 
-                                  // 6) Construimos la columna
+                                  // 6) Construir widgets
                                   final children = <Widget>[];
                                   if (showDateSeparator) {
                                     children.add(
@@ -627,8 +733,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                   children.add(
                                     ChatBubble(
                                       isMine: esMio,
-                                      read:
-                                          readByPeer, // ← aquí se activa el doble‐check
+                                      read: readByPeer,
                                       avatarUrl: foto,
                                       authorName: nombre,
                                       text: texto,
@@ -661,39 +766,44 @@ class _ChatHomePageState extends State<ChatHomePage> {
                           ),
                 ),
 
-                Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _mensajeController,
-                          onChanged: (val) {
-                            setState(() => mensaje = val);
+                if (chatIdSeleccionado != null)
+                  Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _mensajeController,
+                            onChanged: (val) {
+                              // setState(() => mensaje = val);
+                              mensaje = val;
 
-                            // Solo si cambió el estado:
-                            final typing = val.trim().isNotEmpty;
-                            if (typing != _isTyping &&
-                                chatIdSeleccionado != null) {
-                              _isTyping = typing;
-                              FirebaseFirestore.instance
-                                  .collection('Chats')
-                                  .doc(chatIdSeleccionado)
-                                  .update({'typing.$uid': typing});
-                            }
-                          },
-                          decoration: const InputDecoration(
-                            hintText: 'Escribe tu mensaje…',
+                              // Solo si cambió el estado:
+                              final typing = val.trim().isNotEmpty;
+                              if (typing != _isTyping &&
+                                  chatIdSeleccionado != null) {
+                                _isTyping = typing;
+                                FirebaseFirestore.instance
+                                    .collection('Chats')
+                                    .doc(chatIdSeleccionado)
+                                    .update({'typing.$uid': typing});
+                              }
+                            },
+                            decoration: const InputDecoration(
+                              hintText: 'Escribe tu mensaje…',
+                            ),
                           ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.send, color: Colors.blueAccent),
-                        onPressed: _enviarMensaje,
-                      ),
-                    ],
+                        IconButton(
+                          icon: const Icon(
+                            Icons.send,
+                            color: Colors.blueAccent,
+                          ),
+                          onPressed: _enviarMensaje,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
               ],
             ),
           ),
