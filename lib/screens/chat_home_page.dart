@@ -84,37 +84,11 @@ class _ChatHomePageState extends State<ChatHomePage> {
     // 2) Precargamos datos del otro usuario en caché
     await _obtenerUsuario(otroId);
 
-    // // Precargar datos del otro usuario
-    // if (!cacheUsuarios.containsKey(otroId)) {
-    //   final doc =
-    //       await FirebaseFirestore.instance
-    //           .collection('usuarios')
-    //           .doc(otroId)
-    //           .get();
-    //   cacheUsuarios[otroId] = {
-    //     'nombre': doc['Nombre'] ?? 'Usuario',
-    //     'foto': doc['FotoPerfil'] ?? '',
-    //   };
-    // }
-
     // 3) Disparamos el cambio de chat
     setState(() {
       chatIdSeleccionado = nuevoChatId;
       otroUid = otroId;
     });
-  }
-
-  /// En una lista invertida (reverse: true),
-  /// devuelve true **solo** cuando docs[i] arranca un nuevo día.
-  bool _shouldShowDateSeparator(int i, List<QueryDocumentSnapshot> docs) {
-    if (i == 0) return false; // nunca antes del mensaje más nuevo
-    final currTs = (docs[i].data() as Map)['Fecha'] as Timestamp;
-    final prevTs = (docs[i - 1].data() as Map)['Fecha'] as Timestamp;
-    final curr = currTs.toDate();
-    final prev = prevTs.toDate();
-    return curr.year != prev.year ||
-        curr.month != prev.month ||
-        curr.day != prev.day;
   }
 
   void _enviarMensaje() async {
@@ -474,7 +448,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                             color:
                                 Colors
                                     .blue
-                                    .shade600, // texto oscuro para contraste
+                                    .shade900, // texto oscuro para contraste
                           ),
                         ),
                       );
@@ -501,18 +475,34 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                 );
                               }
 
-                              // ─── AUTO-SCROLL tras recibir nuevos mensajes ───
+                              // 0) Marcamos como leídos los mensajes que NO SON MÍOS
                               WidgetsBinding.instance.addPostFrameCallback((_) {
-                                if (_scrollController.hasClients) {
-                                  _scrollController.animateTo(
-                                    0.0, // en reverse: true el offset 0 es el final
-                                    duration: const Duration(milliseconds: 300),
-                                    curve: Curves.easeOut,
+                                final docs = snapshot.data!.docs;
+                                for (final doc in docs) {
+                                  final data =
+                                      doc.data()! as Map<String, dynamic>;
+                                  final autor = data['AutorID'] as String;
+                                  // Solo marcamos lectura en los mensajes del otro:
+                                  if (autor == uid) continue;
+                                  final leidoPor = List<String>.from(
+                                    data['leidoPor'] ?? [],
                                   );
+                                  if (!leidoPor.contains(uid)) {
+                                    FirebaseFirestore.instance
+                                        .collection('Chats')
+                                        .doc(chatIdSeleccionado)
+                                        .collection('Mensajes')
+                                        .doc(doc.id)
+                                        .update({
+                                          'leidoPor': FieldValue.arrayUnion([
+                                            uid,
+                                          ]),
+                                        });
+                                  }
                                 }
                               });
 
-                              // 1) Lista ascendente + su inversa para visual
+                              // 1) Obtenemos la lista normal e invertida
                               final asc = snapshot.data!.docs;
                               final inv = asc.reversed.toList();
 
@@ -522,11 +512,13 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                 padding: const EdgeInsets.all(12),
                                 itemCount: inv.length,
                                 itemBuilder: (context, i) {
+                                  // índice en ascendente para el separador de fecha
                                   final ascIndex = asc.length - 1 - i;
                                   final doc = inv[i];
                                   final data =
                                       doc.data() as Map<String, dynamic>;
 
+                                  // Campos básicos
                                   final esMio = data['AutorID'] == uid;
                                   final texto =
                                       data['Contenido'] as String? ?? '';
@@ -542,7 +534,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                         {},
                                   );
 
-                                  // showName
+                                  // 2) showName
                                   final total = inv.length;
                                   final showName =
                                       i == total - 1 ||
@@ -554,24 +546,17 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                                   >)['AutorID'] !=
                                               data['AutorID']);
 
-                                  // separador de fecha
+                                  // 3) separador de fecha
                                   bool showDateSeparator;
                                   if (ascIndex == 0) {
                                     showDateSeparator = true;
                                   } else {
                                     final currTs =
-                                        (asc[ascIndex].data()
-                                                as Map<
-                                                  String,
-                                                  dynamic
-                                                >)['Fecha']
+                                        (asc[ascIndex].data() as Map)['Fecha']
                                             as Timestamp;
                                     final prevTs =
                                         (asc[ascIndex - 1].data()
-                                                as Map<
-                                                  String,
-                                                  dynamic
-                                                >)['Fecha']
+                                                as Map)['Fecha']
                                             as Timestamp;
                                     final curr = currTs.toDate();
                                     final prev = prevTs.toDate();
@@ -581,7 +566,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                         curr.day != prev.day;
                                   }
 
-                                  // lectura por peer
+                                  // 4) Estado de lectura de **mis** mensajes por el peer
                                   final leidoPor = List<String>.from(
                                     data['leidoPor'] ?? [],
                                   );
@@ -589,13 +574,13 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                       otroUid != null &&
                                       leidoPor.contains(otroUid);
 
-                                  // nombre/foto del cache
+                                  // 5) Datos de autor desde caché
                                   final nombre =
                                       cacheUsuarios[data['AutorID']]!['nombre']!;
                                   final foto =
                                       cacheUsuarios[data['AutorID']]!['foto']!;
 
-                                  // construyo la columna de widgets
+                                  // 6) Construimos la columna
                                   final children = <Widget>[];
                                   if (showDateSeparator) {
                                     children.add(
@@ -642,7 +627,8 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                   children.add(
                                     ChatBubble(
                                       isMine: esMio,
-                                      read: readByPeer,
+                                      read:
+                                          readByPeer, // ← aquí se activa el doble‐check
                                       avatarUrl: foto,
                                       authorName: nombre,
                                       text: texto,
