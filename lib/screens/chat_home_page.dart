@@ -632,7 +632,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
         itemBuilder: (_, i) {
           final userDoc = _usuarios[i];
           final nombre = userDoc['Nombre'] ?? 'Usuario';
-          final foto = cacheUsuarios[userDoc.id]!['foto']!;
+          final foto = cacheUsuarios[userDoc.id]?['foto'] ?? '';
           return ListTile(
             dense: true,
             contentPadding: const EdgeInsets.symmetric(
@@ -669,13 +669,11 @@ class _ChatHomePageState extends State<ChatHomePage> {
           );
         }
 
-        // aquí sí existe docs
         final docs =
             snap.data!.docs.where((chatDoc) {
               final ids = List<String>.from((chatDoc.data()! as Map)['ids']);
               final isGroup = ids.length > 2;
-              return (!filterGroups || isGroup) &&
-                  (!filterUnread /*|| hasUnread*/ );
+              return (!filterGroups || isGroup) && (!filterUnread);
             }).toList();
 
         if (docs.isEmpty) {
@@ -692,43 +690,39 @@ class _ChatHomePageState extends State<ChatHomePage> {
             final bool isGroup = (data['isGroup'] as bool?) == true;
             final String chatId = chatDoc.id;
 
-            // Determinar "other" para 1‑a‑1
+            // Determinar "other" para 1‑a‑1 con orElse
             final String? other =
-                isGroup ? null : otherIds.firstWhere((id) => id != uid);
+                isGroup
+                    ? null
+                    : (() {
+                      final lista = otherIds.where((id) => id != uid).toList();
+                      return lista.isNotEmpty ? lista.first : null;
+                    })();
 
-            // Todas las variables que luego usarás en el ListTile
+            // Si es 1‑a‑1 y aún no está en cache, mostramos shimmer
+            if (!isGroup &&
+                (other == null || !cacheUsuarios.containsKey(other))) {
+              return const ShimmerChatTile();
+            }
+
             final String title =
                 isGroup
                     ? (data['groupName'] as String? ??
                         'Grupo (${otherIds.length})')
                     : cacheUsuarios[other]!['nombre']!;
-            // averiguamos si es grupo y quién lo creó
-            // obtenemos el ID de quien creó el grupo (o primer miembro como fallback)
-            final String? creatorId =
-                data['createdBy'] as String? ?? otherIds.first;
-            // obtenemos el nombre del creador del caché
-            final String creatorName = cacheUsuarios[creatorId]!['nombre']!;
-
-            // nuevo preview:
-            final String preview;
-            if ((data['lastMessage'] as String?)?.trim().isNotEmpty == true) {
-              preview = data['lastMessage'] as String;
-            } else if (isGroup) {
-              preview = '$creatorName ha creado el grupo';
-            } else {
-              preview = '— sin mensajes —';
-            }
 
             final String? photoUrl =
                 isGroup
                     ? (data['groupPhoto'] as String?)
                     : cacheUsuarios[other]!['foto']!;
+
             final String hora =
                 data['lastMessageAt'] != null
                     ? DateFormat.Hm().format(
                       (data['lastMessageAt'] as Timestamp).toDate(),
                     )
                     : '';
+
             final Map<String, dynamic> unreadMap =
                 data['unreadCounts'] as Map<String, dynamic>? ?? {};
             final int unreadCount = (unreadMap[uid] as int?) ?? 0;
@@ -753,7 +747,9 @@ class _ChatHomePageState extends State<ChatHomePage> {
                 ),
                 title: Text(title, style: const TextStyle(color: Colors.white)),
                 subtitle: Text(
-                  preview,
+                  data['lastMessage'] != null
+                      ? (data['lastMessage'] as String)
+                      : '— sin mensajes —',
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white70, fontSize: 12),
                 ),
@@ -949,8 +945,9 @@ class _ChatHomePageState extends State<ChatHomePage> {
         }
 
         // ── 2) Construir la lista invertida y auto‑scroll ──
-        final asc = snap.data!.docs;
-        final inv = asc.reversed.toList();
+        // final asc = snap.data!.docs;
+        // final inv = asc.reversed.toList();
+        final inv = snap.data!.docs.reversed.toList();
 
         // Después de rebuild, asegurar scroll al fondo:
         WidgetsBinding.instance.addPostFrameCallback((_) {
