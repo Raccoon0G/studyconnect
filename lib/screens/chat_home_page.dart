@@ -24,7 +24,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
   String? nombreUsuario;
   final ScrollController _scrollController = ScrollController();
-  bool _yaHizoScroll = false;
   final GlobalKey listViewKey = GlobalKey();
 
   @override
@@ -90,9 +89,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
       };
     }
 
-    // 🔄 Forzar scroll incluso si es el mismo chat
-    _yaHizoScroll = false;
-
     setState(() {
       chatIdSeleccionado = nuevoChatId;
       otroUid = otroId;
@@ -128,7 +124,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
         uidDestino: otroUid!,
         tipo: 'mensaje',
         titulo: 'Nuevo mensaje de $nombreUsuario',
-        //titulo: 'Nuevo mensaje de ${nombreUsuario ?? 'Usuario'}',
         contenido:
             mensaje.trim().length > 40
                 ? '${mensaje.trim().substring(0, 40)}...'
@@ -141,26 +136,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
     _mensajeController.clear();
     setState(() => mensaje = '');
-    _scrollAlFinal(forzar: true);
-  }
-
-  void _scrollAlFinal({bool forzar = false}) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        final distanciaAlFinal =
-            _scrollController.position.maxScrollExtent -
-            _scrollController.position.pixels;
-
-        // Si está a menos de 200px del final, desplazamos automáticamente.
-        if (distanciaAlFinal < 200 || forzar) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      }
-    });
   }
 
   void _editarMensaje(String mensajeId, String contenido, Timestamp fecha) {
@@ -610,7 +585,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                     .collection('Mensajes')
                                     .orderBy('Fecha')
                                     .snapshots(),
-
                             builder: (context, snapshot) {
                               if (!snapshot.hasData) {
                                 return const Center(
@@ -618,89 +592,50 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                 );
                               }
 
-                              final mensajes =
-                                  snapshot
-                                      .data!
-                                      .docs; //significa que ya hay mensajes
-                              if (!_yaHizoScroll && mensajes.isNotEmpty) {
-                                Future.delayed(
-                                  const Duration(milliseconds: 100),
-                                  () {
-                                    if (_scrollController.hasClients) {
-                                      _scrollController.animateTo(
-                                        _scrollController
-                                            .position
-                                            .maxScrollExtent,
-                                        duration: const Duration(
-                                          milliseconds: 300,
-                                        ),
-                                        curve: Curves.easeOut,
-                                      );
-                                      _yaHizoScroll = true;
-                                    }
-                                  },
-                                );
-                              }
-                              return Builder(
-                                builder: (context) {
-                                  // Espera a que el frame con todos los mensajes se haya dibujado
-                                  WidgetsBinding.instance.addPostFrameCallback((
-                                    _,
-                                  ) {
-                                    if (!_yaHizoScroll &&
-                                        _scrollController.hasClients) {
-                                      _scrollController.animateTo(
-                                        _scrollController
-                                            .position
-                                            .maxScrollExtent,
-                                        duration: const Duration(
-                                          milliseconds: 300,
-                                        ),
-                                        curve: Curves.easeOut,
-                                      );
-                                      _yaHizoScroll = true;
-                                    }
-                                  });
+                              // 1) invertimos la lista para facilitar el reverse:
+                              final mensajes = snapshot.data!.docs;
+                              final mensajesInvertidos =
+                                  mensajes.reversed.toList();
 
-                                  return ListView(
-                                    key: listViewKey,
-                                    controller: _scrollController,
-                                    padding: const EdgeInsets.all(12),
-                                    children:
-                                        mensajes.asMap().entries.map((entry) {
-                                          final index = entry.key;
-                                          final doc = entry.value;
-                                          final data =
-                                              doc.data()
-                                                  as Map<String, dynamic>;
-                                          final esMio = data['AutorID'] == uid;
-                                          final mostrarNombreYFoto =
-                                              index == 0 ||
-                                              (mensajes[index - 1].data()
-                                                      as Map<
-                                                        String,
-                                                        dynamic
-                                                      >)['AutorID'] !=
-                                                  data['AutorID'];
+                              // 2) devolvemos un ListView.builder CON `reverse: true`:
+                              return ListView.builder(
+                                controller: _scrollController,
+                                reverse: true,
+                                padding: const EdgeInsets.all(12),
+                                itemCount: mensajesInvertidos.length,
+                                itemBuilder: (context, i) {
+                                  final doc = mensajesInvertidos[i];
+                                  final data =
+                                      doc.data() as Map<String, dynamic>;
+                                  final esMio = data['AutorID'] == uid;
 
-                                          return Column(
-                                            crossAxisAlignment:
-                                                esMio
-                                                    ? CrossAxisAlignment.end
-                                                    : CrossAxisAlignment.start,
-                                            children: [
-                                              if (mostrarNombreYFoto)
-                                                const SizedBox(height: 12),
-                                              _buildChatBubble(
-                                                data,
-                                                esMio,
-                                                doc.id,
-                                                mostrarNombre:
-                                                    mostrarNombreYFoto,
-                                              ),
-                                            ],
-                                          );
-                                        }).toList(),
+                                  // 3) mostramos nombre/avatar solo si cambia de autor
+                                  final total = mensajesInvertidos.length;
+                                  final mostrarNombreYFoto =
+                                      i == total - 1 ||
+                                      (i < total - 1 &&
+                                          (mensajesInvertidos[i + 1].data()
+                                                  as Map<
+                                                    String,
+                                                    dynamic
+                                                  >)['AutorID'] !=
+                                              data['AutorID']);
+
+                                  return Column(
+                                    crossAxisAlignment:
+                                        esMio
+                                            ? CrossAxisAlignment.end
+                                            : CrossAxisAlignment.start,
+                                    children: [
+                                      if (mostrarNombreYFoto)
+                                        const SizedBox(height: 12),
+                                      _buildChatBubble(
+                                        data,
+                                        esMio,
+                                        doc.id,
+                                        mostrarNombre: mostrarNombreYFoto,
+                                      ),
+                                    ],
                                   );
                                 },
                               );
