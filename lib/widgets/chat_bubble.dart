@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_chat_bubble/chat_bubble.dart';
 import 'package:intl/intl.dart';
 
 typedef BubbleCallback = void Function();
 
-class ChatBubble extends StatelessWidget {
+class ChatBubbleCustom extends StatelessWidget {
   final bool isMine;
   final bool read;
   final String avatarUrl;
@@ -18,7 +19,7 @@ class ChatBubble extends StatelessWidget {
   final BubbleCallback? onDelete;
   final BubbleCallback? onReact;
 
-  const ChatBubble({
+  const ChatBubbleCustom({
     super.key,
     required this.isMine,
     required this.read,
@@ -39,66 +40,74 @@ class ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onLongPress: () {
-        showModalBottomSheet(
-          context: context,
-          builder:
-              (_) => Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (isMine && !deleted) ...[
-                    ListTile(
-                      leading: const Icon(Icons.edit),
-                      title: const Text('Editar'),
-                      onTap: onEdit,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      child: Row(
+        mainAxisAlignment:
+            isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!isMine)
+            CircleAvatar(
+              radius: 14,
+              backgroundImage:
+                  avatarUrl.isNotEmpty
+                      ? NetworkImage(avatarUrl)
+                      : const AssetImage('assets/images/avatar1.png')
+                          as ImageProvider,
+            ),
+          const SizedBox(width: 6),
+
+          // Aquí envolvemos el ChatBubble en un GestureDetector
+          GestureDetector(
+            onLongPress: () {
+              showModalBottomSheet(
+                context: context,
+                builder:
+                    (_) => Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isMine && !deleted) ...[
+                          ListTile(
+                            leading: const Icon(Icons.edit),
+                            title: const Text('Editar'),
+                            onTap: onEdit,
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.delete),
+                            title: const Text('Eliminar'),
+                            onTap: onDelete,
+                          ),
+                        ],
+                        ListTile(
+                          leading: const Icon(Icons.emoji_emotions),
+                          title: const Text('Reaccionar'),
+                          onTap: onReact,
+                        ),
+                      ],
                     ),
-                    ListTile(
-                      leading: const Icon(Icons.delete),
-                      title: const Text('Eliminar'),
-                      onTap: onDelete,
-                    ),
-                  ],
-                  ListTile(
-                    leading: const Icon(Icons.emoji_emotions),
-                    title: const Text('Reaccionar'),
-                    onTap: onReact,
-                  ),
-                ],
+              );
+            },
+            child: ChatBubble(
+              clipper: ChatBubbleClipper1(
+                type:
+                    isMine ? BubbleType.sendBubble : BubbleType.receiverBubble,
               ),
-        );
-      },
-      child: Align(
-        alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 320),
-          child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color:
+              backGroundColor:
                   deleted
-                      ? Colors.grey[400]
+                      ? Colors.grey[400]!
                       : isMine
                       ? Colors.purple.shade200
                       : Colors.grey.shade300,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (showName) ...[
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 12,
-                        backgroundImage:
-                            avatarUrl.isNotEmpty
-                                ? NetworkImage(avatarUrl)
-                                : const AssetImage('assets/images/avatar1.png')
-                                    as ImageProvider,
-                      ),
-                      const SizedBox(width: 6),
+              margin: EdgeInsets.zero,
+              alignment: isMine ? Alignment.topRight : Alignment.topLeft,
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                constraints: const BoxConstraints(maxWidth: 280),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (showName) ...[
                       Text(
                         authorName,
                         style: const TextStyle(
@@ -106,60 +115,73 @@ class ChatBubble extends StatelessWidget {
                           fontSize: 13,
                         ),
                       ),
+                      const SizedBox(height: 4),
                     ],
-                  ),
-                  const SizedBox(height: 4),
-                ],
-                Text(
-                  deleted ? 'Mensaje eliminado' : text,
-                  style: const TextStyle(fontSize: 15, height: 1.3),
-                ),
-                if (reactions.isNotEmpty)
-                  Wrap(
-                    spacing: 4,
-                    children:
-                        reactions.entries.map((e) {
-                          return Text(
-                            '${e.key} ${e.value}',
-                            style: const TextStyle(fontSize: 12),
-                          );
-                        }).toList(),
-                  ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (edited && !deleted)
-                      const Text(
-                        '(editado)',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
                     Text(
-                      _formatTime(time),
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: Colors.black54,
-                      ),
+                      deleted ? 'Mensaje eliminado' : text,
+                      style: const TextStyle(fontSize: 15, height: 1.3),
                     ),
-
-                    if (isMine) ...[
-                      const SizedBox(width: 4),
-                      Icon(
-                        read ? Icons.done_all : Icons.check,
-                        size: 14,
-                        color: read ? Colors.blue : Colors.black54,
+                    if (reactions.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        children:
+                            reactions.entries
+                                .map(
+                                  (e) => Text(
+                                    '${e.key} ${e.value}',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                )
+                                .toList(),
                       ),
                     ],
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (edited && !deleted)
+                          const Text(
+                            '(editado) ',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        Text(
+                          _formatTime(time),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Colors.black54,
+                          ),
+                        ),
+                        if (isMine) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            read ? Icons.done_all : Icons.check,
+                            size: 14,
+                            color: read ? Colors.blue : Colors.black54,
+                          ),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
+
+          const SizedBox(width: 6),
+          if (isMine)
+            CircleAvatar(
+              radius: 14,
+              backgroundImage:
+                  avatarUrl.isNotEmpty
+                      ? NetworkImage(avatarUrl)
+                      : const AssetImage('assets/images/avatar1.png')
+                          as ImageProvider,
+            ),
+        ],
       ),
     );
   }
