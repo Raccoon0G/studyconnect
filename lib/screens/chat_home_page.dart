@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import 'package:study_connect/services/notification_service.dart';
-import 'package:study_connect/widgets/notification_icon_widget.dart';
+import 'package:study_connect/services/services.dart';
+import 'package:study_connect/widgets/widgets.dart';
 
 class ChatHomePage extends StatefulWidget {
   const ChatHomePage({super.key});
@@ -39,6 +39,10 @@ class _ChatHomePageState extends State<ChatHomePage> {
         await FirebaseFirestore.instance.collection('usuarios').doc(uid).get();
 
     final nombreEmisor = doc['Nombre'] ?? 'Usuario';
+    final fotoEmisor = doc['FotoPerfil'] ?? ''; // si guardas foto
+
+    // Agregamos el usuario al cache
+    cacheUsuarios[uid] = {'nombre': nombreEmisor, 'foto': fotoEmisor};
 
     setState(() {
       nombreUsuario = nombreEmisor;
@@ -73,26 +77,43 @@ class _ChatHomePageState extends State<ChatHomePage> {
   }
 
   void _iniciarChat(String otroId) async {
+    // 1) Creamos el chatId ordenado
     final nuevoChatId =
         uid.compareTo(otroId) < 0 ? '${uid}_$otroId' : '${otroId}_$uid';
+    // 2) Precargamos datos del otro usuario en caché
+    await _obtenerUsuario(otroId);
 
-    // Precargar datos del otro usuario
-    if (!cacheUsuarios.containsKey(otroId)) {
-      final doc =
-          await FirebaseFirestore.instance
-              .collection('usuarios')
-              .doc(otroId)
-              .get();
-      cacheUsuarios[otroId] = {
-        'nombre': doc['Nombre'] ?? 'Usuario',
-        'foto': doc['FotoPerfil'] ?? '',
-      };
-    }
+    // // Precargar datos del otro usuario
+    // if (!cacheUsuarios.containsKey(otroId)) {
+    //   final doc =
+    //       await FirebaseFirestore.instance
+    //           .collection('usuarios')
+    //           .doc(otroId)
+    //           .get();
+    //   cacheUsuarios[otroId] = {
+    //     'nombre': doc['Nombre'] ?? 'Usuario',
+    //     'foto': doc['FotoPerfil'] ?? '',
+    //   };
+    // }
 
+    // 3) Disparamos el cambio de chat
     setState(() {
       chatIdSeleccionado = nuevoChatId;
       otroUid = otroId;
     });
+  }
+
+  /// En una lista invertida (reverse: true),
+  /// devuelve true **solo** cuando docs[i] arranca un nuevo día.
+  bool _shouldShowDateSeparator(int i, List<QueryDocumentSnapshot> docs) {
+    if (i == 0) return false; // nunca antes del mensaje más nuevo
+    final currTs = (docs[i].data() as Map)['Fecha'] as Timestamp;
+    final prevTs = (docs[i - 1].data() as Map)['Fecha'] as Timestamp;
+    final curr = currTs.toDate();
+    final prev = prevTs.toDate();
+    return curr.year != prev.year ||
+        curr.month != prev.month ||
+        curr.day != prev.day;
   }
 
   void _enviarMensaje() async {
@@ -214,177 +235,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
                     )
                     .toList(),
           ),
-    );
-  }
-
-  Widget _buildChatBubble(
-    Map<String, dynamic> data,
-    bool esMio,
-    String id, {
-    bool mostrarNombre = true,
-  }) {
-    final reacciones = Map<String, dynamic>.from(data['reacciones'] ?? {});
-    final eliminado = data['eliminado'] ?? false;
-    final autorId = data['AutorID'];
-    final nombre = cacheUsuarios[autorId]?['nombre'] ?? 'Usuario';
-    final foto = cacheUsuarios[autorId]?['foto'] ?? '';
-
-    return FutureBuilder<Map<String, String>>(
-      future: _obtenerUsuario(data['AutorID']),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox.shrink();
-        final nombre = snapshot.data!['nombre']!;
-        final foto = snapshot.data!['foto']!;
-
-        return GestureDetector(
-          onLongPress: () {
-            showModalBottomSheet(
-              context: context,
-              builder:
-                  (_) => Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (esMio && !eliminado) ...[
-                        ListTile(
-                          leading: const Icon(Icons.edit),
-                          title: const Text('Editar'),
-                          onTap: () {
-                            Navigator.pop(context);
-                            _editarMensaje(
-                              id,
-                              data['Contenido'],
-                              data['Fecha'],
-                            );
-                          },
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.delete),
-                          title: const Text('Eliminar'),
-                          onTap: () {
-                            Navigator.pop(context);
-                            _eliminarMensaje(id);
-                          },
-                        ),
-                      ],
-                      ListTile(
-                        leading: const Icon(Icons.emoji_emotions),
-                        title: const Text('Reaccionar'),
-                        onTap: () {
-                          Navigator.pop(context);
-                          _reaccionarMensaje(id);
-                        },
-                      ),
-                    ],
-                  ),
-            );
-          },
-          child: Align(
-            alignment: esMio ? Alignment.centerRight : Alignment.centerLeft,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 320),
-              child: Container(
-                margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color:
-                      eliminado
-                          ? Colors.grey[400]
-                          : esMio
-                          ? Colors.purple.shade200
-                          : Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (mostrarNombre) ...[
-                      Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 12,
-                            backgroundImage:
-                                foto.isNotEmpty
-                                    ? NetworkImage(foto)
-                                    : const AssetImage(
-                                          'assets/images/avatar1.png',
-                                        )
-                                        as ImageProvider,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            nombre,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                    ],
-
-                    const SizedBox(height: 4),
-                    Text(
-                      eliminado ? 'Mensaje eliminado' : data['Contenido'],
-                      style: const TextStyle(fontSize: 15, height: 1.3),
-                    ),
-
-                    if (reacciones.isNotEmpty)
-                      Wrap(
-                        spacing: 4,
-                        children:
-                            reacciones.entries
-                                .map(
-                                  (e) => Text(
-                                    '${e.key} ${e.value}',
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                )
-                                .toList(),
-                      ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        if (data['editado'] == true && !eliminado)
-                          const Text(
-                            '(editado)',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        Text(
-                          _formatearHora(data['Fecha']),
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Colors.black54,
-                          ),
-                        ),
-                        if (esMio) const SizedBox(width: 4),
-                        if (esMio)
-                          if (data['leidoPor']?.contains(otroUid) == true)
-                            const Icon(
-                              Icons.done_all,
-                              size: 14,
-                              color: Colors.blue,
-                            ) // doble check
-                          else
-                            const Icon(
-                              Icons.check,
-                              size: 14,
-                              color: Color.fromARGB(255, 25, 167, 180),
-                            ), // check simple
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 
@@ -592,34 +442,75 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                 );
                               }
 
-                              // 1) invertimos la lista para facilitar el reverse:
-                              final mensajes = snapshot.data!.docs;
-                              final mensajesInvertidos =
-                                  mensajes.reversed.toList();
+                              // 1) Lista cronológica (ascendente) y su inversa para el ListView
+                              final asc = snapshot.data!.docs;
+                              final inv = asc.reversed.toList();
 
-                              // 2) devolvemos un ListView.builder CON `reverse: true`:
                               return ListView.builder(
                                 controller: _scrollController,
                                 reverse: true,
                                 padding: const EdgeInsets.all(12),
-                                itemCount: mensajesInvertidos.length,
+                                itemCount: inv.length,
                                 itemBuilder: (context, i) {
-                                  final doc = mensajesInvertidos[i];
+                                  // 2) Índice en la lista ascendente
+                                  final ascIndex = asc.length - 1 - i;
+
+                                  // 3) Extraemos documento “visual” e información
+                                  final doc = inv[i];
                                   final data =
                                       doc.data() as Map<String, dynamic>;
                                   final esMio = data['AutorID'] == uid;
+                                  final texto =
+                                      data['Contenido'] as String? ?? '';
+                                  final fecha =
+                                      (data['Fecha'] as Timestamp).toDate();
+                                  final editado =
+                                      data['editado'] as bool? ?? false;
+                                  final eliminado =
+                                      data['eliminado'] as bool? ?? false;
+                                  final reacciones = Map<String, int>.from(
+                                    data['reacciones']
+                                            as Map<String, dynamic>? ??
+                                        {},
+                                  );
 
-                                  // 3) mostramos nombre/avatar solo si cambia de autor
-                                  final total = mensajesInvertidos.length;
-                                  final mostrarNombreYFoto =
+                                  // 4) Mostrar nombre/avatar solo si cambia el autor
+                                  final total = inv.length;
+                                  final showName =
                                       i == total - 1 ||
                                       (i < total - 1 &&
-                                          (mensajesInvertidos[i + 1].data()
+                                          ((inv[i + 1].data()
                                                   as Map<
                                                     String,
                                                     dynamic
                                                   >)['AutorID'] !=
-                                              data['AutorID']);
+                                              data['AutorID']));
+
+                                  // 5) Cálculo del separador de fecha (comparando en ascendente)
+                                  bool showDateSeparator;
+                                  if (ascIndex == 0) {
+                                    showDateSeparator = true;
+                                  } else {
+                                    final currTs =
+                                        (asc[ascIndex].data() as Map)['Fecha']
+                                            as Timestamp;
+                                    final prevTs =
+                                        (asc[ascIndex - 1].data()
+                                                as Map)['Fecha']
+                                            as Timestamp;
+                                    final curr = currTs.toDate();
+                                    final prev = prevTs.toDate();
+                                    showDateSeparator =
+                                        curr.year != prev.year ||
+                                        curr.month != prev.month ||
+                                        curr.day != prev.day;
+                                  }
+
+                                  // 6) Nombre y foto desde el caché
+                                  final nombre =
+                                      cacheUsuarios[data['AutorID']]!['nombre']!;
+                                  final foto =
+                                      cacheUsuarios[data['AutorID']]!['foto']!;
 
                                   return Column(
                                     crossAxisAlignment:
@@ -627,13 +518,66 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                             ? CrossAxisAlignment.end
                                             : CrossAxisAlignment.start,
                                     children: [
-                                      if (mostrarNombreYFoto)
-                                        const SizedBox(height: 12),
-                                      _buildChatBubble(
-                                        data,
-                                        esMio,
-                                        doc.id,
-                                        mostrarNombre: mostrarNombreYFoto,
+                                      if (showDateSeparator)
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 8,
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              const Expanded(
+                                                child: Divider(thickness: 1),
+                                              ),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 4,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey.shade200,
+                                                  borderRadius:
+                                                      BorderRadius.circular(16),
+                                                ),
+                                                child: Text(
+                                                  DateFormat(
+                                                    'dd MMM yyyy',
+                                                  ).format(fecha),
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.black54,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
+                                              const Expanded(
+                                                child: Divider(thickness: 1),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+
+                                      // ——— Tu ChatBubble ———
+                                      ChatBubble(
+                                        isMine: esMio,
+                                        avatarUrl: foto,
+                                        authorName: nombre,
+                                        text: texto,
+                                        time: fecha,
+                                        edited: editado,
+                                        deleted: eliminado,
+                                        reactions: reacciones,
+                                        showName: showName,
+                                        onEdit:
+                                            () => _editarMensaje(
+                                              doc.id,
+                                              texto,
+                                              data['Fecha'] as Timestamp,
+                                            ),
+                                        onDelete:
+                                            () => _eliminarMensaje(doc.id),
+                                        onReact:
+                                            () => _reaccionarMensaje(doc.id),
                                       ),
                                     ],
                                   );
@@ -642,6 +586,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                             },
                           ),
                 ),
+
                 Padding(
                   padding: const EdgeInsets.all(12.0),
                   child: Row(

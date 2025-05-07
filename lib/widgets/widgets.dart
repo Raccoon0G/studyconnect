@@ -19,3 +19,4 @@ export 'package:study_connect/widgets/custom_dropdown_version.dart';
 export 'package:study_connect/widgets/custom_expansion_tiles_comentarios.dart';
 export 'package:study_connect/widgets/custom_action_buttons_row.dart';
 export 'package:study_connect/widgets/custom_feedback_card.dart';
+export 'package:study_connect/widgets/chat_bubble.dart';
