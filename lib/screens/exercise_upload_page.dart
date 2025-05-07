@@ -127,13 +127,25 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
         'DescPasos': descripciones,
       });
 
+      // 🔄 Incrementar contador de ejercicios subidos
+      if (user != null) {
+        final userRef = firestore.collection('usuarios').doc(user.uid);
+        await firestore.runTransaction((transaction) async {
+          final snapshot = await transaction.get(userRef);
+          final actual = snapshot.data()?['EjerSubidos'] ?? 0;
+          transaction.update(userRef, {'EjerSubidos': actual + 1});
+        });
+      }
+
       if (!mounted) return;
       showDialog(
         context: context,
         builder:
             (_) => AlertDialog(
               title: const Text('Ejercicio subido'),
-              content: const Text('Tu ejercicio fue guardado correctamente.'),
+              content: const Text(
+                'Tu ejercicio fue guardado correctamente y tu perfil ha sido actualizado.',
+              ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),

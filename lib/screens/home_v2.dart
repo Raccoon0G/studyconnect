@@ -2,8 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:study_connect/services/notification_service.dart';
 import 'package:study_connect/widgets/notification_icon_widget.dart';
+
+// 🎨 Colores personalizados
+const Color azulPrimario = Color(0xFF0D47A1); // Azul profundo
+const Color azulSecundario = Color(0xFF1976D2); // Azul claro
+const Color moradoPrimario = Color(0xFF7E57C2); // Púrpura educativo
+const Color fondoOscuro = Color(0xFF0A192F); // Azul oscuro tipo navy
+const Color blancoSuave = Color(0xFFE3F2FD); // Blanco azulado
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -17,54 +23,14 @@ class _HomePageState extends State<HomePage> {
   String? nombreUsuario;
   Map<String, int> ejerciciosPorTema = {};
   int totalEjercicios = 0;
-  bool mostrarDetalles = false;
+  bool mostrarDetallesEjercicios = false;
+  bool mostrarDetallesPreguntas = false;
+  List<Map<String, dynamic>>? _rankingCache;
 
   @override
   void initState() {
     super.initState();
     _obtenerDatos();
-    _cargarTopRanking();
-  }
-
-  List<Map<String, dynamic>> topUsuarios = [];
-
-  Future<void> _cargarTopRanking() async {
-    final query =
-        await FirebaseFirestore.instance
-            .collection('usuarios')
-            .orderBy('EjerSubidos', descending: true) // o "Puntos"
-            .limit(3)
-            .get();
-
-    setState(() {
-      topUsuarios =
-          query.docs.map((doc) {
-            final data = doc.data();
-            return {
-              'nombre': data['Nombre'] ?? 'Usuario',
-              'avatar':
-                  data['FotoPerfil'] ??
-                  'assets/images/avatar1.png', // asegúrate que exista o usa un default
-            };
-          }).toList();
-    });
-  }
-
-  Future<List<Map<String, dynamic>>> _obtenerTop3Usuarios() async {
-    final snapshot =
-        await FirebaseFirestore.instance
-            .collection('usuarios')
-            .orderBy('Puntaje', descending: true)
-            .limit(3)
-            .get();
-
-    return snapshot.docs.map((doc) {
-      final data = doc.data();
-      return {
-        'nombre': data['Nombre'] ?? 'Usuario',
-        'avatar': data['FotoPerfil'] ?? 'assets/images/default_avatar.png',
-      };
-    }).toList();
   }
 
   Future<void> _obtenerDatos() async {
@@ -110,6 +76,64 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  Future<List<Map<String, dynamic>>> obtenerRanking() async {
+    if (_rankingCache != null) return _rankingCache!;
+
+    final usersSnapshot =
+        await FirebaseFirestore.instance
+            .collection('usuarios')
+            .get(); // No usamos orderBy porque calcularemos el total nosotros
+
+    final temas = ['FnAlg', 'Lim', 'Der', 'TecInteg'];
+    List<Map<String, dynamic>> ranking = [];
+
+    for (final userDoc in usersSnapshot.docs) {
+      final userId = userDoc.id;
+      int totalEjer = 0;
+
+      for (final tema in temas) {
+        final ejerciciosSnapshot =
+            await FirebaseFirestore.instance
+                .collection('calculo')
+                .doc(tema)
+                .collection('Ejer$tema')
+                .where('AutorId', isEqualTo: userId)
+                .get();
+
+        totalEjer += ejerciciosSnapshot.size;
+      }
+
+      final data = userDoc.data();
+      ranking.add({
+        'uid': userId,
+        'nombre': data['Nombre'] ?? 'Usuario',
+        'foto': data['FotoPerfil'],
+        'calificacion': data['Calificacion'] ?? 0.0,
+        'ejercicios': totalEjer,
+      });
+    }
+
+    // Ordenar por número de ejercicios (de mayor a menor)
+    ranking.sort((a, b) => b['ejercicios'].compareTo(a['ejercicios']));
+
+    _rankingCache = ranking.take(5).toList(); // Top 5 usuarios
+    return _rankingCache!;
+  }
+
+  Future<Map<String, int>> obtenerConteoPreguntasPorTema() async {
+    final snapshot =
+        await FirebaseFirestore.instance.collection('preguntas_por_tema').get();
+
+    Map<String, int> conteo = {};
+
+    for (final doc in snapshot.docs) {
+      final tema = doc.data()['tema'] ?? 'Tema desconocido';
+      conteo[tema] = (conteo[tema] ?? 0) + 1;
+    }
+
+    return conteo;
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -117,11 +141,13 @@ class _HomePageState extends State<HomePage> {
     final user = _auth.currentUser;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF036799),
+      backgroundColor: fondoOscuro,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(80),
         child: AppBar(
-          backgroundColor: const Color(0xFF048DD2),
+          backgroundColor: azulPrimario,
+          foregroundColor: Colors.white,
+
           elevation: 6,
           shadowColor: Colors.black.withAlpha(76),
           title: Row(
@@ -273,11 +299,11 @@ class _HomePageState extends State<HomePage> {
           child: Image.asset(
             'assets/images/profe.jpg',
             width: double.infinity,
-            height: 700,
+            height: 600,
             fit: BoxFit.cover,
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 10),
         _buildContenidosCard(),
       ],
     );
@@ -303,18 +329,18 @@ class _HomePageState extends State<HomePage> {
           Text(
             'Potencia tu aprendizaje y\nAlcanza tus objetivos académicos',
             textAlign: TextAlign.center,
-            style: GoogleFonts.roboto(
-              color: Colors.white,
+            style: GoogleFonts.poppins(
+              color: blancoSuave,
               fontSize: 36,
               fontWeight: FontWeight.bold,
-              height: 1.5,
+              height: 1.4,
             ),
           ),
           const SizedBox(height: 40),
           Text(
             'A través de ejercicios colaborativos\ncreados por estudiantes como tú',
             textAlign: TextAlign.center,
-            style: GoogleFonts.roboto(
+            style: GoogleFonts.poppins(
               color: const Color(0xFFB0E0FF),
               fontSize: 24,
               fontWeight: FontWeight.w600,
@@ -327,7 +353,7 @@ class _HomePageState extends State<HomePage> {
             child: Text(
               'Sube tus propios ejercicios, estudia los de otros y compite por el\nreconocimiento en nuestro sistema de ranking únete a una comunidad\nde aprendizaje que recompensa tu esfuerzo y colaboración',
               textAlign: TextAlign.center,
-              style: GoogleFonts.roboto(
+              style: GoogleFonts.poppins(
                 color: Colors.white,
                 fontSize: 16,
                 height: 1.6,
@@ -338,7 +364,7 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 60),
           if (user == null)
             ElevatedButton(
-              onPressed: () => Navigator.pushNamed(context, '/login'),
+              onPressed: () => Navigator.pushNamed(context, '/register'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
                 foregroundColor: Colors.black,
@@ -363,39 +389,82 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildContenidosCard() {
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1E3C72), Color(0xFF2A5298)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Contenidos',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          Center(
+            child: Text(
+              '📚 Contenidos disponibles',
+              style: GoogleFonts.poppins(
+                color: blancoSuave,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
-          Text('$totalEjercicios+', style: const TextStyle(fontSize: 28)),
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              '$totalEjercicios+ ejercicios',
+              style: GoogleFonts.poppins(
+                color: blancoSuave,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
           const SizedBox(height: 8),
           TextButton(
             onPressed: () {
               setState(() {
-                mostrarDetalles = !mostrarDetalles;
+                mostrarDetallesEjercicios = !mostrarDetallesEjercicios;
               });
             },
-            child: Text(mostrarDetalles ? 'Ocultar detalles' : 'Ver más'),
+            child: Center(
+              child: Text(
+                mostrarDetallesEjercicios ? 'Ocultar detalles' : 'Ver más',
+                style: GoogleFonts.poppins(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                ),
+              ),
+            ),
           ),
-          if (mostrarDetalles)
+          if (mostrarDetallesEjercicios)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children:
-                  ejerciciosPorTema.entries
-                      .map(
-                        (entry) => Text(
-                          '${_nombreTema(entry.key)}: ${entry.value}',
-                          style: const TextStyle(fontSize: 14),
+                  ejerciciosPorTema.entries.map((entry) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Center(
+                        child: Text(
+                          '• ${_nombreTema(entry.key)}: ${entry.value}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
                         ),
-                      )
-                      .toList(),
+                      ),
+                    );
+                  }).toList(),
             ),
         ],
       ),
@@ -407,19 +476,14 @@ class _HomePageState extends State<HomePage> {
 
     return Column(
       children: [
-        FutureBuilder<QuerySnapshot>(
-          future:
-              FirebaseFirestore.instance
-                  .collection('usuarios')
-                  .orderBy('Calificacion', descending: true)
-                  .limit(3)
-                  .get(),
+        FutureBuilder<List<Map<String, dynamic>>>(
+          future: obtenerRanking(),
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
-              return _buildSkeletonRanking(); // << NUEVO método
+              return _buildSkeletonRanking();
             }
 
-            final topUsers = snapshot.data!.docs;
+            final topUsers = snapshot.data!;
 
             if (topUsers.isEmpty) {
               return const Text(
@@ -428,21 +492,32 @@ class _HomePageState extends State<HomePage> {
               );
             }
 
-            return _buildRankingCard(topUsers); // << EXTRAEMOS contenido
+            return _buildRankingCardDesdeMapa(topUsers);
           },
         ),
+
         const SizedBox(height: 40),
         if (!isMobile)
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
             child: Image.asset(
               'assets/images/alumno.jpg',
+              height: 260,
               width: double.infinity,
               fit: BoxFit.cover,
             ),
           ),
-        const SizedBox(height: 20),
 
+        const SizedBox(height: 40),
+        FutureBuilder<Map<String, int>>(
+          future: obtenerConteoPreguntasPorTema(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData)
+              return _buildSkeletonRanking(); // Reutiliza skeleton
+            return _buildAutoevaluacionCard(snapshot.data!);
+          },
+        ),
+        const SizedBox(height: 20),
         // Botón de chat (sin cambios)
         GestureDetector(
           onTap: () {
@@ -517,22 +592,7 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
         ),
-
-        const SizedBox(height: 16),
-        // Botón de autoevaluación (sin cambios)
-        ElevatedButton.icon(
-          onPressed: () => Navigator.pushNamed(context, '/autoevaluation'),
-          icon: const Icon(Icons.assignment_turned_in),
-          label: const Text('Autoevaluación'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.white,
-            foregroundColor: Colors.blueGrey,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(30),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-          ),
-        ),
+        const SizedBox(height: 20),
       ],
     );
   }
@@ -553,75 +613,7 @@ class _HomePageState extends State<HomePage> {
           SizedBox(height: 16),
           CircularProgressIndicator(color: Colors.white),
           SizedBox(height: 12),
-          Text('Cargando ranking...', style: TextStyle(color: Colors.white70)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRankingCard(List<QueryDocumentSnapshot> topUsers) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 600),
-      curve: Curves.easeInOut,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFB3E5FC),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Text(
-            '🏆 Top 3 Ranking',
-            style: GoogleFonts.roboto(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF01579B),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 16,
-            runSpacing: 16,
-            children:
-                topUsers.asMap().entries.map((entry) {
-                  final i = entry.key;
-                  final data = entry.value.data() as Map<String, dynamic>;
-                  final nombre = data['Nombre'] ?? 'Usuario';
-                  final puntaje = (data['Calificacion'] ?? 0).toStringAsFixed(
-                    2,
-                  );
-                  final ejercicios = data['EjerSubidos'] ?? 0;
-                  final foto = data['FotoPerfil'];
-
-                  final defaultAvatars = [
-                    'assets/images/avatar1.png',
-                    'assets/images/avatar2.png',
-                    'assets/images/avatar3.png',
-                  ];
-
-                  final ImageProvider avatar =
-                      (foto == null || foto.isEmpty)
-                          ? AssetImage(defaultAvatars[i % 3])
-                          : (foto.startsWith('http')
-                              ? NetworkImage(foto)
-                              : AssetImage(defaultAvatars[i % 3]));
-
-                  return _avatarMiniRanking(
-                    avatar,
-                    nombre,
-                    puntaje,
-                    ejercicios,
-                  );
-                }).toList(),
-          ),
+          Text('Cargando ...', style: TextStyle(color: Colors.white70)),
         ],
       ),
     );
@@ -650,21 +642,232 @@ class _HomePageState extends State<HomePage> {
         const SizedBox(height: 6),
         Text(
           nombre,
-          style: const TextStyle(
-            color: Colors.blue,
+          style: GoogleFonts.poppins(
+            color: Colors.white,
             fontWeight: FontWeight.bold,
             fontSize: 14,
+            shadows: [
+              Shadow(
+                blurRadius: 2,
+                color: Colors.black26,
+                offset: Offset(1, 1),
+              ),
+            ],
           ),
         ),
-        Text(
-          '⭐ $puntaje pts',
-          style: const TextStyle(color: Colors.blueGrey, fontSize: 12),
+
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.star, color: Colors.amber, size: 16),
+            const SizedBox(width: 4),
+            Text(
+              '$puntaje pts',
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                shadows: [
+                  Shadow(
+                    blurRadius: 2,
+                    color: Colors.black26,
+                    offset: Offset(1, 1),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
+        const SizedBox(height: 4),
         Text(
           '$ejercicios ejercicios',
-          style: const TextStyle(color: Colors.black54, fontSize: 11),
+          style: GoogleFonts.poppins(
+            color: Colors.white70,
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+          ),
         ),
       ],
+    );
+  }
+
+  Widget _buildRankingCardDesdeMapa(List<Map<String, dynamic>> topUsers) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeInOut,
+      padding: const EdgeInsets.all(16),
+      width: double.infinity, // <-- AÑADE ESTO
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF4FC3F7), Color(0xFF0288D1)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Text(
+            '🏅 Top 5 - Comunidad destacada',
+            style: GoogleFonts.poppins(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 16,
+            runSpacing: 16,
+            children:
+                topUsers.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final data = entry.value;
+                  final nombre = data['nombre'] ?? 'Usuario';
+                  final puntaje = (data['calificacion'] ?? 0.0).toStringAsFixed(
+                    2,
+                  );
+                  final ejercicios = data['ejercicios'] ?? 0;
+                  final foto = data['foto'];
+
+                  final defaultAvatars = [
+                    'assets/images/avatar1.png',
+                    'assets/images/avatar2.png',
+                    'assets/images/avatar3.png',
+                  ];
+
+                  final ImageProvider avatar =
+                      (foto == null || foto.isEmpty)
+                          ? AssetImage(defaultAvatars[i % 3])
+                          : (foto.startsWith('http')
+                              ? NetworkImage(foto)
+                              : AssetImage(defaultAvatars[i % 3]));
+
+                  return _avatarMiniRanking(
+                    avatar,
+                    nombre,
+                    puntaje,
+                    ejercicios,
+                  );
+                }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAutoevaluacionCard(Map<String, int> preguntasPorTema) {
+    final totalPreguntas = preguntasPorTema.values.fold(0, (a, b) => a + b);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Text(
+              '📝 Autoevaluación disponible',
+              style: GoogleFonts.poppins(
+                color: blancoSuave,
+                fontSize: 24,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              '$totalPreguntas+ preguntas',
+              style: GoogleFonts.poppins(
+                color: blancoSuave,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                mostrarDetallesPreguntas = !mostrarDetallesPreguntas;
+              });
+            },
+            child: Center(
+              child: Text(
+                mostrarDetallesPreguntas ? 'Ocultar temas' : 'Ver más',
+                style: GoogleFonts.poppins(
+                  color: blancoSuave,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          if (mostrarDetallesPreguntas)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children:
+                  preguntasPorTema.entries.map((entry) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Center(
+                        child: Text(
+                          '• ${entry.key}: ${entry.value}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+            ),
+          const SizedBox(height: 20),
+          Center(
+            child: ElevatedButton.icon(
+              onPressed: () => Navigator.pushNamed(context, '/autoevaluation'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Color(0xFF6A11CB),
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+              ),
+
+              icon: const Icon(Icons.assignment_turned_in),
+              label: const Text('Ir a autoevaluación'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

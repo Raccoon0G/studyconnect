@@ -23,10 +23,14 @@ class _ChatHomePageState extends State<ChatHomePage> {
   Map<String, Map<String, String>> cacheUsuarios = {};
 
   String? nombreUsuario;
+  final ScrollController _scrollController = ScrollController();
+  bool _yaHizoScroll = false;
+  final GlobalKey listViewKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
+
     _cargarUsuarios();
     _obtenerNombreUsuario();
   }
@@ -72,16 +76,23 @@ class _ChatHomePageState extends State<ChatHomePage> {
   void _iniciarChat(String otroId) async {
     final nuevoChatId =
         uid.compareTo(otroId) < 0 ? '${uid}_$otroId' : '${otroId}_$uid';
-    final chatRef = FirebaseFirestore.instance
-        .collection('Chats')
-        .doc(nuevoChatId);
-    final doc = await chatRef.get();
-    if (!doc.exists) {
-      await chatRef.set({
-        'Participantes': [uid, otroId],
-        'UltimaAct': Timestamp.now(),
-      });
+
+    // Precargar datos del otro usuario
+    if (!cacheUsuarios.containsKey(otroId)) {
+      final doc =
+          await FirebaseFirestore.instance
+              .collection('usuarios')
+              .doc(otroId)
+              .get();
+      cacheUsuarios[otroId] = {
+        'nombre': doc['Nombre'] ?? 'Usuario',
+        'foto': doc['FotoPerfil'] ?? '',
+      };
     }
+
+    // 🔄 Forzar scroll incluso si es el mismo chat
+    _yaHizoScroll = false;
+
     setState(() {
       chatIdSeleccionado = nuevoChatId;
       otroUid = otroId;
@@ -130,6 +141,26 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
     _mensajeController.clear();
     setState(() => mensaje = '');
+    _scrollAlFinal(forzar: true);
+  }
+
+  void _scrollAlFinal({bool forzar = false}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        final distanciaAlFinal =
+            _scrollController.position.maxScrollExtent -
+            _scrollController.position.pixels;
+
+        // Si está a menos de 200px del final, desplazamos automáticamente.
+        if (distanciaAlFinal < 200 || forzar) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      }
+    });
   }
 
   void _editarMensaje(String mensajeId, String contenido, Timestamp fecha) {
@@ -211,9 +242,17 @@ class _ChatHomePageState extends State<ChatHomePage> {
     );
   }
 
-  Widget _buildChatBubble(Map<String, dynamic> data, bool esMio, String id) {
+  Widget _buildChatBubble(
+    Map<String, dynamic> data,
+    bool esMio,
+    String id, {
+    bool mostrarNombre = true,
+  }) {
     final reacciones = Map<String, dynamic>.from(data['reacciones'] ?? {});
     final eliminado = data['eliminado'] ?? false;
+    final autorId = data['AutorID'];
+    final nombre = cacheUsuarios[autorId]?['nombre'] ?? 'Usuario';
+    final foto = cacheUsuarios[autorId]?['foto'] ?? '';
 
     return FutureBuilder<Map<String, String>>(
       future: _obtenerUsuario(data['AutorID']),
@@ -283,28 +322,32 @@ class _ChatHomePageState extends State<ChatHomePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 12,
-                          backgroundImage:
-                              foto.isNotEmpty
-                                  ? NetworkImage(foto)
-                                  : const AssetImage(
-                                        'assets/images/avatar1.png',
-                                      )
-                                      as ImageProvider,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          nombre,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
+                    if (mostrarNombre) ...[
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 12,
+                            backgroundImage:
+                                foto.isNotEmpty
+                                    ? NetworkImage(foto)
+                                    : const AssetImage(
+                                          'assets/images/avatar1.png',
+                                        )
+                                        as ImageProvider,
                           ),
-                        ),
-                      ],
-                    ),
+                          const SizedBox(width: 6),
+                          Text(
+                            nombre,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+
                     const SizedBox(height: 4),
                     Text(
                       eliminado ? 'Mensaje eliminado' : data['Contenido'],
@@ -346,7 +389,18 @@ class _ChatHomePageState extends State<ChatHomePage> {
                         ),
                         if (esMio) const SizedBox(width: 4),
                         if (esMio)
-                          const Icon(Icons.check, size: 14, color: Colors.blue),
+                          if (data['leidoPor']?.contains(otroUid) == true)
+                            const Icon(
+                              Icons.done_all,
+                              size: 14,
+                              color: Colors.blue,
+                            ) // doble check
+                          else
+                            const Icon(
+                              Icons.check,
+                              size: 14,
+                              color: Color.fromARGB(255, 25, 167, 180),
+                            ), // check simple
                       ],
                     ),
                   ],
@@ -556,26 +610,99 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                     .collection('Mensajes')
                                     .orderBy('Fecha')
                                     .snapshots(),
+
                             builder: (context, snapshot) {
                               if (!snapshot.hasData) {
                                 return const Center(
                                   child: CircularProgressIndicator(),
                                 );
                               }
-                              final mensajes = snapshot.data!.docs;
-                              return ListView(
-                                padding: const EdgeInsets.all(12),
-                                children:
-                                    mensajes.map((doc) {
-                                      final data =
-                                          doc.data() as Map<String, dynamic>;
-                                      final esMio = data['AutorID'] == uid;
-                                      return _buildChatBubble(
-                                        data,
-                                        esMio,
-                                        doc.id,
+
+                              final mensajes =
+                                  snapshot
+                                      .data!
+                                      .docs; //significa que ya hay mensajes
+                              if (!_yaHizoScroll && mensajes.isNotEmpty) {
+                                Future.delayed(
+                                  const Duration(milliseconds: 100),
+                                  () {
+                                    if (_scrollController.hasClients) {
+                                      _scrollController.animateTo(
+                                        _scrollController
+                                            .position
+                                            .maxScrollExtent,
+                                        duration: const Duration(
+                                          milliseconds: 300,
+                                        ),
+                                        curve: Curves.easeOut,
                                       );
-                                    }).toList(),
+                                      _yaHizoScroll = true;
+                                    }
+                                  },
+                                );
+                              }
+                              return Builder(
+                                builder: (context) {
+                                  // Espera a que el frame con todos los mensajes se haya dibujado
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
+                                    if (!_yaHizoScroll &&
+                                        _scrollController.hasClients) {
+                                      _scrollController.animateTo(
+                                        _scrollController
+                                            .position
+                                            .maxScrollExtent,
+                                        duration: const Duration(
+                                          milliseconds: 300,
+                                        ),
+                                        curve: Curves.easeOut,
+                                      );
+                                      _yaHizoScroll = true;
+                                    }
+                                  });
+
+                                  return ListView(
+                                    key: listViewKey,
+                                    controller: _scrollController,
+                                    padding: const EdgeInsets.all(12),
+                                    children:
+                                        mensajes.asMap().entries.map((entry) {
+                                          final index = entry.key;
+                                          final doc = entry.value;
+                                          final data =
+                                              doc.data()
+                                                  as Map<String, dynamic>;
+                                          final esMio = data['AutorID'] == uid;
+                                          final mostrarNombreYFoto =
+                                              index == 0 ||
+                                              (mensajes[index - 1].data()
+                                                      as Map<
+                                                        String,
+                                                        dynamic
+                                                      >)['AutorID'] !=
+                                                  data['AutorID'];
+
+                                          return Column(
+                                            crossAxisAlignment:
+                                                esMio
+                                                    ? CrossAxisAlignment.end
+                                                    : CrossAxisAlignment.start,
+                                            children: [
+                                              if (mostrarNombreYFoto)
+                                                const SizedBox(height: 12),
+                                              _buildChatBubble(
+                                                data,
+                                                esMio,
+                                                doc.id,
+                                                mostrarNombre:
+                                                    mostrarNombreYFoto,
+                                              ),
+                                            ],
+                                          );
+                                        }).toList(),
+                                  );
+                                },
                               );
                             },
                           ),
