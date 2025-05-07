@@ -385,12 +385,18 @@ class _ChatHomePageState extends State<ChatHomePage> {
                               'isGroup': true,
                               'groupName': _groupNameController.text.trim(),
                               'groupPhoto': '',
+                              'createdBy': uid,
                               'lastMessage': '',
                               'lastMessageAt': now,
+                              'typing': {
+                                for (var u in [uid, ..._selected]) u: false,
+                              },
                               'unreadCounts': {
                                 for (var u in [uid, ..._selected]) u: 0,
                               },
                             });
+
+                        if (!mounted) return;
                         Navigator.pop(context);
                         setState(() {
                           chatIdSeleccionado = chatId;
@@ -405,25 +411,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
         );
       },
     );
-  }
-
-  // 3) Lógica para crear el documento de grupo:
-  Future<void> _crearGrupo(String nombre, List<String> miembros) async {
-    // incluirme a mí:
-    if (!miembros.contains(uid)) miembros.add(uid);
-    final doc = FirebaseFirestore.instance.collection('Chats').doc();
-    await doc.set({
-      'ids': miembros,
-      'isGroup': true,
-      'groupName': nombre,
-      'groupPhoto': '', // podrías permitir subir foto
-      'createdBy': uid,
-
-      'lastMessage': '',
-      'lastMessageAt': FieldValue.serverTimestamp(),
-      'typing': {for (var m in miembros) m: false},
-      'unreadCounts': {for (var m in miembros) m: 0},
-    });
   }
 
   // Panel izquierdo con header, tabs, buscador, historias y lista de chats
@@ -716,12 +703,13 @@ class _ChatHomePageState extends State<ChatHomePage> {
                         'Grupo (${otherIds.length})')
                     : cacheUsuarios[other]!['nombre']!;
             // averiguamos si es grupo y quién lo creó
-
+            // obtenemos el ID de quien creó el grupo (o primer miembro como fallback)
             final String? creatorId =
-                data['createdBy'] as String? ?? otherIds.first; // fallback
+                data['createdBy'] as String? ?? otherIds.first;
+            // obtenemos el nombre del creador del caché
             final String creatorName = cacheUsuarios[creatorId]!['nombre']!;
 
-            // ahora el preview:
+            // nuevo preview:
             final String preview;
             if ((data['lastMessage'] as String?)?.trim().isNotEmpty == true) {
               preview = data['lastMessage'] as String;
