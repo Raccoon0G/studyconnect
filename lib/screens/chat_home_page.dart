@@ -104,25 +104,32 @@ class _ChatHomePageState extends State<ChatHomePage> {
   void _enviarMensaje() async {
     if (chatIdSeleccionado == null || mensaje.trim().isEmpty) return;
 
-    final mensajesRef = FirebaseFirestore.instance
-        .collection('Chats')
-        .doc(chatIdSeleccionado)
-        .collection('Mensajes');
+    // 1) Creamos un timestamp único para usarlo en mensaje y chat
+    final now = Timestamp.now();
 
-    await mensajesRef.add({
-      'AutorID': uid,
-      'Contenido': mensaje.trim(),
-      'Fecha': Timestamp.now(),
-      'reacciones': {},
-      'editado': false,
-      'eliminado': false,
-      'leidoPor': [uid],
-    });
-
+    // 2) Añadimos el mensaje con esa fecha
     await FirebaseFirestore.instance
         .collection('Chats')
         .doc(chatIdSeleccionado)
-        .update({'UltimaAct': Timestamp.now(), 'typing.$uid': false});
+        .collection('Mensajes')
+        .add({
+          'AutorID': uid,
+          'Contenido': mensaje.trim(),
+          'Fecha': now, // <-- usamos now aquí
+          'reacciones': {},
+          'editado': false,
+          'eliminado': false,
+          'leidoPor': [uid],
+        });
+
+    // 3) Actualizamos el documento de chat con lastMessageAt
+    await FirebaseFirestore.instance
+        .collection('Chats')
+        .doc(chatIdSeleccionado)
+        .update({
+          'typing.$uid': false,
+          'lastMessageAt': now, // <-- nuevo campo
+        });
 
     // Crear notificación para el receptor
     if (otroUid != null && otroUid != uid) {
@@ -353,7 +360,10 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                   FirebaseFirestore.instance
                                       .collection('Chats')
                                       .where('ids', arrayContains: uid)
-                                      .orderBy('UltimaAct', descending: true)
+                                      .orderBy(
+                                        'lastMessageAt',
+                                        descending: true,
+                                      )
                                       .snapshots(),
                               builder: (context, snap) {
                                 if (snap.connectionState ==
@@ -394,7 +404,8 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                     final other = ids.firstWhere(
                                       (m) => m != uid,
                                     );
-                                    final ts = data['UltimaAct'] as Timestamp?;
+                                    final ts =
+                                        data['lastMessageAt'] as Timestamp?;
                                     final hora =
                                         ts == null
                                             ? ''
@@ -461,20 +472,23 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                   color: Colors.white,
                                 );
                               }
-                              final data = snapshot.data!;
-                              final nombre = data['Nombre'] ?? 'Usuario';
-                              final foto = data['FotoPerfil'] ?? '';
-                              final online =
-                                  data.data().toString().contains('online')
-                                      ? data['online']
-                                      : false;
 
-                              final ultimaConexion =
-                                  data.data().toString().contains(
-                                        'ultimaConexion',
-                                      )
-                                      ? data['ultimaConexion'] as Timestamp?
-                                      : null;
+                              final data =
+                                  snapshot.data!.data()!
+                                      as Map<String, dynamic>;
+                              final nombre =
+                                  data['Nombre'] as String? ?? 'Usuario';
+                              final foto = data['FotoPerfil'] as String? ?? '';
+
+                              // 1) Sacamos online
+                              final online = (data['online'] as bool?) == true;
+
+                              // 2) Leemos 'ultimaConexion' del usuario
+                              final ts = data['ultimaConexion'] as Timestamp?;
+                              final ultimaConexionStr =
+                                  ts != null
+                                      ? _formatearHora(ts)
+                                      : 'hace un momento';
 
                               return Row(
                                 children: [
@@ -504,7 +518,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                       Text(
                                         online
                                             ? '🟢 En línea'
-                                            : 'Últ. conexión: ${_formatearHora(ultimaConexion ?? Timestamp.now())}',
+                                            : 'Últ. conexión: $ultimaConexionStr',
                                         style: const TextStyle(
                                           fontSize: 12,
                                           color: Colors.white70,
