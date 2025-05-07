@@ -442,7 +442,33 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                 );
                               }
 
-                              // 1) Lista cronológica (ascendente) y su inversa para el ListView
+                              // ——— 0) Marcar como leídos SOLO los que NO SON MÍOS ———
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                final docs = snapshot.data!.docs;
+                                for (final doc in docs) {
+                                  final data =
+                                      doc.data() as Map<String, dynamic>;
+                                  final autor = data['AutorID'] as String?;
+                                  if (autor == null || autor == uid) continue;
+                                  final leidoPor = List<String>.from(
+                                    data['leidoPor'] ?? [],
+                                  );
+                                  if (!leidoPor.contains(uid)) {
+                                    FirebaseFirestore.instance
+                                        .collection('Chats')
+                                        .doc(chatIdSeleccionado)
+                                        .collection('Mensajes')
+                                        .doc(doc.id)
+                                        .update({
+                                          'leidoPor': FieldValue.arrayUnion([
+                                            uid,
+                                          ]),
+                                        });
+                                  }
+                                }
+                              });
+
+                              // 1) Lista ascendente + su inversa para el ListView
                               final asc = snapshot.data!.docs;
                               final inv = asc.reversed.toList();
 
@@ -452,13 +478,12 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                 padding: const EdgeInsets.all(12),
                                 itemCount: inv.length,
                                 itemBuilder: (context, i) {
-                                  // 2) Índice en la lista ascendente
+                                  // ——— 2) Índice en ascendente para el separador de fecha ———
                                   final ascIndex = asc.length - 1 - i;
-
-                                  // 3) Extraemos documento “visual” e información
                                   final doc = inv[i];
                                   final data =
                                       doc.data() as Map<String, dynamic>;
+
                                   final esMio = data['AutorID'] == uid;
                                   final texto =
                                       data['Contenido'] as String? ?? '';
@@ -474,29 +499,36 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                         {},
                                   );
 
-                                  // 4) Mostrar nombre/avatar solo si cambia el autor
+                                  // ——— 3) showName solo cuando cambia autor ———
                                   final total = inv.length;
                                   final showName =
                                       i == total - 1 ||
                                       (i < total - 1 &&
-                                          ((inv[i + 1].data()
+                                          (inv[i + 1].data()
                                                   as Map<
                                                     String,
                                                     dynamic
                                                   >)['AutorID'] !=
-                                              data['AutorID']));
+                                              data['AutorID']);
 
-                                  // 5) Cálculo del separador de fecha (comparando en ascendente)
+                                  // ——— 4) separador de fecha ———
                                   bool showDateSeparator;
                                   if (ascIndex == 0) {
                                     showDateSeparator = true;
                                   } else {
                                     final currTs =
-                                        (asc[ascIndex].data() as Map)['Fecha']
+                                        (asc[ascIndex].data()
+                                                as Map<
+                                                  String,
+                                                  dynamic
+                                                >)['Fecha']
                                             as Timestamp;
                                     final prevTs =
                                         (asc[ascIndex - 1].data()
-                                                as Map)['Fecha']
+                                                as Map<
+                                                  String,
+                                                  dynamic
+                                                >)['Fecha']
                                             as Timestamp;
                                     final curr = currTs.toDate();
                                     final prev = prevTs.toDate();
@@ -506,80 +538,93 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                         curr.day != prev.day;
                                   }
 
-                                  // 6) Nombre y foto desde el caché
+                                  // ——— 5) Si es mi mensaje, ¿lo leyó el peer? ———
+                                  final leidoPor = List<String>.from(
+                                    data['leidoPor'] ?? [],
+                                  );
+                                  final readByPeer =
+                                      otroUid != null &&
+                                      leidoPor.contains(otroUid);
+
+                                  // ——— 6) sacamos nombre/foto del caché ———
                                   final nombre =
                                       cacheUsuarios[data['AutorID']]!['nombre']!;
                                   final foto =
                                       cacheUsuarios[data['AutorID']]!['foto']!;
+
+                                  // ——— 7) montamos Column con opcional separador + burbuja ———
+                                  final children = <Widget>[];
+                                  if (showDateSeparator) {
+                                    children.add(
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 8,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            const Expanded(
+                                              child: Divider(thickness: 1),
+                                            ),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 12,
+                                                    vertical: 4,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey.shade200,
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                              ),
+                                              child: Text(
+                                                DateFormat(
+                                                  'dd MMM yyyy',
+                                                ).format(fecha),
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.black54,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                            const Expanded(
+                                              child: Divider(thickness: 1),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  }
+
+                                  children.add(
+                                    ChatBubble(
+                                      isMine: esMio,
+                                      read: readByPeer, // ← aquí
+                                      avatarUrl: foto,
+                                      authorName: nombre,
+                                      text: texto,
+                                      time: fecha,
+                                      edited: editado,
+                                      deleted: eliminado,
+                                      reactions: reacciones,
+                                      showName: showName,
+                                      onEdit:
+                                          () => _editarMensaje(
+                                            doc.id,
+                                            texto,
+                                            data['Fecha'] as Timestamp,
+                                          ),
+                                      onDelete: () => _eliminarMensaje(doc.id),
+                                      onReact: () => _reaccionarMensaje(doc.id),
+                                    ),
+                                  );
 
                                   return Column(
                                     crossAxisAlignment:
                                         esMio
                                             ? CrossAxisAlignment.end
                                             : CrossAxisAlignment.start,
-                                    children: [
-                                      if (showDateSeparator)
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 8,
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              const Expanded(
-                                                child: Divider(thickness: 1),
-                                              ),
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 12,
-                                                      vertical: 4,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.grey.shade200,
-                                                  borderRadius:
-                                                      BorderRadius.circular(16),
-                                                ),
-                                                child: Text(
-                                                  DateFormat(
-                                                    'dd MMM yyyy',
-                                                  ).format(fecha),
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    color: Colors.black54,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ),
-                                              const Expanded(
-                                                child: Divider(thickness: 1),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-
-                                      // ——— Tu ChatBubble ———
-                                      ChatBubble(
-                                        isMine: esMio,
-                                        avatarUrl: foto,
-                                        authorName: nombre,
-                                        text: texto,
-                                        time: fecha,
-                                        edited: editado,
-                                        deleted: eliminado,
-                                        reactions: reacciones,
-                                        showName: showName,
-                                        onEdit:
-                                            () => _editarMensaje(
-                                              doc.id,
-                                              texto,
-                                              data['Fecha'] as Timestamp,
-                                            ),
-                                        onDelete:
-                                            () => _eliminarMensaje(doc.id),
-                                        onReact:
-                                            () => _reaccionarMensaje(doc.id),
-                                      ),
-                                    ],
+                                    children: children,
                                   );
                                 },
                               );

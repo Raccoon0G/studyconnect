@@ -5,6 +5,7 @@ typedef BubbleCallback = void Function();
 
 class ChatBubble extends StatelessWidget {
   final bool isMine;
+  final bool read;
   final String avatarUrl;
   final String authorName;
   final String text;
@@ -20,6 +21,7 @@ class ChatBubble extends StatelessWidget {
   const ChatBubble({
     super.key,
     required this.isMine,
+    required this.read,
     required this.avatarUrl,
     required this.authorName,
     required this.text,
@@ -144,15 +146,14 @@ class ChatBubble extends StatelessWidget {
                       ),
                     ),
                     if (isMine) const SizedBox(width: 4),
-                    if (isMine)
+                    if (isMine) ...[
+                      const SizedBox(width: 4),
                       Icon(
-                        deleted ? Icons.check : Icons.done_all,
+                        read ? Icons.done_all : Icons.check,
                         size: 14,
-                        color:
-                            deleted
-                                ? Color.fromARGB(255, 25, 167, 180)
-                                : Colors.blue,
+                        color: read ? Colors.blue : Colors.black54,
                       ),
+                    ],
                   ],
                 ),
               ],
