@@ -927,10 +927,42 @@ class _ChatHomePageState extends State<ChatHomePage> {
               .orderBy('Fecha')
               .snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData)
+        if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
+
+        // ── 1) Marcar como leídos los mensajes que veo y que no son míos ──
+        for (var doc in snap.data!.docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          final autor = data['AutorID'] as String;
+          final leidoPor = List<String>.from(data['leidoPor'] ?? []);
+          if (autor != uid && !leidoPor.contains(uid)) {
+            FirebaseFirestore.instance
+                .collection('Chats')
+                .doc(chatIdSeleccionado)
+                .collection('Mensajes')
+                .doc(doc.id)
+                .update({
+                  'leidoPor': FieldValue.arrayUnion([uid]),
+                });
+          }
+        }
+
+        // ── 2) Construir la lista invertida y auto‑scroll ──
         final asc = snap.data!.docs;
         final inv = asc.reversed.toList();
+
+        // Después de rebuild, asegurar scroll al fondo:
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(
+              0.0,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+
         return ListView.builder(
           controller: _scrollController,
           reverse: true,
@@ -941,7 +973,8 @@ class _ChatHomePageState extends State<ChatHomePage> {
             final data = doc.data() as Map<String, dynamic>;
             final esMio = data['AutorID'] == uid;
             final fecha = (data['Fecha'] as Timestamp).toDate();
-            // showDateSeparator
+
+            // Separador de fecha
             bool showDateSeparator = false;
             if (i == inv.length - 1) {
               showDateSeparator = true;
@@ -956,12 +989,15 @@ class _ChatHomePageState extends State<ChatHomePage> {
                   d1.month != d2.month ||
                   d1.day != d2.day;
             }
-            // readByPeer
+
+            // Doble‑check: ¿mi interlocutor leyó?
             final leidoPor = List<String>.from(data['leidoPor'] ?? []);
             final readByPeer = otroUid != null && leidoPor.contains(otroUid);
-            // autorInfo
+
+            // Datos de autor desde cache
             final autorInfo = cacheUsuarios[data['AutorID']]!;
-            // agrupación de nombre
+
+            // ¿mostrar nombre arriba de la burbuja?
             final total = inv.length;
             final showName =
                 i == total - 1 ||
@@ -1021,15 +1057,27 @@ class _ChatHomePageState extends State<ChatHomePage> {
                       .doc(chatIdSeleccionado)
                       .update({'typing.$uid': typing});
                 }
+                // Dispara rebuild para que el botón se actualice
+                setState(() {});
               },
               decoration: const InputDecoration(
                 hintText: 'Escribe tu mensaje…',
               ),
             ),
           ),
+          // IconButton(
+          //   icon: const Icon(Icons.send, color: Colors.blueAccent),
+          //   onPressed: _enviarMensaje,
+          // ),
+          // Si mensaje.trim() está vacío, onPressed será null y el botón deshabilitado
           IconButton(
-            icon: const Icon(Icons.send, color: Colors.blueAccent),
-            onPressed: _enviarMensaje,
+            icon: Icon(
+              Icons.send,
+              // color cambia según si está habilitado o no
+              color:
+                  mensaje.trim().isNotEmpty ? Colors.blueAccent : Colors.grey,
+            ),
+            onPressed: mensaje.trim().isNotEmpty ? _enviarMensaje : null,
           ),
         ],
       ),
