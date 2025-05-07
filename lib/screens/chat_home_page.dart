@@ -157,6 +157,17 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
     _mensajeController.clear();
     setState(() => mensaje = '');
+
+    // ── AUTO‐SCROLL TRAS ENVÍO ──
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   void _editarMensaje(String mensajeId, String contenido, Timestamp fecha) {
@@ -442,33 +453,18 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                 );
                               }
 
-                              // ——— 0) Marcar como leídos SOLO los que NO SON MÍOS ———
+                              // ─── AUTO-SCROLL tras recibir nuevos mensajes ───
                               WidgetsBinding.instance.addPostFrameCallback((_) {
-                                final docs = snapshot.data!.docs;
-                                for (final doc in docs) {
-                                  final data =
-                                      doc.data() as Map<String, dynamic>;
-                                  final autor = data['AutorID'] as String?;
-                                  if (autor == null || autor == uid) continue;
-                                  final leidoPor = List<String>.from(
-                                    data['leidoPor'] ?? [],
+                                if (_scrollController.hasClients) {
+                                  _scrollController.animateTo(
+                                    0.0, // en reverse: true el offset 0 es el final
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeOut,
                                   );
-                                  if (!leidoPor.contains(uid)) {
-                                    FirebaseFirestore.instance
-                                        .collection('Chats')
-                                        .doc(chatIdSeleccionado)
-                                        .collection('Mensajes')
-                                        .doc(doc.id)
-                                        .update({
-                                          'leidoPor': FieldValue.arrayUnion([
-                                            uid,
-                                          ]),
-                                        });
-                                  }
                                 }
                               });
 
-                              // 1) Lista ascendente + su inversa para el ListView
+                              // 1) Lista ascendente + su inversa para visual
                               final asc = snapshot.data!.docs;
                               final inv = asc.reversed.toList();
 
@@ -478,7 +474,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                 padding: const EdgeInsets.all(12),
                                 itemCount: inv.length,
                                 itemBuilder: (context, i) {
-                                  // ——— 2) Índice en ascendente para el separador de fecha ———
                                   final ascIndex = asc.length - 1 - i;
                                   final doc = inv[i];
                                   final data =
@@ -499,7 +494,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                         {},
                                   );
 
-                                  // ——— 3) showName solo cuando cambia autor ———
+                                  // showName
                                   final total = inv.length;
                                   final showName =
                                       i == total - 1 ||
@@ -511,7 +506,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                                   >)['AutorID'] !=
                                               data['AutorID']);
 
-                                  // ——— 4) separador de fecha ———
+                                  // separador de fecha
                                   bool showDateSeparator;
                                   if (ascIndex == 0) {
                                     showDateSeparator = true;
@@ -538,7 +533,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                         curr.day != prev.day;
                                   }
 
-                                  // ——— 5) Si es mi mensaje, ¿lo leyó el peer? ———
+                                  // lectura por peer
                                   final leidoPor = List<String>.from(
                                     data['leidoPor'] ?? [],
                                   );
@@ -546,13 +541,13 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                       otroUid != null &&
                                       leidoPor.contains(otroUid);
 
-                                  // ——— 6) sacamos nombre/foto del caché ———
+                                  // nombre/foto del cache
                                   final nombre =
                                       cacheUsuarios[data['AutorID']]!['nombre']!;
                                   final foto =
                                       cacheUsuarios[data['AutorID']]!['foto']!;
 
-                                  // ——— 7) montamos Column con opcional separador + burbuja ———
+                                  // construyo la columna de widgets
                                   final children = <Widget>[];
                                   if (showDateSeparator) {
                                     children.add(
@@ -599,7 +594,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                   children.add(
                                     ChatBubble(
                                       isMine: esMio,
-                                      read: readByPeer, // ← aquí
+                                      read: readByPeer,
                                       avatarUrl: foto,
                                       authorName: nombre,
                                       text: texto,
