@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:html' as html;
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -23,7 +25,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
   final TextEditingController bioController = TextEditingController();
 
   String photoUrl = '';
-  File? newProfileImage;
+  //File? newProfileImage;
+  Uint8List? newProfileImageBytes; // Compatible con Flutter Web
 
   bool modoOscuro = true;
   bool notificaciones = true;
@@ -69,17 +72,84 @@ class _EditProfilePageState extends State<EditProfilePage> {
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
 
     if (pickedFile != null) {
-      setState(() => newProfileImage = File(pickedFile.path));
+      final bytes = await pickedFile.readAsBytes();
+      setState(() => newProfileImageBytes = bytes);
     }
   }
 
-  Future<String> subirImagen(File imageFile) async {
-    final ref = FirebaseStorage.instance
-        .ref()
-        .child('fotos_perfil')
-        .child('${user!.uid}.jpg');
-    await ref.putFile(imageFile);
-    return await ref.getDownloadURL();
+  // Future<String> subirImagen(File imageFile) async {
+  //   try {
+  //     // Crear referencia única para la imagen
+  //     final ref = FirebaseStorage.instance
+  //         .ref()
+  //         .child('fotos_perfil')
+  //         .child('${user!.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+  //     // Subir archivo a Firebase Storage
+  //     final uploadTask = await ref.putFile(imageFile);
+
+  //     // Obtener y retornar la URL de descarga
+  //     return await uploadTask.ref.getDownloadURL();
+  //   } catch (e) {
+  //     debugPrint('Error al subir imagen: $e');
+  //     rethrow;
+  //   }
+  // }
+  Future<String> subirImagen(Uint8List imageBytes) async {
+    try {
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('fotos_perfil')
+          .child(user!.uid)
+          .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+      final uploadTask = await ref.putData(imageBytes);
+      return await uploadTask.ref.getDownloadURL();
+    } catch (e) {
+      debugPrint('Error al subir imagen: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _seleccionarYSubirImagen(BuildContext context) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final uploadInput = html.FileUploadInputElement()..accept = 'image/*';
+    uploadInput.click();
+
+    uploadInput.onChange.listen((e) async {
+      final file = uploadInput.files?.first;
+      if (file == null) return;
+
+      final reader = html.FileReader();
+
+      reader.readAsArrayBuffer(file);
+
+      reader.onLoadEnd.listen((e) async {
+        final data = reader.result as Uint8List;
+        final ref = FirebaseStorage.instance
+            .ref()
+            .child('fotos_perfil')
+            .child(user.uid)
+            .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+        await ref.putData(data);
+        final url = await ref.getDownloadURL();
+
+        await FirebaseFirestore.instance
+            .collection('usuarios')
+            .doc(user.uid)
+            .update({'FotoPerfil': url});
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Foto de perfil actualizada')),
+        );
+
+        // Recargar la pantalla
+        Navigator.pushReplacementNamed(context, '/user_profile');
+      });
+    });
   }
 
   Future<void> guardarCambios() async {
@@ -104,43 +174,90 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
     if (confirm != true) return;
 
-    String finalPhotoUrl = photoUrl;
-
-    if (newProfileImage != null) {
-      finalPhotoUrl = await subirImagen(newProfileImage!);
-    }
-
-    await FirebaseFirestore.instance.collection('usuarios').doc(user!.uid).set({
-      'Nombre': nameController.text,
-      'Correo': emailController.text,
-      'Telefono': phoneController.text,
-      'rol': roleController.text,
-      'Acerca de mi': bioController.text,
-      'FotoPerfil': finalPhotoUrl,
-      'id': user!.uid,
-      'Config': {
-        'ModoOscuro': modoOscuro,
-        'Notificaciones': notificaciones,
-        'PerfilVisible': perfilVisible,
-      },
-    }, SetOptions(merge: true));
-
-    await showDialog(
+    showDialog(
+      barrierDismissible: false,
       context: context,
       builder:
-          (_) => AlertDialog(
-            title: const Text("Cambios guardados"),
-            content: const Text("Tu perfil se ha actualizado correctamente."),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text("Aceptar"),
+          (_) => const AlertDialog(
+            content: SizedBox(
+              height: 80,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Guardando cambios...'),
+                ],
               ),
-            ],
+            ),
           ),
     );
 
-    Navigator.pushReplacementNamed(context, '/');
+    try {
+      String finalPhotoUrl = photoUrl;
+      // if (newProfileImage != null) {
+      //   finalPhotoUrl = await subirImagen(newProfileImage!);
+      // }
+
+      if (newProfileImageBytes != null) {
+        finalPhotoUrl = await subirImagen(newProfileImageBytes!);
+      }
+
+      await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(user!.uid)
+          .set({
+            'Nombre': nameController.text,
+            'Correo': emailController.text,
+            'Telefono': phoneController.text,
+            'rol': roleController.text,
+            'Acerca de mi': bioController.text,
+            'FotoPerfil': finalPhotoUrl,
+            'id': user!.uid,
+            'Config': {
+              'ModoOscuro': modoOscuro,
+              'Notificaciones': notificaciones,
+              'PerfilVisible': perfilVisible,
+            },
+          }, SetOptions(merge: true));
+
+      Navigator.pop(context); // quitar loader
+
+      await showDialog(
+        context: context,
+        builder:
+            (_) => AlertDialog(
+              title: const Text("Cambios guardados"),
+              content: const Text("Tu perfil se ha actualizado correctamente."),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Aceptar"),
+                ),
+              ],
+            ),
+      );
+
+      Navigator.pushReplacementNamed(context, '/');
+    } catch (e) {
+      Navigator.pop(context); // quitar loader en caso de error
+      debugPrint('ERROR al guardar cambios: $e');
+
+      await showDialog(
+        context: context,
+        builder:
+            (_) => AlertDialog(
+              title: const Text("Error"),
+              content: Text("Error al guardar cambios: $e"),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Aceptar"),
+                ),
+              ],
+            ),
+      );
+    }
   }
 
   Future<void> enviarCambioContrasena() async {
@@ -314,18 +431,60 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         Stack(
                           alignment: Alignment.bottomRight,
                           children: [
-                            CircleAvatar(
-                              radius: 50,
-                              backgroundImage:
-                                  newProfileImage != null
-                                      ? FileImage(newProfileImage!)
-                                      : (photoUrl.isNotEmpty
-                                          ? NetworkImage(photoUrl)
-                                          : const AssetImage(
-                                                'assets/images/avatar1.png',
-                                              )
-                                              as ImageProvider),
+                            // CircleAvatar(
+                            //   radius: 50,
+                            //   backgroundImage:
+                            //       newProfileImage != null
+                            //           ? FileImage(newProfileImage!)
+                            //           : (photoUrl.isNotEmpty
+                            //               ? NetworkImage(photoUrl)
+                            //               : const AssetImage(
+                            //                     'assets/images/avatar1.png',
+                            //                   )
+                            //                   as ImageProvider),
+                            // ),
+                            // CircleAvatar(
+                            //   radius: 50,
+                            //   backgroundImage:
+                            //       newProfileImageBytes != null
+                            //           ? MemoryImage(newProfileImageBytes!)
+                            //           : (photoUrl.isNotEmpty
+                            //               ? NetworkImage(photoUrl)
+                            //               : const AssetImage(
+                            //                     'assets/images/avatar1.png',
+                            //                   )
+                            //                   as ImageProvider),
+                            // ),
+                            GestureDetector(
+                              onTap: () => _seleccionarYSubirImagen(context),
+                              child: Stack(
+                                alignment: Alignment.bottomRight,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 50,
+                                    backgroundImage:
+                                        newProfileImageBytes != null
+                                            ? MemoryImage(newProfileImageBytes!)
+                                            : (photoUrl.isNotEmpty
+                                                    ? NetworkImage(photoUrl)
+                                                    : const AssetImage(
+                                                      'assets/images/avatar1.png',
+                                                    ))
+                                                as ImageProvider,
+                                  ),
+                                  const CircleAvatar(
+                                    radius: 14,
+                                    backgroundColor: Colors.white,
+                                    child: Icon(
+                                      Icons.edit,
+                                      size: 16,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
+
                             IconButton(
                               icon: const Icon(Icons.edit, color: Colors.blue),
                               onPressed: seleccionarImagen,

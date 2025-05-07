@@ -745,11 +745,9 @@ class _HomePageState extends State<HomePage> {
                   ];
 
                   final ImageProvider avatar =
-                      (foto == null || foto.isEmpty)
-                          ? AssetImage(defaultAvatars[i % 3])
-                          : (foto.startsWith('http')
-                              ? NetworkImage(foto)
-                              : AssetImage(defaultAvatars[i % 3]));
+                      (foto != null && foto.startsWith('http'))
+                          ? NetworkImage(foto)
+                          : AssetImage(defaultAvatars[i % 3]);
 
                   return _avatarMiniRanking(
                     avatar,

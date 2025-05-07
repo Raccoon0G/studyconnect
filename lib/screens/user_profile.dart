@@ -86,11 +86,15 @@ class UserProfilePage extends StatelessWidget {
                     CircleAvatar(
                       radius: 50,
                       backgroundImage:
-                          (data['FotoPerfil'] ?? '').isNotEmpty
+                          (data['FotoPerfil'] ?? '').isNotEmpty &&
+                                  (data['FotoPerfil'] as String).startsWith(
+                                    'http',
+                                  )
                               ? NetworkImage(data['FotoPerfil'])
                               : const AssetImage('assets/images/avatar1.png')
                                   as ImageProvider,
                     ),
+
                     const SizedBox(height: 16),
                     Text(
                       data['Nombre'] ?? 'Sin nombre',
