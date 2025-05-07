@@ -25,6 +25,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
   String? nombreUsuario;
   final ScrollController _scrollController = ScrollController();
   final GlobalKey listViewKey = GlobalKey();
+  bool _isTyping = false;
 
   @override
   void initState() {
@@ -137,7 +138,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
     await FirebaseFirestore.instance
         .collection('Chats')
         .doc(chatIdSeleccionado)
-        .update({'UltimaAct': Timestamp.now()});
+        .update({'UltimaAct': Timestamp.now(), 'typing.$uid': false});
 
     // Crear notificación para el receptor
     if (otroUid != null && otroUid != uid) {
@@ -432,6 +433,53 @@ class _ChatHomePageState extends State<ChatHomePage> {
                             },
                           ),
                 ),
+                if (chatIdSeleccionado != null)
+                  StreamBuilder<DocumentSnapshot>(
+                    stream:
+                        FirebaseFirestore.instance
+                            .collection('Chats')
+                            .doc(chatIdSeleccionado)
+                            .snapshots(),
+                    builder: (context, snap) {
+                      // Si aún no hay datos o no hemos seleccionado un peer, no mostramos nada
+                      if (!snap.hasData || otroUid == null) {
+                        return const SizedBox.shrink();
+                      }
+
+                      final data = snap.data!.data() as Map<String, dynamic>;
+                      // 'typing' es un mapa en el doc Chats/{chatId}: { uid1: true/false, uid2: ... }
+                      final typingMap =
+                          (data['typing'] as Map<String, dynamic>?) ?? {};
+                      final otherTyping = typingMap[otroUid] == true;
+
+                      // Si la otra persona no está escribiendo, nada que pintar
+                      if (!otherTyping) {
+                        return const SizedBox.shrink();
+                      }
+
+                      // Si aquí, el peer está escribiendo: mostramos indicador visible
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 6.0,
+                          horizontal: 12.0,
+                        ),
+                        color: Colors.grey.withOpacity(
+                          0.1,
+                        ), // fondo suave y diferenciado
+                        child: Text(
+                          '${cacheUsuarios[otroUid]!['nombre']} está escribiendo…',
+                          style: TextStyle(
+                            fontStyle: FontStyle.italic,
+                            color:
+                                Colors
+                                    .blue
+                                    .shade600, // texto oscuro para contraste
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 Expanded(
                   child:
                       chatIdSeleccionado == null
@@ -634,9 +682,22 @@ class _ChatHomePageState extends State<ChatHomePage> {
                       Expanded(
                         child: TextField(
                           controller: _mensajeController,
-                          onChanged: (val) => setState(() => mensaje = val),
+                          onChanged: (val) {
+                            setState(() => mensaje = val);
+
+                            // Solo si cambió el estado:
+                            final typing = val.trim().isNotEmpty;
+                            if (typing != _isTyping &&
+                                chatIdSeleccionado != null) {
+                              _isTyping = typing;
+                              FirebaseFirestore.instance
+                                  .collection('Chats')
+                                  .doc(chatIdSeleccionado)
+                                  .update({'typing.$uid': typing});
+                            }
+                          },
                           decoration: const InputDecoration(
-                            hintText: 'Escribe tu mensaje...',
+                            hintText: 'Escribe tu mensaje…',
                           ),
                         ),
                       ),
