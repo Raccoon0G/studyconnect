@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-
 import 'package:study_connect/services/services.dart';
 import 'package:study_connect/widgets/widgets.dart';
 
@@ -913,7 +912,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
     );
   }
 
-  /// 3) StreamBuilder de mensajes, con separador de fecha y ChatBubbleCustom
+  /// 3) StreamBuilder de mensajes, con separador de fecha y ChatBubble
   Widget _buildMessagesStream() {
     return StreamBuilder<QuerySnapshot>(
       stream:
