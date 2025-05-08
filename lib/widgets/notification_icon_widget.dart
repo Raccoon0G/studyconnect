@@ -238,6 +238,10 @@ class _NotificationIconWidgetState extends State<NotificationIconWidget> {
         return Icons.message;
       case 'comentario':
         return Icons.comment;
+      case 'grupo':
+        return Icons.group_add;
+      case 'material':
+        return Icons.archive;
       case 'calificacion':
         return Icons.star;
       case 'ranking':
