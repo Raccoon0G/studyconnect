@@ -1,3 +1,7 @@
+import 'dart:typed_data';
+import 'dart:html' as html;
+
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -30,6 +34,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
   bool _showList = true;
   List<String> _selectedForGroup = [];
   final TextEditingController _groupNameController = TextEditingController();
+  Uint8List? _imagenGrupo;
 
   @override
   void initState() {
@@ -254,6 +259,16 @@ class _ChatHomePageState extends State<ChatHomePage> {
     );
   }
 
+  Future<String> subirImagenGrupo(Uint8List imagenBytes, String chatId) async {
+    final ref = FirebaseStorage.instance
+        .ref()
+        .child('grupos')
+        .child('$chatId.jpg');
+
+    await ref.putData(imagenBytes);
+    return await ref.getDownloadURL();
+  }
+
   // Método que abre el diálogo de creación de grupo
   void _mostrarDialogoCrearGrupo() {
     // controladores y estado local del diálogo
@@ -265,149 +280,273 @@ class _ChatHomePageState extends State<ChatHomePage> {
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Nuevo grupo'),
-          content: SizedBox(
-            width: 350,
-            height: 400,
-            child: Column(
-              children: [
-                // Nombre del grupo
-                TextField(
-                  controller: _groupNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Nombre del grupo',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                // Buscador de usuarios
-                TextField(
-                  controller: _searchController,
-                  decoration: const InputDecoration(
-                    hintText: 'Buscar usuarios...',
-                    prefixIcon: Icon(Icons.search),
-                  ),
-                  onChanged: (txt) {
-                    _filter = txt.trim().toLowerCase();
-                    // notificar sólo al contenido del diálogo
-                    (context as Element).markNeedsBuild();
-                  },
-                ),
-                const SizedBox(height: 12),
-                // Lista de usuarios filtrada con foto y checkbox
-                Expanded(
-                  child: StreamBuilder<QuerySnapshot>(
-                    stream:
-                        FirebaseFirestore.instance
-                            .collection('usuarios')
-                            .where(FieldPath.documentId, whereNotIn: [uid])
-                            .snapshots(),
-                    builder: (ctx, snap) {
-                      if (!snap.hasData)
-                        return const Center(child: CircularProgressIndicator());
-                      // todos los usuarios excepto yo
-                      final all = snap.data!.docs;
-                      // aplicar filtro por nombre
-                      final filtered =
-                          all.where((d) {
-                            final name =
-                                (d['Nombre'] ?? '').toString().toLowerCase();
-                            return name.contains(_filter);
-                          }).toList();
-                      if (filtered.isEmpty)
-                        return const Center(child: Text("No hay usuarios"));
-                      return ListView.builder(
-                        itemCount: filtered.length,
-                        itemBuilder: (_, i) {
-                          final doc = filtered[i];
-                          final data = doc.data()! as Map<String, dynamic>;
-                          final nombre = data['Nombre'] as String? ?? 'Usuario';
-                          final foto = data['FotoPerfil'] as String? ?? '';
-                          final isSel = _selected.contains(doc.id);
-                          return CheckboxListTile(
-                            value: isSel,
-                            onChanged: (yes) {
-                              if (yes == true)
-                                _selected.add(doc.id);
-                              else
-                                _selected.remove(doc.id);
-                              (context as Element).markNeedsBuild();
+        final TextEditingController _groupNameController =
+            TextEditingController();
+        final TextEditingController _searchController = TextEditingController();
+        List<String> _selected = [];
+        String _filter = '';
+
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Nuevo grupo'),
+              content: SizedBox(
+                width: 350,
+                height: 400,
+                child: Column(
+                  children: [
+                    Stack(
+                      alignment: Alignment.bottomRight,
+                      children: [
+                        CircleAvatar(
+                          radius: 60,
+                          backgroundImage:
+                              _imagenGrupo != null
+                                  ? MemoryImage(_imagenGrupo!)
+                                  : const AssetImage(
+                                        'assets/images/avatar1.png',
+                                      )
+                                      as ImageProvider,
+                        ),
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: IconButton(
+                            icon: const Icon(Icons.edit, size: 20),
+                            onPressed: () async {
+                              final input =
+                                  html.FileUploadInputElement()
+                                    ..accept = 'image/*';
+                              input.click();
+                              input.onChange.listen((event) {
+                                final file = input.files?.first;
+                                if (file != null) {
+                                  final reader = html.FileReader();
+                                  reader.readAsArrayBuffer(file);
+                                  reader.onLoadEnd.listen((event) {
+                                    _imagenGrupo = reader.result as Uint8List;
+                                    setStateDialog(() {}); // <- importante
+                                  });
+                                }
+                              });
                             },
-                            title: Row(
-                              children: [
-                                CircleAvatar(
-                                  backgroundImage:
-                                      foto.isNotEmpty
-                                          ? NetworkImage(foto)
-                                          : const AssetImage(
-                                                'assets/images/avatar1.png',
-                                              )
-                                              as ImageProvider,
-                                  radius: 16,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(child: Text(nombre)),
-                              ],
-                            ),
-                            controlAffinity: ListTileControlAffinity.leading,
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed:
-                  (_groupNameController.text.trim().isNotEmpty &&
-                          _selected.isNotEmpty)
-                      ? () async {
-                        final chatId =
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _groupNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre del grupo',
+                      ),
+                      onChanged: (_) => setStateDialog(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _searchController,
+                      decoration: const InputDecoration(
+                        hintText: 'Buscar usuarios...',
+                        prefixIcon: Icon(Icons.search),
+                      ),
+                      onChanged: (txt) {
+                        _filter = txt.trim().toLowerCase();
+                        setStateDialog(() {});
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: StreamBuilder<QuerySnapshot>(
+                        stream:
                             FirebaseFirestore.instance
                                 .collection('Chats')
-                                .doc()
-                                .id;
-                        final now = Timestamp.now();
-                        await FirebaseFirestore.instance
-                            .collection('Chats')
-                            .doc(chatId)
-                            .set({
-                              'ids': [uid, ..._selected],
-                              'isGroup': true,
-                              'groupName': _groupNameController.text.trim(),
-                              'groupPhoto': '',
-                              'createdBy': uid,
-                              'lastMessage': '',
-                              'lastMessageAt': now,
-                              'typing': {
-                                for (var u in [uid, ..._selected]) u: false,
-                              },
-                              'unreadCounts': {
-                                for (var u in [uid, ..._selected]) u: 0,
-                              },
-                            });
+                                .where('ids', arrayContains: uid)
+                                .orderBy('lastMessageAt', descending: true)
+                                .limit(5)
+                                .snapshots(),
+                        builder: (ctx, chatSnap) {
+                          if (!chatSnap.hasData) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          }
 
-                        if (!mounted) return;
-                        Navigator.pop(context);
-                        setState(() {
-                          chatIdSeleccionado = chatId;
-                          otroUid = null;
-                          _showList = false;
-                        });
-                      }
-                      : null,
-              child: const Text('Crear'),
-            ),
-          ],
+                          // Extrae los usuarios con los que se tienen los 5 chats más recientes (1 a 1 y grupos)
+                          final recentUserIds = <String>{};
+                          for (var doc in chatSnap.data!.docs) {
+                            final ids = List<String>.from(doc['ids']);
+                            for (var id in ids) {
+                              if (id != uid) recentUserIds.add(id);
+                            }
+                          }
+
+                          // Si hay filtro activo, buscar entre todos los usuarios
+                          final searchStream =
+                              _filter.isNotEmpty
+                                  ? FirebaseFirestore.instance
+                                      .collection('usuarios')
+                                      .snapshots()
+                                  : FirebaseFirestore.instance
+                                      .collection('usuarios')
+                                      .where(
+                                        FieldPath.documentId,
+                                        whereIn: recentUserIds.toList(),
+                                      )
+                                      .snapshots();
+
+                          return StreamBuilder<QuerySnapshot>(
+                            stream: searchStream,
+                            builder: (ctx, snap) {
+                              if (!snap.hasData) {
+                                return const Center(
+                                  child: CircularProgressIndicator(),
+                                );
+                              }
+
+                              final all =
+                                  snap.data!.docs
+                                      .where((d) => d.id != uid)
+                                      .toList();
+
+                              // Si hay filtro, aplicamos búsqueda local
+                              final filtered =
+                                  _filter.isEmpty
+                                      ? all
+                                      : all.where((d) {
+                                        final name =
+                                            (d['Nombre'] ?? '')
+                                                .toString()
+                                                .toLowerCase();
+                                        return name.contains(_filter);
+                                      }).toList();
+
+                              if (filtered.isEmpty) {
+                                return const Center(
+                                  child: Text("No hay usuarios"),
+                                );
+                              }
+
+                              return ListView.builder(
+                                itemCount: filtered.length,
+                                itemBuilder: (_, i) {
+                                  final doc = filtered[i];
+                                  final data =
+                                      doc.data()! as Map<String, dynamic>;
+                                  final nombre = data['Nombre'] ?? 'Usuario';
+                                  final foto = data['FotoPerfil'] ?? '';
+                                  final isSel = _selected.contains(doc.id);
+
+                                  return CheckboxListTile(
+                                    value: isSel,
+                                    onChanged: (yes) {
+                                      setStateDialog(() {
+                                        if (yes == true) {
+                                          _selected.add(doc.id);
+                                        } else {
+                                          _selected.remove(doc.id);
+                                        }
+                                      });
+                                    },
+                                    title: Row(
+                                      children: [
+                                        CircleAvatar(
+                                          backgroundImage:
+                                              foto.isNotEmpty
+                                                  ? NetworkImage(foto)
+                                                  : const AssetImage(
+                                                        'assets/images/avatar1.png',
+                                                      )
+                                                      as ImageProvider,
+                                          radius: 16,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(child: Text(nombre)),
+                                      ],
+                                    ),
+                                    controlAffinity:
+                                        ListTileControlAffinity.leading,
+                                  );
+                                },
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed:
+                      (_groupNameController.text.trim().isNotEmpty &&
+                              _selected.isNotEmpty)
+                          ? () async {
+                            final chatId =
+                                FirebaseFirestore.instance
+                                    .collection('Chats')
+                                    .doc()
+                                    .id;
+                            final now = Timestamp.now();
+
+                            String urlImagen = '';
+                            if (_imagenGrupo != null) {
+                              urlImagen = await subirImagenGrupo(
+                                _imagenGrupo!,
+                                chatId,
+                              );
+                            }
+
+                            await FirebaseFirestore.instance
+                                .collection('Chats')
+                                .doc(chatId)
+                                .set({
+                                  'ids': [uid, ..._selected],
+                                  'isGroup': true,
+                                  'groupName': _groupNameController.text.trim(),
+                                  'groupPhoto': urlImagen,
+                                  'createdBy': uid,
+                                  'lastMessage': '',
+                                  'lastMessageAt': now,
+                                  'typing': {
+                                    for (var u in [uid, ..._selected]) u: false,
+                                  },
+                                  'unreadCounts': {
+                                    for (var u in [uid, ..._selected]) u: 0,
+                                  },
+                                });
+
+                            for (final miembro in _selected) {
+                              await NotificationService.crearNotificacion(
+                                uidDestino: miembro,
+                                tipo: 'grupo',
+                                titulo: 'Nuevo grupo creado',
+                                contenido:
+                                    '$nombreUsuario te ha agregado al grupo "${_groupNameController.text.trim()}"',
+                                referenciaId: chatId,
+                                uidEmisor: uid,
+                                nombreEmisor: nombreUsuario ?? 'Usuario',
+                              );
+                            }
+
+                            if (!mounted) return;
+                            Navigator.pop(context);
+                            setState(() {
+                              chatIdSeleccionado = chatId;
+                              otroUid = null;
+                              _showList = false;
+                            });
+                          }
+                          : null,
+                  child: const Text('Crear'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -705,6 +844,21 @@ class _ChatHomePageState extends State<ChatHomePage> {
               return const ShimmerChatTile();
             }
 
+            final String? creatorId = data['createdBy'] as String?;
+            final String creatorName =
+                (creatorId != null && cacheUsuarios.containsKey(creatorId))
+                    ? cacheUsuarios[creatorId]!['nombre']!
+                    : 'Usuario';
+
+            final String preview;
+            if ((data['lastMessage'] as String?)?.trim().isNotEmpty == true) {
+              preview = data['lastMessage'] as String;
+            } else if (isGroup) {
+              preview = '$creatorName ha creado el grupo';
+            } else {
+              preview = '— sin mensajes —';
+            }
+
             final String title =
                 isGroup
                     ? (data['groupName'] as String? ??
@@ -746,13 +900,29 @@ class _ChatHomePageState extends State<ChatHomePage> {
                               as ImageProvider,
                 ),
                 title: Text(title, style: const TextStyle(color: Colors.white)),
-                subtitle: Text(
-                  data['lastMessage'] != null
-                      ? (data['lastMessage'] as String)
-                      : '— sin mensajes —',
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                subtitle: Row(
+                  children: [
+                    if (preview.contains('ha creado el grupo')) ...[
+                      const Icon(
+                        Icons.group_add,
+                        size: 14,
+                        color: Colors.white70,
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                    Expanded(
+                      child: Text(
+                        preview,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+
                 trailing: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
