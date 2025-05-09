@@ -1,5 +1,6 @@
 export 'package:study_connect/utils/calcular_promedio.dart';
 export 'package:study_connect/utils/preparar_latex.dart';
+export 'package:study_connect/utils/preparar_latex_seguro.dart';
 export 'package:study_connect/utils/custom_snackbar.dart';
 export 'package:study_connect/utils/show_custom_dialog.dart';
 export 'package:study_connect/utils/custom_snack_close_dialog.dart';

@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:study_connect/utils/utils.dart';
 import 'package:study_connect/widgets/exercise_carousel.dart';
+
+import '../widgets/widgets.dart';
 
 class ExerciseUploadPage extends StatefulWidget {
   const ExerciseUploadPage({super.key});
@@ -86,11 +89,15 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
         '${_temaSeleccionado}_${(snapshot.docs.length + 1).toString().padLeft(2, '0')}';
     final versionId = 'Version_01';
 
-    final pasos =
+    final pasosLimpios =
         _stepsControllers
-            .map((step) => step['latex'].text.trim())
+            .map((step) {
+              final rawInput = step['latex'].text;
+              return prepararLaTeXSeguro(rawInput);
+            })
             .where((p) => p.isNotEmpty)
             .toList();
+
     final descripciones =
         _stepsControllers
             .map((step) => step['desc'].text.trim())
@@ -123,7 +130,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
         'Descripcion': descripcion,
         'Fecha': now,
         'AutorId': user?.uid ?? '',
-        'PasosEjer': pasos,
+        'PasosEjer': pasosLimpios,
         'DescPasos': descripciones,
       });
 
@@ -534,7 +541,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'Vista previa (LaTeX):',
+                          'Vista previa (Título):',
                           style: TextStyle(color: Colors.white),
                         ),
                         Container(
@@ -544,19 +551,44 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Math.tex(
-                              _titleController.text.trim().isEmpty
-                                  ? r'\text{Escribe un título para mostrarlo aquí}'
-                                  : _titleController.text.trim().replaceAll(
-                                    ' ',
-                                    r'\ ',
+                          child: Builder(
+                            builder: (_) {
+                              final raw = _titleController.text;
+                              final isPlain =
+                                  raw.trim().isNotEmpty &&
+                                  !RegExp(r'[\\\^\_\{\}]').hasMatch(raw);
+
+                              if (raw.trim().isEmpty) {
+                                return Text(
+                                  'Escribe un título aquí',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontStyle: FontStyle.italic,
+                                    color: Colors.grey.shade600,
                                   ),
-                              textStyle: const TextStyle(fontSize: 16),
-                            ),
+                                );
+                              } else if (isPlain) {
+                                return Text(
+                                  raw,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.black87,
+                                  ),
+                                );
+                              } else {
+                                return SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: CustomLatexText(
+                                    contenido: raw,
+                                    fontSize: 16,
+                                    color: Colors.black87,
+                                  ),
+                                );
+                              }
+                            },
                           ),
                         ),
+
                         const SizedBox(height: 16),
                         const Text(
                           'Descripción',
@@ -576,7 +608,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'Vista previa (LaTeX):',
+                          'Vista previa (Descripción):',
                           style: TextStyle(color: Colors.white),
                         ),
                         Container(
@@ -586,18 +618,20 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Math.tex(
-                              _descriptionController.text.trim().isEmpty
-                                  ? r'\text{Escribe una descripción para mostrarla aquí}'
-                                  : _descriptionController.text
-                                      .trim()
-                                      .replaceAll(' ', r'\ '),
-                              textStyle: const TextStyle(fontSize: 14),
+                          child: Text(
+                            _descriptionController.text.isEmpty
+                                ? 'Escribe una descripción aquí'
+                                : dividirDescripcionEnLineas(
+                                  _descriptionController.text,
+                                ),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.black87,
+                              height: 1.4,
                             ),
                           ),
                         ),
+
                         const SizedBox(height: 14),
                         Center(
                           child: ClipRRect(
@@ -790,12 +824,44 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                                       color: Colors.grey.shade300,
                                     ),
                                   ),
-                                  child: Math.tex(
-                                    step['latex'].text.isEmpty
-                                        ? r'\text{Escribe una expresión para verla aquí}'
-                                        : step['latex'].text,
-                                    mathStyle: MathStyle.display,
-                                    textStyle: const TextStyle(fontSize: 18),
+                                  child: Builder(
+                                    builder: (context) {
+                                      final rawInput = step['latex'].text;
+                                      // Detectar “solo texto” (sin comandos LaTeX)
+                                      final isPlainText =
+                                          rawInput.trim().isNotEmpty &&
+                                          !RegExp(
+                                            r'[\\\^\_\{\}]',
+                                          ).hasMatch(rawInput);
+
+                                      if (rawInput.trim().isEmpty) {
+                                        return Text(
+                                          'Escribe una expresión para verla aquí',
+                                          style: TextStyle(
+                                            fontStyle: FontStyle.italic,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        );
+                                      } else if (isPlainText) {
+                                        return Text(
+                                          rawInput,
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            color: Colors.black87,
+                                            height: 1.4,
+                                          ),
+                                        );
+                                      } else {
+                                        return SingleChildScrollView(
+                                          scrollDirection: Axis.horizontal,
+                                          child: CustomLatexText(
+                                            contenido: rawInput,
+                                            fontSize: 20,
+                                            color: Colors.black87,
+                                          ),
+                                        );
+                                      }
+                                    },
                                   ),
                                 ),
                               ],

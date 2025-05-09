@@ -12,6 +12,7 @@ import 'dart:html' as html;
 import '../services/services.dart';
 import '../utils/utils.dart';
 import '../widgets/widgets.dart';
+import 'package:study_connect/config/secrets.dart';
 
 class UploadMaterialPage extends StatefulWidget {
   const UploadMaterialPage({super.key});
@@ -96,13 +97,11 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
     final videoId =
         Uri.parse(url).queryParameters['v'] ?? Uri.parse(url).pathSegments.last;
 
-    final apiKey = 'AIzaSyAtBdlPLuf0Ctf4wDu7q6jzL3icUiUt7MM';
     final apiUrl =
-        'https://www.googleapis.com/youtube/v3/videos?part=snippet&id=$videoId&key=$apiKey';
+        'https://www.googleapis.com/youtube/v3/videos?part=snippet&id=$videoId&key=$youtubeApiKey';
 
     try {
       final response = await http.get(Uri.parse(apiUrl));
-
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
         final items = json['items'];
@@ -322,52 +321,26 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
     }
   }
 
-  Future<void> _seleccionarArchivoAvanzado() async {
+  Future<void> _seleccionarArchivoPorExtension(
+    List<String> extensiones,
+    String tipo,
+  ) async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
-      allowMultiple: true,
+      allowMultiple: false,
       type: FileType.custom,
-      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'mp3', 'mp4'],
+      allowedExtensions: extensiones,
     );
 
-    if (result != null) {
-      int archivosIgnorados = 0;
-
-      for (var file in result.files) {
-        final ext = (file.extension ?? '').toLowerCase();
-        String? tipo;
-
-        if (ext == 'pdf')
-          tipo = 'pdf';
-        else if (['jpg', 'jpeg', 'png'].contains(ext))
-          tipo = 'image';
-        else if (ext == 'mp3')
-          tipo = 'audio';
-        else if (ext == 'mp4')
-          tipo = 'video';
-
-        if (tipo != null) {
-          setState(() {
-            _archivos.add({
-              'nombre': file.name,
-              'bytes': file.bytes,
-              'extension': ext,
-              'tipo': tipo,
-            });
-          });
-        } else {
-          archivosIgnorados++;
-        }
-      }
-
-      // Mostrar advertencia si hubo archivos no válidos
-      if (archivosIgnorados > 0) {
-        showCustomSnackbar(
-          context: context,
-          message:
-              '⚠️ $archivosIgnorados archivo(s) no permitidos fueron ignorados.',
-          success: false,
-        );
-      }
+    if (result != null && result.files.isNotEmpty) {
+      final file = result.files.first;
+      setState(() {
+        _archivos.add({
+          'nombre': file.name,
+          'bytes': file.bytes,
+          'extension': file.extension ?? '',
+          'tipo': tipo,
+        });
+      });
     }
   }
 
@@ -616,22 +589,50 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
                   alignment: WrapAlignment.center,
                   children: [
                     CustomActionButton(
-                      text: 'Agregar Archivos',
-                      icon: Icons.attach_file,
-                      onPressed: _seleccionarArchivoAvanzado,
-                      backgroundColor: Colors.teal.shade700,
+                      text: 'Agregar PDF',
+                      icon: Icons.picture_as_pdf,
+                      backgroundColor: Colors.red.shade600,
+                      onPressed:
+                          () => _seleccionarArchivoPorExtension(['pdf'], 'pdf'),
+                    ),
+                    CustomActionButton(
+                      text: 'Agregar Imagen',
+                      icon: Icons.image,
+                      backgroundColor: Colors.blue.shade700,
+                      onPressed:
+                          () => _seleccionarArchivoPorExtension([
+                            'jpg',
+                            'jpeg',
+                            'png',
+                          ], 'image'),
+                    ),
+                    CustomActionButton(
+                      text: 'Agregar Video',
+                      icon: Icons.videocam,
+                      backgroundColor: Colors.deepOrange.shade700,
+                      onPressed:
+                          () =>
+                              _seleccionarArchivoPorExtension(['mp4'], 'video'),
+                    ),
+                    CustomActionButton(
+                      text: 'Agregar Audio',
+                      icon: Icons.audiotrack,
+                      backgroundColor: Colors.purple.shade800,
+                      onPressed:
+                          () =>
+                              _seleccionarArchivoPorExtension(['mp3'], 'audio'),
                     ),
                     CustomActionButton(
                       text: 'Agregar Enlace',
                       icon: Icons.link,
-                      onPressed: _agregarEnlace,
                       backgroundColor: Colors.green.shade700,
+                      onPressed: _agregarEnlace,
                     ),
                     CustomActionButton(
                       text: 'Agregar Nota',
                       icon: Icons.notes,
+                      backgroundColor: Colors.indigo.shade700,
                       onPressed: _agregarNota,
-                      backgroundColor: Colors.purple.shade700,
                     ),
                   ],
                 ),
@@ -668,17 +669,17 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
                 //   ],
                 // ),
                 const SizedBox(height: 20),
-                TextField(
-                  controller: _notaController,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    hintText: 'Escribe una nota para agregarla...',
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 20),
+                // TextField(
+                //   controller: _notaController,
+                //   maxLines: 3,
+                //   decoration: const InputDecoration(
+                //     hintText: 'Escribe una nota para agregarla...',
+                //     filled: true,
+                //     fillColor: Colors.white,
+                //     border: OutlineInputBorder(),
+                //   ),
+                // ),
+                // const SizedBox(height: 20),
                 const Align(
                   alignment: Alignment.centerLeft,
                   child: Text(

@@ -53,7 +53,9 @@ class ContentPage extends StatelessWidget {
           ),
           const NotificationIconWidget(),
           TextButton(
-            onPressed: () {},
+            onPressed: () {
+              Navigator.pushNamed(context, '/user_profile');
+            },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(

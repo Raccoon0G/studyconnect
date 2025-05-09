@@ -93,11 +93,19 @@ class CustomExpansionTileComentarios extends StatelessWidget {
                       ),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: Colors.blueGrey.shade100,
-                          child: const Icon(
-                            Icons.person,
-                            color: Colors.black87,
-                          ),
+                          backgroundColor: Colors.grey.shade200,
+                          radius: 24,
+                          backgroundImage:
+                              c['fotoUrl'] != null && c['nombre'] != 'Anónimo'
+                                  ? NetworkImage(c['fotoUrl'])
+                                  : null,
+                          child:
+                              (c['fotoUrl'] == null || c['nombre'] == 'Anónimo')
+                                  ? const Icon(
+                                    Icons.person,
+                                    color: Colors.black54,
+                                  )
+                                  : null,
                         ),
                         title: LayoutBuilder(
                           builder: (context, constraints) {

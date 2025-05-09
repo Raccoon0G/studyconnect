@@ -12,10 +12,9 @@ import 'package:http/http.dart' as http;
 import 'package:screenshot/screenshot.dart';
 import 'package:intl/intl.dart';
 
-import 'package:study_connect/services/notification_service.dart';
 import 'package:study_connect/widgets/widgets.dart';
 import 'package:study_connect/utils/utils.dart';
-import 'package:youtube_explode_dart/youtube_explode_dart.dart';
+import 'package:study_connect/config/secrets.dart';
 
 class MaterialViewPage extends StatefulWidget {
   final String tema;
@@ -169,8 +168,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         await doc.reference.delete();
       }
 
-      await _cargarComentarios();
-      await _cargarDatosDesdeFirestore();
+      await _cargarTodo(); // recarga TODO (material + comentarios)
 
       // 🎯 Mostrar SnackBar bonito
       if (mounted) {
@@ -222,75 +220,50 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         docRef.get(),
         FirebaseFirestore.instance
             .collection('comentarios_materiales')
-            .where('materialId', isEqualTo: widget.materialId)
             .where('tema', isEqualTo: widget.tema)
+            .where('materialId', isEqualTo: widget.materialId)
             .orderBy('timestamp', descending: true)
             .get(),
+        docRef.collection('Versiones').orderBy('Fecha', descending: true).get(),
       ]);
 
-      final doc = results[0] as DocumentSnapshot<Map<String, dynamic>>;
+      final docSnap = results[0] as DocumentSnapshot<Map<String, dynamic>>;
       final comentariosSnap = results[1] as QuerySnapshot<Map<String, dynamic>>;
+      final versionesSnap = results[2] as QuerySnapshot<Map<String, dynamic>>;
 
-      if (!doc.exists) {
-        throw Exception('No se encontró el material.');
-      }
-
-      final data = doc.data();
-      final versionId = data?['versionActual'];
-
-      Map<String, dynamic> versionData = {};
-      if (versionId != null) {
-        final versionDoc =
-            await docRef.collection('Versiones').doc(versionId).get();
-        versionData = versionDoc.data() ?? {};
-      }
-
-      final versionesSnap =
-          await docRef
-              .collection('Versiones')
-              .orderBy('Fecha', descending: true)
-              .get();
+      if (!docSnap.exists) throw Exception('Material no encontrado');
 
       setState(() {
-        materialData = data;
+        // datos
+        materialData = docSnap.data()!;
+
+        // comentarios
+        comentarios = comentariosSnap.docs.map((d) => d.data()).toList();
+
+        // versiones ➡️ mapeamos id + fecha
         versiones =
             versionesSnap.docs
-                .map((d) => {'id': d.id, 'fecha': d['Fecha']})
+                .map((d) => {'id': d.id, 'fecha': d['Fecha'] as Timestamp})
                 .toList();
-        versionSeleccionada = versionId;
-        comentarios = comentariosSnap.docs.map((e) => e.data()).toList();
-        pasos = List<String>.from(versionData['PasosEjer'] ?? []);
-        descripciones = List<String>.from(versionData['DescPasos'] ?? []);
+
+        // valor inicial del dropdown
+        versionSeleccionada =
+            versiones.isNotEmpty ? versiones.first['id'] : null;
       });
     } catch (e) {
       _mostrarError('Error al cargar datos', e.toString());
     }
   }
 
-  // Future<String?> obtenerTituloVideoYoutube(String url) async {
-  //   final yt = YoutubeExplode();
-  //   try {
-  //     final video = await yt.videos.get(url);
-  //     return video.title;
-  //   } catch (e) {
-  //     print('Error al obtener el título del video: $e');
-  //     return null;
-  //   } finally {
-  //     yt.close();
-  //   }
-  // }
-
   Future<String?> obtenerTituloVideoYoutube(String url) async {
     final videoId =
         Uri.parse(url).queryParameters['v'] ?? Uri.parse(url).pathSegments.last;
 
-    final apiKey = 'AIzaSyAtBdlPLuf0Ctf4wDu7q6jzL3icUiUt7MM';
     final apiUrl =
-        'https://www.googleapis.com/youtube/v3/videos?part=snippet&id=$videoId&key=$apiKey';
+        'https://www.googleapis.com/youtube/v3/videos?part=snippet&id=$videoId&key=$youtubeApiKey';
 
     try {
       final response = await http.get(Uri.parse(apiUrl));
-
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
         final items = json['items'];
@@ -492,7 +465,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
   Widget _columnaIzquierda({
     required Map<String, dynamic> ejercicioData,
     required String tema,
-    required String ejercicioId,
+    required String materialId,
     required List<Map<String, dynamic>> versiones,
     required String? versionSeleccionada,
     required List<Map<String, dynamic>> comentarios,
@@ -542,7 +515,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
           const SizedBox(height: 8),
           InfoWithIcon(
             icon: Icons.assignment,
-            text: 'Ejercicio: $ejercicioId',
+            text: 'Ejercicio: $materialId',
             alignment: MainAxisAlignment.center,
             iconAlignment: Alignment.center,
             textColor: Colors.white,
@@ -875,46 +848,34 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
   }
 
   void _mostrarDialogoCalificacion() {
-    final TextEditingController controller = TextEditingController();
+    final controller = TextEditingController();
     bool enviando = false;
-
-    int rating = 0; //
+    int rating = 0;
     bool comoAnonimo = false;
 
-    showGeneralDialog(
+    showDialog(
       context: context,
       barrierDismissible: true,
-      barrierLabel: "Cerrar",
-      transitionDuration: const Duration(milliseconds: 400),
-      pageBuilder: (context, animation, secondaryAnimation) {
-        return const SizedBox();
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        final curvedValue = Curves.easeInOut.transform(animation.value);
-        return Opacity(
-          opacity: animation.value,
-          child: Transform.translate(
-            offset: Offset(0, (1 - curvedValue) * 100),
-            child: StatefulBuilder(
-              builder: (context, setStateDialog) {
-                return AlertDialog(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  contentPadding: const EdgeInsets.all(24),
-                  content: _buildContenidoDialogo(
-                    controller,
-                    () => comoAnonimo, //  lo pasamos como función getter
-                    (val) => setStateDialog(() => comoAnonimo = val),
-                    () => rating,
-                    (val) => setStateDialog(() => rating = val),
-                    enviando,
-                    (val) => setStateDialog(() => enviando = val),
-                  ),
-                );
-              },
-            ),
-          ),
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              contentPadding: const EdgeInsets.all(24),
+              content: _buildContenidoDialogo(
+                controller,
+                () => comoAnonimo,
+                (v) => setStateDialog(() => comoAnonimo = v),
+                () => rating,
+                (v) => setStateDialog(() => rating = v),
+                enviando,
+                (v) => setStateDialog(() => enviando = v),
+                dialogContext,
+              ),
+            );
+          },
         );
       },
     );
@@ -928,20 +889,21 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     void Function(int) setRating,
     bool enviando,
     void Function(bool) setEnviando,
+    BuildContext dialogContext, // <-- recibirlo aquí
   ) {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 500),
       child: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Cabecera
             Row(
               children: [
                 Expanded(
                   child: Text(
-                    'Califica este ejercicio',
+                    'Califica este material',
                     style: GoogleFonts.ebGaramond(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -951,17 +913,21 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
                 ),
               ],
             ),
             const SizedBox(height: 12),
+
+            // Rating
             CustomRatingWidget(
               rating: getRating(),
-              onRatingChanged: (nuevoValor) => setRating(nuevoValor),
+              onRatingChanged: (v) => setRating(v),
               enableHoverEffect: true,
             ),
             const SizedBox(height: 12),
+
+            // Comentario
             TextField(
               controller: controller,
               decoration: const InputDecoration(
@@ -971,65 +937,23 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
               maxLines: 2,
             ),
             const SizedBox(height: 12),
+
+            // Anónimo
             CheckboxListTile(
               value: getComoAnonimo(),
-              onChanged: (val) {
-                if (val != null) setComoAnonimo(val);
-              },
+              onChanged: (v) => setComoAnonimo(v ?? false),
               title: const Text('Comentar como anónimo'),
               controlAffinity: ListTileControlAffinity.leading,
               contentPadding: EdgeInsets.zero,
             ),
             const SizedBox(height: 16),
 
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF6F3FA),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 6,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: DropdownButtonFormField<String>(
-                value: versionSeleccionada,
-                isExpanded: true,
-                items:
-                    versiones.map((ver) {
-                      final fecha = (ver['fecha'] as Timestamp?)?.toDate();
-                      final formatted =
-                          fecha != null
-                              ? DateFormat('dd/MM/yyyy').format(fecha)
-                              : 'Sin fecha';
-                      return DropdownMenuItem<String>(
-                        value: ver['id'],
-                        child: Text('Versión ${ver['id']} - $formatted'),
-                      );
-                    }).toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => versionSeleccionada = value);
-                  }
-                },
-                decoration: const InputDecoration.collapsed(
-                  hintText: 'Seleccionar versión',
-                ),
-                dropdownColor: Colors.white,
-              ),
-            ),
-
-            const SizedBox(height: 16),
+            // Botones
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
                   child: const Text('Cancelar'),
                 ),
                 const SizedBox(width: 8),
@@ -1038,10 +962,11 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                       enviando
                           ? null
                           : () async {
+                            // 1) Validación: si faltan campos, muestro el diálogo y salgo:
                             if (controller.text.trim().isEmpty ||
                                 getRating() == 0) {
-                              showCustomDialog(
-                                context: context,
+                              await showCustomDialog(
+                                context: dialogContext, // contexto del diálogo
                                 titulo: 'Campos incompletos',
                                 mensaje:
                                     'Por favor escribe un comentario y selecciona una calificación.',
@@ -1062,19 +987,27 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                                   ),
                                 ],
                               );
-
-                              return;
+                              return; // 2) aquí terminamos el onPressed sin seguir adelante
                             }
 
+                            // 3) Si pasa la validación, enviamos el comentario:
                             setEnviando(true);
                             await _enviarComentario(
-                              controller.text
-                                  .trim(), // hacer trim sirve para eliminar espacios en blanco al inicio y al final
+                              controller.text.trim(),
                               getRating(),
                               getComoAnonimo(),
                             );
                             setEnviando(false);
-                            Navigator.pop(context);
+
+                            // 4) Cerramos el diálogo de calificación:
+                            Navigator.of(dialogContext).pop();
+
+                            // 5) Y finalmente mostramos el snackbar de éxito:
+                            showCustomSnackbar(
+                              context: context,
+                              message: '✅ Comentario enviado exitosamente.',
+                              success: true,
+                            );
                           },
                   icon:
                       enviando
@@ -1110,14 +1043,23 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
             .collection('usuarios')
             .doc(user.uid)
             .get();
+
+    final nombreUsuario = comoAnonimo ? 'Anónimo' : userData['Nombre'];
+    // Aquí obtenemos la URL de la foto (o null si no hay)
+    final fotoUrl =
+        (!comoAnonimo)
+            ? (userData.data()?['FotoPerfil'] as String?) ?? user.photoURL
+            : null;
+
     final comentario = {
       'usuarioId': user.uid,
-      'nombre': comoAnonimo ? 'Anónimo' : userData['Nombre'],
+      'nombre': nombreUsuario,
+      'fotoUrl': fotoUrl, // <-- nueva propiedad
       'comentario': texto,
       'estrellas': rating,
       'timestamp': Timestamp.now(),
       'tema': widget.tema,
-      'ejercicioId': widget.materialId,
+      'materialId': widget.materialId,
       'modificado': false,
     };
 
@@ -1128,11 +1070,12 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     final calSnap =
         await FirebaseFirestore.instance
             .collection('comentarios_materiales')
-            .where('ejercicioId', isEqualTo: widget.materialId)
+            .where('materialId', isEqualTo: widget.materialId)
             .where('tema', isEqualTo: widget.tema)
             .get();
 
     final ratings = calSnap.docs.map((d) => d['estrellas'] as int).toList();
+
     double promedio = 0.0;
     if (ratings.isNotEmpty) {
       promedio = ratings.reduce((a, b) => a + b) / ratings.length;
@@ -1265,7 +1208,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                           child: _columnaIzquierda(
                             ejercicioData: materialData ?? {},
                             tema: widget.tema,
-                            ejercicioId: widget.materialId,
+                            materialId: widget.materialId,
                             versiones: versiones,
                             versionSeleccionada: versionSeleccionada,
                             comentarios: comentarios,
@@ -1299,7 +1242,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                           child: _columnaIzquierda(
                             ejercicioData: materialData ?? {},
                             tema: widget.tema,
-                            ejercicioId: widget.materialId,
+                            materialId: widget.materialId,
                             versiones: versiones,
                             versionSeleccionada: versionSeleccionada,
                             comentarios: comentarios,

@@ -519,29 +519,31 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                     builder: (context) {
                       // aquí recibes el context
                       try {
-                        final pasoLatex = prepararLaTeX(pasos[i]);
-                        final descLatex =
-                            (i < descripciones.length)
-                                ? prepararLaTeX(descripciones[i])
-                                : '';
-
-                        final mostrarAmbos = pasoLatex != descLatex;
+                        // 1) Solo tomo el raw de Firestore, sin sanitizar para la descripción:
+                        final descText =
+                            (i < descripciones.length) ? descripciones[i] : '';
+                        // 2) Aquí sí aplico sanitizer / preview solo para la fórmula:
+                        final pasoLatex = pasos[i];
 
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (descLatex.isNotEmpty)
-                              SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: CustomLatexText(
-                                  contenido: descLatex,
-                                  fontSize: 20,
-                                  color: Colors.black,
+                            // ––––– Descripción como texto normal –––––
+                            if (descText.trim().isNotEmpty) ...[
+                              Text(
+                                // si guardaste "\ " en los datos, conviérelos de vuelta
+                                descText.replaceAll(r'\ ', ' '),
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  color: Colors.black87,
+                                  height: 1.4,
                                 ),
                               ),
-                            if (mostrarAmbos && pasoLatex.isNotEmpty)
-                              const SizedBox(height: 10),
-                            if (mostrarAmbos && pasoLatex.isNotEmpty)
+                              const SizedBox(height: 12),
+                            ],
+
+                            // ––––– Fórmula LaTeX –––––
+                            if (pasoLatex.trim().isNotEmpty) ...[
                               SingleChildScrollView(
                                 scrollDirection: Axis.horizontal,
                                 child: CustomLatexText(
@@ -550,13 +552,12 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                                   color: Colors.black87,
                                 ),
                               ),
-                            if (pasoLatex.isNotEmpty)
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton.icon(
-                                  onPressed: () async {
-                                    await Clipboard.setData(
-                                      ClipboardData(text: pasos[i]),
+                                  onPressed: () {
+                                    Clipboard.setData(
+                                      ClipboardData(text: pasoLatex),
                                     );
                                     showCustomSnackbar(
                                       context: context,
@@ -568,6 +569,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                                   label: const Text('Copiar LaTeX'),
                                 ),
                               ),
+                            ],
                           ],
                         );
                       } catch (e) {
@@ -876,9 +878,17 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
             .collection('usuarios')
             .doc(user.uid)
             .get();
+
+    // Aquí obtenemos la URL de la foto (o null si no hay)
+    final fotoUrl =
+        (!comoAnonimo)
+            ? (userData.data()?['FotoPerfil'] as String?) ?? user.photoURL
+            : null;
+
     final comentario = {
       'usuarioId': user.uid,
       'nombre': comoAnonimo ? 'Anónimo' : userData['Nombre'],
+      'fotoUrl': fotoUrl,
       'comentario': texto,
       'estrellas': rating,
       'timestamp': Timestamp.now(),
