@@ -41,6 +41,20 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
   List<Map<String, dynamic>> versiones = [];
   String? versionSeleccionada;
 
+  Map<String, List<Map<String, dynamic>>> agruparArchivosPorTipo(
+    List archivos,
+  ) {
+    final Map<String, List<Map<String, dynamic>>> agrupados = {};
+    for (final archivo in archivos) {
+      final tipo = archivo['tipo'] ?? 'otro';
+      if (!agrupados.containsKey(tipo)) {
+        agrupados[tipo] = [];
+      }
+      agrupados[tipo]!.add(archivo);
+    }
+    return agrupados;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -291,6 +305,190 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     }
   }
 
+  Widget _buildVistaArchivo(Map<String, dynamic> archivo) {
+    final tipo = archivo['tipo'];
+    final nombre = archivo['nombre'] ?? 'Archivo';
+    final url =
+        tipo == 'link' ? archivo['contenido'] ?? '' : archivo['url'] ?? '';
+
+    final extension = (archivo['extension'] ?? '').toString().toLowerCase();
+    final bool esPdf = extension == 'pdf';
+    final bool esMp3 = extension == 'mp3';
+    final bool esMp4 = extension == 'mp4';
+
+    if (tipo == 'pdf' || tipo == 'word' || tipo == 'excel' || tipo == 'ppt') {
+      IconData icono = Icons.insert_drive_file;
+      Color color = Colors.grey;
+
+      switch (tipo) {
+        case 'pdf':
+          icono = Icons.picture_as_pdf;
+          color = Colors.red;
+          break;
+        case 'word':
+          icono = Icons.description;
+          color = Colors.blue;
+          break;
+        case 'excel':
+          icono = Icons.table_chart;
+          color = Colors.green;
+          break;
+        case 'ppt':
+          icono = Icons.slideshow;
+          color = Colors.orange;
+          break;
+      }
+
+      return ListTile(
+        leading: Icon(icono, color: color),
+        title: Text(nombre),
+        trailing: IconButton(
+          icon: const Icon(Icons.open_in_new),
+          onPressed: () => html.window.open(url, '_blank'),
+        ),
+      );
+    }
+
+    if (tipo == 'image') {
+      return Card(
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Image.network(url, fit: BoxFit.cover),
+            ListTile(
+              leading: const Icon(Icons.image, color: Colors.blue),
+              title: Text(nombre),
+              trailing: IconButton(
+                icon: const Icon(Icons.open_in_new),
+                onPressed: () => html.window.open(url, '_blank'),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (tipo == 'video' || esMp4) {
+      final viewId = 'video-${url.hashCode}';
+      ui.platformViewRegistry.registerViewFactory(viewId, (int viewId) {
+        final video =
+            html.VideoElement()
+              ..src = url
+              ..controls = true
+              ..style.width = '100%';
+        return video;
+      });
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.videocam, color: Colors.orange),
+            title: Text(nombre),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(height: 300, child: HtmlElementView(viewType: viewId)),
+        ],
+      );
+    }
+
+    if (tipo == 'audio' || esMp3) {
+      final viewId = 'audio-${url.hashCode}';
+      ui.platformViewRegistry.registerViewFactory(viewId, (int viewId) {
+        final audio =
+            html.AudioElement()
+              ..src = url
+              ..controls = true
+              ..style.width = '100%';
+        return audio;
+      });
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.audiotrack, color: Colors.pink),
+            title: Text(nombre),
+          ),
+          const SizedBox(height: 8),
+          HtmlElementView(viewType: viewId),
+        ],
+      );
+    }
+
+    if (tipo == 'link') {
+      final isYoutube = url.contains('youtube.com') || url.contains('youtu.be');
+      if (isYoutube) {
+        final videoId =
+            Uri.parse(url).queryParameters['v'] ??
+            Uri.parse(url).pathSegments.last;
+        final thumbnailUrl = 'https://img.youtube.com/vi/$videoId/0.jpg';
+        return FutureBuilder<String?>(
+          future: obtenerTituloVideoYoutube(url),
+          builder: (context, snapshot) {
+            final tituloVideo = snapshot.data ?? 'Video de YouTube';
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Image.network(thumbnailUrl, fit: BoxFit.cover),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.play_circle_fill,
+                      color: Colors.red,
+                    ),
+                    title: Text(tituloVideo),
+                    subtitle: Text(url),
+                    trailing: ElevatedButton.icon(
+                      icon: const Icon(Icons.open_in_new),
+                      label: const Text('Ver video'),
+                      onPressed: () => html.window.open(url, '_blank'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.black,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      } else {
+        return ListTile(
+          leading: const Icon(Icons.link, color: Colors.green),
+          title: Text(url),
+          trailing: IconButton(
+            icon: const Icon(Icons.open_in_new),
+            onPressed: () => html.window.open(url, '_blank'),
+          ),
+        );
+      }
+    }
+
+    if (tipo == 'nota') {
+      return Card(
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        color: const Color(0xFFF1F8E9),
+        child: ListTile(
+          leading: const Icon(Icons.notes, color: Colors.purple),
+          title: Text(nombre),
+        ),
+      );
+    }
+
+    return ListTile(
+      leading: const Icon(Icons.insert_drive_file, color: Colors.grey),
+      title: Text(nombre),
+      trailing: IconButton(
+        icon: const Icon(Icons.open_in_new),
+        onPressed: () => html.window.open(url, '_blank'),
+      ),
+    );
+  }
+
   Widget _columnaIzquierda({
     required Map<String, dynamic> ejercicioData,
     required String tema,
@@ -465,8 +663,27 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
   }) {
     final titulo = materialData['titulo'] ?? '';
     final descripcion = materialData['descripcion'] ?? '';
-
     final List archivos = materialData['archivos'] ?? [];
+
+    final Map<String, IconData> iconosTipo = {
+      'pdf': Icons.picture_as_pdf,
+      'image': Icons.image,
+      'audio': Icons.audiotrack,
+      'video': Icons.videocam,
+      'link': Icons.link,
+      'nota': Icons.notes,
+    };
+
+    final Map<String, String> titulosTipo = {
+      'pdf': '📄 Documentos PDF',
+      'image': '🖼️ Imágenes',
+      'audio': '🎵 Audios',
+      'video': '🎬 Videos',
+      'link': '🔗 Enlaces',
+      'nota': '📝 Notas',
+    };
+
+    final agrupados = agruparArchivosPorTipo(archivos);
 
     final contenido = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -510,161 +727,110 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         const SizedBox(height: 20),
         const Divider(color: Colors.black87),
         const Text('Contenido:', style: TextStyle(fontSize: 18)),
+        const SizedBox(height: 10),
+        ...agrupados.entries.map((entry) {
+          final tipo = entry.key;
+          final lista = entry.value;
+          return ExpansionTile(
+            initiallyExpanded: true,
+            leading: Icon(iconosTipo[tipo], color: Colors.black),
+            title: Text(
+              titulosTipo[tipo] ?? tipo,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            ),
+            children:
+                lista.map<Widget>((archivo) {
+                  final nombre = archivo['nombre'] ?? 'Archivo';
+                  final url = archivo['url'] ?? archivo['contenido'] ?? '';
 
-        ...archivos.map((archivo) {
-          final tipo = archivo['tipo'];
-          final nombre = archivo['nombre'] ?? 'Archivo';
-          final url =
-              tipo == 'link'
-                  ? archivo['contenido'] ?? ''
-                  : archivo['url'] ?? '';
+                  if (tipo == 'image') {
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Image.network(url, fit: BoxFit.cover),
+                          ListTile(
+                            leading: Icon(iconosTipo[tipo]),
+                            title: Text(nombre),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.open_in_new),
+                              onPressed: () => html.window.open(url, '_blank'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
 
-          IconData icon;
-          Color color;
+                  if (tipo == 'nota') {
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 8),
+                      color: const Color(0xFFF1F8E9),
+                      child: ListTile(
+                        leading: Icon(iconosTipo[tipo]),
+                        title: Text(nombre),
+                      ),
+                    );
+                  }
 
-          // if (tipo == 'pdf') {
-          //   final viewId = 'pdf-$url';
-          //   ui.platformViewRegistry.registerViewFactory(viewId, (int viewId) {
-          //     final iframe =
-          //         html.IFrameElement()
-          //           ..src = url
-          //           ..style.border = 'none'
-          //           ..style.height = '600px'
-          //           ..style.width = '100%';
-          //     return iframe;
-          //   });
+                  final isYoutube =
+                      tipo == 'link' &&
+                      (url.contains('youtube.com') || url.contains('youtu.be'));
 
-          //   return Column(
-          //     crossAxisAlignment: CrossAxisAlignment.start,
-          //     children: [
-          //       ListTile(
-          //         leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
-          //         title: Text(nombre),
-          //         trailing: IconButton(
-          //           icon: const Icon(Icons.open_in_new),
-          //           onPressed: () => html.window.open(url, '_blank'),
-          //         ),
-          //       ),
-          //       const SizedBox(height: 12),
-          //       SizedBox(height: 600, child: HtmlElementView(viewType: viewId)),
-          //     ],
-          //   );
-          // }
-          if (tipo == 'pdf') {
-            icon = Icons.picture_as_pdf;
-            color = Colors.red;
-          } else if (tipo == 'image') {
-            return Card(
-              margin: const EdgeInsets.symmetric(vertical: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Image.network(url, fit: BoxFit.cover),
-                  ListTile(
-                    leading: const Icon(Icons.image, color: Colors.blue),
+                  if (isYoutube) {
+                    return FutureBuilder<String?>(
+                      future: obtenerTituloVideoYoutube(url),
+                      builder: (context, snapshot) {
+                        final tituloVideo = snapshot.data ?? 'Video de YouTube';
+                        final videoId =
+                            Uri.parse(url).queryParameters['v'] ??
+                            Uri.parse(url).pathSegments.last;
+                        final thumbnailUrl =
+                            'https://img.youtube.com/vi/$videoId/0.jpg';
+
+                        return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Image.network(thumbnailUrl, fit: BoxFit.cover),
+                              ListTile(
+                                leading: const Icon(
+                                  Icons.play_circle_fill,
+                                  color: Colors.red,
+                                ),
+                                title: Text(tituloVideo),
+                                subtitle: Text(url),
+                                trailing: ElevatedButton.icon(
+                                  icon: const Icon(Icons.open_in_new),
+                                  label: const Text('Ver video'),
+                                  onPressed:
+                                      () => html.window.open(url, '_blank'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.black,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  }
+
+                  return ListTile(
+                    leading: Icon(iconosTipo[tipo], color: Colors.grey[800]),
                     title: Text(nombre),
                     trailing: IconButton(
                       icon: const Icon(Icons.open_in_new),
                       onPressed: () => html.window.open(url, '_blank'),
                     ),
-                  ),
-                ],
-              ),
-            );
-          } else if (tipo == 'video') {
-            icon = Icons.videocam;
-            color = Colors.orange;
-          } else if (tipo == 'link') {
-            icon = Icons.link;
-            color = Colors.green;
-          } else if (tipo == 'nota') {
-            return Card(
-              margin: const EdgeInsets.symmetric(vertical: 8),
-              color: const Color(0xFFF1F8E9),
-              child: ListTile(
-                leading: const Icon(Icons.notes, color: Colors.purple),
-                title: Text(nombre),
-              ),
-            );
-          } else {
-            icon = Icons.insert_drive_file;
-            color = Colors.grey;
-          }
-
-          final isYoutube =
-              tipo == 'link' &&
-              (url.contains('youtube.com') || url.contains('youtu.be'));
-
-          if (isYoutube) {
-            return FutureBuilder<String?>(
-              future: obtenerTituloVideoYoutube(url),
-              builder: (context, snapshot) {
-                final tituloVideo = snapshot.data ?? 'Video de YouTube';
-                final videoId =
-                    Uri.parse(url).queryParameters['v'] ??
-                    Uri.parse(url).pathSegments.last;
-                final thumbnailUrl =
-                    'https://img.youtube.com/vi/$videoId/0.jpg';
-
-                return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Image.network(thumbnailUrl, fit: BoxFit.cover),
-                      ListTile(
-                        leading: const Icon(
-                          Icons.play_circle_fill,
-                          color: Colors.red,
-                        ),
-                        title: Text(tituloVideo),
-                        subtitle: Text(url),
-                        trailing: ElevatedButton.icon(
-                          icon: const Icon(Icons.open_in_new),
-                          label: const Text('Ver video'),
-                          onPressed: () => html.window.open(url, '_blank'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black,
-                            foregroundColor: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            );
-          }
-
-          return ListTile(
-            leading: Icon(icon, color: color),
-            title: Text(
-              tipo == 'link'
-                  ? '$nombre (enlace)'
-                  : tipo == 'nota'
-                  ? '$nombre (nota)'
-                  : nombre,
-            ),
-            trailing:
-                tipo != 'nota'
-                    ? IconButton(
-                      icon: const Icon(Icons.open_in_new),
-                      onPressed: () {
-                        if (url.isNotEmpty) {
-                          html.window.open(url, '_blank');
-                        } else {
-                          showCustomSnackbar(
-                            context: context,
-                            message: '❌ Enlace no válido o vacío.',
-                            success: false,
-                          );
-                        }
-                      },
-                    )
-                    : null,
+                  );
+                }).toList(),
           );
         }).toList(),
-
         const SizedBox(height: 20),
         CustomExpansionTileComentarios(
           comentarios: comentarios,

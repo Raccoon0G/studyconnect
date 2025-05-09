@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
 import 'dart:typed_data';
 import 'dart:html' as html;
 import '../services/services.dart';
@@ -86,6 +89,31 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
       setState(() {
         _nombreUsuario = doc['Nombre'] ?? 'Usuario';
       });
+    }
+  }
+
+  Future<String?> obtenerTituloVideoYoutube(String url) async {
+    final videoId =
+        Uri.parse(url).queryParameters['v'] ?? Uri.parse(url).pathSegments.last;
+
+    final apiKey = 'AIzaSyAtBdlPLuf0Ctf4wDu7q6jzL3icUiUt7MM';
+    final apiUrl =
+        'https://www.googleapis.com/youtube/v3/videos?part=snippet&id=$videoId&key=$apiKey';
+
+    try {
+      final response = await http.get(Uri.parse(apiUrl));
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        final items = json['items'];
+        if (items != null && items.isNotEmpty) {
+          return items[0]['snippet']['title'];
+        }
+      }
+      return null;
+    } catch (e) {
+      print('Error al obtener título del video: $e');
+      return null;
     }
   }
 
@@ -294,27 +322,52 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
     }
   }
 
-  Future<void> _seleccionarArchivo(String tipo) async {
+  Future<void> _seleccionarArchivoAvanzado() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type:
-          tipo == 'pdf'
-              ? FileType.custom
-              : tipo == 'image'
-              ? FileType.image
-              : FileType.media,
-      allowedExtensions: tipo == 'pdf' ? ['pdf'] : null,
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'mp3', 'mp4'],
     );
 
     if (result != null) {
-      final file = result.files.first;
-      setState(() {
-        _archivos.add({
-          'nombre': file.name,
-          'bytes': file.bytes,
-          'extension': file.extension,
-          'tipo': tipo,
-        });
-      });
+      int archivosIgnorados = 0;
+
+      for (var file in result.files) {
+        final ext = (file.extension ?? '').toLowerCase();
+        String? tipo;
+
+        if (ext == 'pdf')
+          tipo = 'pdf';
+        else if (['jpg', 'jpeg', 'png'].contains(ext))
+          tipo = 'image';
+        else if (ext == 'mp3')
+          tipo = 'audio';
+        else if (ext == 'mp4')
+          tipo = 'video';
+
+        if (tipo != null) {
+          setState(() {
+            _archivos.add({
+              'nombre': file.name,
+              'bytes': file.bytes,
+              'extension': ext,
+              'tipo': tipo,
+            });
+          });
+        } else {
+          archivosIgnorados++;
+        }
+      }
+
+      // Mostrar advertencia si hubo archivos no válidos
+      if (archivosIgnorados > 0) {
+        showCustomSnackbar(
+          context: context,
+          message:
+              '⚠️ $archivosIgnorados archivo(s) no permitidos fueron ignorados.',
+          success: false,
+        );
+      }
     }
   }
 
@@ -404,27 +457,33 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
 
   Widget _buildArchivoPreview(Map<String, dynamic> archivo) {
     final tipo = archivo['tipo'];
+    final nombre = archivo['nombre'] ?? '';
+    final extension = (archivo['extension'] ?? '').toString().toLowerCase();
 
-    if (tipo == 'pdf') {
+    if (extension == 'pdf') {
       return ListTile(
         leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
-        title: Text(archivo['nombre']),
+        title: Text(nombre),
+      );
+    } else if (extension == 'mp3') {
+      return ListTile(
+        leading: const Icon(Icons.audiotrack, color: Colors.purple),
+        title: Text('$nombre (Audio MP3)'),
+      );
+    } else if (extension == 'mp4') {
+      return ListTile(
+        leading: const Icon(Icons.movie, color: Colors.deepOrange),
+        title: Text('$nombre (Video MP4)'),
       );
     } else if (tipo == 'image') {
       return ListTile(
         leading: const Icon(Icons.image, color: Colors.blue),
-        title: Text(archivo['nombre']),
-      );
-    } else if (tipo == 'video') {
-      return ListTile(
-        leading: const Icon(Icons.videocam, color: Colors.orange),
-        title: Text(archivo['nombre']),
+        title: Text(nombre),
       );
     } else if (tipo == 'link') {
       final link = archivo['nombre'];
       final isYoutube =
           link.contains("youtube.com") || link.contains("youtu.be");
-
       if (isYoutube) {
         final videoId = _extractYoutubeId(link);
         final thumbnailUrl = 'https://img.youtube.com/vi/$videoId/0.jpg';
@@ -437,7 +496,12 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
               Image.network(thumbnailUrl, fit: BoxFit.cover),
               ListTile(
                 leading: const Icon(Icons.play_circle, color: Colors.red),
-                title: const Text('Video de YouTube'),
+                title: FutureBuilder<String?>(
+                  future: obtenerTituloVideoYoutube(link),
+                  builder: (context, snapshot) {
+                    return Text(snapshot.data ?? 'Video de YouTube');
+                  },
+                ),
                 subtitle: Text(link),
                 trailing: ElevatedButton.icon(
                   onPressed: () => _abrirEnlaceEnWeb(link),
@@ -465,7 +529,7 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
     } else if (tipo == 'nota') {
       return ListTile(
         leading: const Icon(Icons.notes, color: Colors.purple),
-        title: Text(archivo['nombre']),
+        title: Text(nombre),
       );
     } else {
       return const SizedBox.shrink();
@@ -552,22 +616,10 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
                   alignment: WrapAlignment.center,
                   children: [
                     CustomActionButton(
-                      text: 'Agregar PDF',
-                      icon: Icons.picture_as_pdf,
-                      onPressed: () => _seleccionarArchivo('pdf'),
-                      backgroundColor: Colors.red.shade700,
-                    ),
-                    CustomActionButton(
-                      text: 'Agregar Imagen',
-                      icon: Icons.image,
-                      onPressed: () => _seleccionarArchivo('image'),
-                      backgroundColor: Colors.blue.shade700,
-                    ),
-                    CustomActionButton(
-                      text: 'Agregar Video',
-                      icon: Icons.videocam,
-                      onPressed: () => _seleccionarArchivo('video'),
-                      backgroundColor: Colors.orange.shade800,
+                      text: 'Agregar Archivos',
+                      icon: Icons.attach_file,
+                      onPressed: _seleccionarArchivoAvanzado,
+                      backgroundColor: Colors.teal.shade700,
                     ),
                     CustomActionButton(
                       text: 'Agregar Enlace',
