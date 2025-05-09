@@ -115,8 +115,15 @@ class _HomePageState extends State<HomePage> {
     }
 
     // Ordenar por número de ejercicios (de mayor a menor)
-    ranking.sort((a, b) => b['ejercicios'].compareTo(a['ejercicios']));
+    ranking.sort((a, b) {
+      final promA = (a['calificacion'] ?? 0.0) as double;
+      final promB = (b['calificacion'] ?? 0.0) as double;
 
+      if (promA == promB) {
+        return (b['ejercicios'] ?? 0).compareTo(a['ejercicios'] ?? 0);
+      }
+      return promB.compareTo(promA); // Calificación primero (descendente)
+    });
     _rankingCache = ranking.take(5).toList(); // Top 5 usuarios
     return _rankingCache!;
   }
