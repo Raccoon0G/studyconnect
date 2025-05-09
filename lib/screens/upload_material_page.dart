@@ -1,7 +1,14 @@
+import 'package:audioplayers/audioplayers.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:typed_data';
-import 'dart:html' as html; // SOLO FUNCIONA EN FLUTTER WEB
+import 'dart:html' as html;
+import '../services/services.dart';
+import '../utils/utils.dart';
+import '../widgets/widgets.dart';
 
 class UploadMaterialPage extends StatefulWidget {
   const UploadMaterialPage({super.key});
@@ -21,7 +28,271 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
     'Lim': 'Límites de funciones y continuidad',
     'Der': 'Derivada y optimización',
     'TecInteg': 'Técnicas de integración',
+    'Gnral': 'Temas en General (Cosas de aportación General)',
   };
+
+  final TextEditingController _tituloController = TextEditingController();
+  final TextEditingController _descripcionController = TextEditingController();
+
+  String? _nombreUsuario;
+  bool _subiendo = false;
+  bool _exitoAlSubir = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarNombreUsuario();
+  }
+
+  Future<void> _confirmarEliminarArchivo(int index) async {
+    final archivo = _archivos[index];
+    final nombre = archivo['nombre'] ?? 'archivo';
+
+    await showCustomDialog(
+      context: context,
+      titulo: '¿Eliminar archivo?',
+      mensaje: '¿Estás seguro de que deseas eliminar "$nombre"?',
+      tipo: CustomDialogType.warning,
+      botones: [
+        DialogButton(texto: 'Cancelar', cierraDialogo: true),
+        DialogButton(
+          texto: 'Eliminar',
+          onPressed: () async {
+            setState(() {
+              _archivos.removeAt(index);
+            });
+            Navigator.of(
+              context,
+            ).pop(); // cerrar el diálogo si no lo cierras automáticamente
+            showCustomSnackbar(
+              context: context,
+              message: 'Archivo eliminado.',
+              success: true,
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Future<void> _cargarNombreUsuario() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      final doc =
+          await FirebaseFirestore.instance
+              .collection('usuarios')
+              .doc(uid)
+              .get();
+      setState(() {
+        _nombreUsuario = doc['Nombre'] ?? 'Usuario';
+      });
+    }
+  }
+
+  Future<void> reproducirSonidoExito() async {
+    final player = AudioPlayer();
+    await player.play(AssetSource('audio/successed.mp3'));
+  }
+
+  Future<void> reproducirSonidoError() async {
+    final player = AudioPlayer();
+    await player.play(AssetSource('audio/error.mp3'));
+  }
+
+  Future<void> _subirMaterialEducativo() async {
+    if (_subiendo) return;
+
+    if (_temaSeleccionado == null || _tituloController.text.trim().isEmpty) {
+      await showCustomDialog(
+        context: context,
+        titulo: 'Campos obligatorios',
+        mensaje:
+            'Debes completar el título y seleccionar un tema para continuar.',
+        tipo: CustomDialogType.warning,
+      );
+      return;
+    }
+
+    if (_archivos.isEmpty) {
+      showCustomSnackbar(
+        context: context,
+        message: 'Agrega al menos un archivo o contenido.',
+        success: false,
+      );
+      return;
+    }
+    if (_archivos.length > 10) {
+      await showCustomDialog(
+        context: context,
+        titulo: 'Límite de archivos',
+        mensaje:
+            'Solo puedes subir hasta 10 archivos o contenidos por material.',
+        tipo: CustomDialogType.warning,
+      );
+      return;
+    }
+
+    try {
+      setState(() => _subiendo = true);
+
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final nombreTema = temasDisponibles[_temaSeleccionado!] ?? 'Otro';
+      final now = Timestamp.now();
+
+      // Referencia a la subcolección con el patrón EjerFnAlg, EjerTecInteg, etc.
+      final coleccionMateriales = FirebaseFirestore.instance
+          .collection('materiales')
+          .doc(_temaSeleccionado!)
+          .collection('Mat$_temaSeleccionado');
+
+      // Obtener el número de documentos para generar un ID incremental
+      final snapshot = await coleccionMateriales.get();
+      final materialId =
+          '${_temaSeleccionado}_${(snapshot.docs.length + 1).toString().padLeft(2, '0')}';
+      final versionId = 'Version_01';
+
+      // Subida de archivos a Storage y recopilación de contenido
+      final List<Map<String, dynamic>> contenido = [];
+      for (var archivo in _archivos) {
+        if (archivo['tipo'] == 'pdf' ||
+            archivo['tipo'] == 'image' ||
+            archivo['tipo'] == 'video') {
+          final nombreArchivo =
+              '${DateTime.now().millisecondsSinceEpoch}_${archivo['nombre']}';
+          final ref = FirebaseStorage.instance
+              .ref()
+              .child('materiales')
+              .child(_temaSeleccionado!)
+              .child(uid!) // uid ya lo tienes arriba
+              .child(nombreArchivo);
+
+          await ref.putData(archivo['bytes']);
+          final url = await ref.getDownloadURL();
+
+          contenido.add({
+            'tipo': archivo['tipo'],
+            'nombre': archivo['nombre'],
+            'url': url,
+            'extension': archivo['extension'],
+          });
+        } else if (archivo['tipo'] == 'link' || archivo['tipo'] == 'nota') {
+          contenido.add({
+            'tipo': archivo['tipo'],
+            'contenido': archivo['nombre'],
+          });
+        }
+      }
+
+      // Guardar documento principal
+      final materialRef = coleccionMateriales.doc(materialId);
+      await materialRef.set({
+        'id': materialId,
+        'autorId': uid,
+        'autorNombre': _nombreUsuario ?? 'Usuario',
+        'tema': _temaSeleccionado,
+        'subtema': _subtemaController.text.trim(),
+        'titulo': _tituloController.text.trim(),
+        'descripcion': _descripcionController.text.trim(),
+        'archivos': contenido,
+        'fecha': now,
+        'FechMod': now,
+        'calificacionPromedio': 0.0,
+        'versionActual': versionId,
+        'carpetaStorage': 'materiales/$_temaSeleccionado/$uid',
+      });
+
+      // Guardar versión inicial
+      await materialRef.collection('Versiones').doc(versionId).set({
+        'Descripcion': _descripcionController.text.trim(),
+        'Fecha': now,
+        'AutorId': uid,
+        'archivos': contenido,
+      });
+
+      await NotificationService.crearNotificacion(
+        uidDestino: uid!,
+        tipo: 'material',
+        titulo: 'Material subido correctamente',
+        contenido: 'Agregaste nuevo material en $nombreTema',
+        referenciaId: materialId,
+        uidEmisor: uid,
+        nombreEmisor: _nombreUsuario ?? 'Tú',
+      );
+
+      // ALERTA LOCAL
+      await LocalNotificationService.show(
+        title: 'Material subido',
+        body: 'Tu material en $nombreTema fue guardado exitosamente',
+      );
+
+      await reproducirSonidoExito();
+
+      await showFeedbackDialogAndSnackbar(
+        context: context,
+        titulo: '¡Éxito!',
+        mensaje: 'El material se subió correctamente a la plataforma.',
+        tipo: CustomDialogType.success,
+        snackbarMessage: 'Material guardado con éxito',
+        snackbarSuccess: true,
+      );
+
+      // Limpiar campos
+      setState(() {
+        _temaSeleccionado = null;
+        _subtemaController.clear();
+        _notaController.clear();
+        _archivos.clear();
+        _tituloController.clear();
+        _descripcionController.clear();
+      });
+    } catch (e) {
+      await reproducirSonidoError();
+      await showFeedbackDialogAndSnackbar(
+        context: context,
+        titulo: 'Error al subir material',
+        mensaje: e.toString(),
+        tipo: CustomDialogType.error,
+        snackbarMessage: '❌ Hubo un error al subir el material.',
+        snackbarSuccess: false,
+      );
+
+      // Tip opcional aleatorio
+      final List<String> tips = [
+        'Tip: Puedes añadir enlaces de YouTube y se mostrarán como miniaturas.',
+        'Tip: Puedes combinar notas y archivos en una sola publicación.',
+        'Tip: No olvides agregar una descripción detallada.',
+      ];
+
+      final randomTip =
+          tips[DateTime.now().millisecondsSinceEpoch % tips.length];
+
+      // Reproduce sonido
+      final player = AudioPlayer();
+      await player.play(AssetSource('audio/tip.mp3'));
+
+      // Muestra diálogo
+      await showCustomDialog(
+        context: context,
+        titulo: '¡Consejo!',
+        mensaje: randomTip,
+        tipo: CustomDialogType.info,
+      );
+    } finally {
+      setState(() => _subiendo = false);
+    }
+    setState(() {
+      _exitoAlSubir = true;
+    });
+
+    // Esperar 1.5 segundos y luego restaurar
+    await Future.delayed(const Duration(milliseconds: 1500));
+
+    if (mounted) {
+      setState(() {
+        _exitoAlSubir = false;
+      });
+    }
+  }
 
   Future<void> _seleccionarArchivo(String tipo) async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -61,9 +332,26 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
           actions: [
             TextButton(
               onPressed: () {
-                if (controller.text.isNotEmpty) {
+                final enlace = controller.text.trim();
+                if (enlace.isNotEmpty) {
+                  final yaExiste = _archivos.any(
+                    (archivo) =>
+                        archivo['tipo'] == 'link' &&
+                        archivo['nombre'] == enlace,
+                  );
+
+                  if (yaExiste) {
+                    Navigator.pop(context);
+                    showCustomSnackbar(
+                      context: context,
+                      message: 'Este enlace ya ha sido agregado.',
+                      success: false,
+                    );
+                    return;
+                  }
+
                   setState(() {
-                    _archivos.add({'nombre': controller.text, 'tipo': 'link'});
+                    _archivos.add({'nombre': enlace, 'tipo': 'link'});
                   });
                 }
                 Navigator.pop(context);
@@ -77,9 +365,23 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
   }
 
   void _agregarNota() {
-    if (_notaController.text.isNotEmpty) {
+    final nota = _notaController.text.trim();
+    if (nota.isNotEmpty) {
+      final yaExiste = _archivos.any(
+        (archivo) => archivo['tipo'] == 'nota' && archivo['nombre'] == nota,
+      );
+
+      if (yaExiste) {
+        showCustomSnackbar(
+          context: context,
+          message: 'Esta nota ya ha sido agregada.',
+          success: false,
+        );
+        return;
+      }
+
       setState(() {
-        _archivos.add({'nombre': _notaController.text, 'tipo': 'nota'});
+        _archivos.add({'nombre': nota, 'tipo': 'nota'});
         _notaController.clear();
       });
     }
@@ -212,6 +514,17 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
                 ),
                 const SizedBox(height: 12),
                 TextField(
+                  controller: _tituloController,
+                  decoration: const InputDecoration(
+                    labelText: 'Título del material',
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+                TextField(
                   controller: _subtemaController,
                   decoration: const InputDecoration(
                     labelText: 'Subtema (opcional)',
@@ -221,37 +534,87 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _descripcionController,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    labelText: 'Descripción del material',
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
+                  spacing: 12,
+                  runSpacing: 12,
+                  alignment: WrapAlignment.center,
                   children: [
-                    ElevatedButton.icon(
+                    CustomActionButton(
+                      text: 'Agregar PDF',
+                      icon: Icons.picture_as_pdf,
                       onPressed: () => _seleccionarArchivo('pdf'),
-                      icon: const Icon(Icons.picture_as_pdf),
-                      label: const Text('Agregar PDF'),
+                      backgroundColor: Colors.red.shade700,
                     ),
-                    ElevatedButton.icon(
+                    CustomActionButton(
+                      text: 'Agregar Imagen',
+                      icon: Icons.image,
                       onPressed: () => _seleccionarArchivo('image'),
-                      icon: const Icon(Icons.image),
-                      label: const Text('Agregar Imagen'),
+                      backgroundColor: Colors.blue.shade700,
                     ),
-                    ElevatedButton.icon(
+                    CustomActionButton(
+                      text: 'Agregar Video',
+                      icon: Icons.videocam,
                       onPressed: () => _seleccionarArchivo('video'),
-                      icon: const Icon(Icons.videocam),
-                      label: const Text('Agregar Video'),
+                      backgroundColor: Colors.orange.shade800,
                     ),
-                    ElevatedButton.icon(
+                    CustomActionButton(
+                      text: 'Agregar Enlace',
+                      icon: Icons.link,
                       onPressed: _agregarEnlace,
-                      icon: const Icon(Icons.link),
-                      label: const Text('Agregar Enlace'),
+                      backgroundColor: Colors.green.shade700,
                     ),
-                    ElevatedButton.icon(
+                    CustomActionButton(
+                      text: 'Agregar Nota',
+                      icon: Icons.notes,
                       onPressed: _agregarNota,
-                      icon: const Icon(Icons.notes),
-                      label: const Text('Agregar Nota'),
+                      backgroundColor: Colors.purple.shade700,
                     ),
                   ],
                 ),
+
+                // Wrap(
+                //   spacing: 10,
+                //   runSpacing: 10,
+                //   children: [
+                //     ElevatedButton.icon(
+                //       onPressed: () => _seleccionarArchivo('pdf'),
+                //       icon: const Icon(Icons.picture_as_pdf),
+                //       label: const Text('Agregar PDF'),
+                //     ),
+                //     ElevatedButton.icon(
+                //       onPressed: () => _seleccionarArchivo('image'),
+                //       icon: const Icon(Icons.image),
+                //       label: const Text('Agregar Imagen'),
+                //     ),
+                //     ElevatedButton.icon(
+                //       onPressed: () => _seleccionarArchivo('video'),
+                //       icon: const Icon(Icons.videocam),
+                //       label: const Text('Agregar Video'),
+                //     ),
+                //     ElevatedButton.icon(
+                //       onPressed: _agregarEnlace,
+                //       icon: const Icon(Icons.link),
+                //       label: const Text('Agregar Enlace'),
+                //     ),
+                //     ElevatedButton.icon(
+                //       onPressed: _agregarNota,
+                //       icon: const Icon(Icons.notes),
+                //       label: const Text('Agregar Nota'),
+                //     ),
+                //   ],
+                // ),
                 const SizedBox(height: 20),
                 TextField(
                   controller: _notaController,
@@ -282,24 +645,93 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
                             _buildArchivoPreview(_archivos[index]),
                   ),
                 ),
+
                 const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    // Aquí puedes invocar la función de subir a Firestore
-                    print('Subiendo a Firestore...');
-                  },
-                  icon: const Icon(Icons.upload),
-                  label: const Text('Subir a Firestore'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 40,
-                      vertical: 14,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
+
+                // ElevatedButton.icon(
+                //   onPressed: _subiendo ? null : _subirMaterialEducativo,
+                //   icon:
+                //       _subiendo
+                //           ? const SizedBox(
+                //             width: 20,
+                //             height: 20,
+                //             child: CircularProgressIndicator(
+                //               strokeWidth: 2,
+                //               color: Colors.white,
+                //             ),
+                //           )
+                //           : const Icon(Icons.upload),
+                //   label: Text(_subiendo ? 'Subiendo...' : 'Subir a Firestore'),
+                //   style: ElevatedButton.styleFrom(
+                //     backgroundColor: Colors.black,
+                //     foregroundColor: Colors.white,
+                //     padding: const EdgeInsets.symmetric(
+                //       horizontal: 40,
+                //       vertical: 14,
+                //     ),
+                //     shape: RoundedRectangleBorder(
+                //       borderRadius: BorderRadius.circular(30),
+                //     ),
+                //   ),
+                // ),
+                // Stack(
+                //   alignment: Alignment.centerRight,
+                //   children: [
+                //     CustomActionButton(
+                //       text: _subiendo ? 'Subiendo...' : 'Subir',
+                //       icon: Icons.upload,
+                //       onPressed: () {
+                //         if (!_subiendo) _subirMaterialEducativo();
+                //       },
+                //       reserveLoaderSpace: _subiendo,
+                //       animar: _subiendo,
+                //       girarIcono: _subiendo,
+                //       backgroundColor:
+                //           _subiendo ? Colors.grey.shade800 : Colors.black,
+                //     ),
+                //     if (_subiendo)
+                //       const Positioned(
+                //         right: 20,
+                //         child: SizedBox(
+                //           width: 16,
+                //           height: 16,
+                //           child: CircularProgressIndicator(
+                //             strokeWidth: 2,
+                //             color: Colors.white,
+                //           ),
+                //         ),
+                //       ),
+                //   ],
+                // ),
+                AnimatedScale(
+                  scale: _exitoAlSubir ? 1.05 : 1.0,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutBack,
+                  child: CustomActionButton(
+                    text:
+                        _subiendo
+                            ? 'Subiendo...'
+                            : _exitoAlSubir
+                            ? '¡Subido!'
+                            : 'Subir',
+                    icon:
+                        _subiendo
+                            ? Icons.hourglass_top
+                            : _exitoAlSubir
+                            ? Icons.check_circle_outline
+                            : Icons.upload,
+                    onPressed: () {
+                      if (!_subiendo && !_exitoAlSubir) {
+                        _subirMaterialEducativo();
+                      }
+                    },
+                    backgroundColor:
+                        _exitoAlSubir
+                            ? Colors.green.shade600
+                            : (_subiendo ? Colors.grey.shade800 : Colors.black),
+                    reserveLoaderSpace: _subiendo,
+                    animar: _subiendo,
+                    girarIcono: _subiendo,
                   ),
                 ),
               ],

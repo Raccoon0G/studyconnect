@@ -3,9 +3,12 @@ import 'firebase_options.dart';
 import 'package:flutter/material.dart';
 import 'package:study_connect/screens/screens.dart';
 
+import 'services/services.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await LocalNotificationService.init();
   runApp(const MyApp());
 }
 
@@ -46,6 +49,17 @@ class MyApp extends StatelessWidget {
                 (context) => ExerciseViewPage(
                   tema: args['tema'],
                   ejercicioId: args['ejercicioId'],
+                ),
+          );
+        }
+
+        if (settings.name == '/material_view') {
+          final args = settings.arguments as Map<String, dynamic>;
+          return MaterialPageRoute(
+            builder:
+                (context) => MaterialViewPage(
+                  tema: args['tema'],
+                  materialId: args['materialId'],
                 ),
           );
         }

@@ -29,7 +29,7 @@ class CustomFeedbackCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             const Text(
-              '¿Te fue útil este ejercicio?',
+              '¿Te fue útil este ejercicio o material?',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
@@ -55,7 +55,7 @@ class CustomFeedbackCard extends StatelessWidget {
 
             const SizedBox(height: 16),
             const Text(
-              '¡Comparte este ejercicio con tus compañeros!',
+              '¡Compartelo con tus compañeros!',
               style: TextStyle(
                 fontSize: 15,
                 fontStyle: FontStyle.italic,

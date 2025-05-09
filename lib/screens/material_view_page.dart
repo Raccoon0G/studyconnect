@@ -1,33 +1,38 @@
 //todo Darle major presentacion, agregar imagenes, y mejorar el diseño
+import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:typed_data';
+import 'dart:ui_web' as ui;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import 'package:screenshot/screenshot.dart';
 import 'package:intl/intl.dart';
-import 'package:study_connect/services/notification_service.dart';
-import 'package:study_connect/widgets/notification_icon_widget.dart';
 
-class ExerciseViewPage extends StatefulWidget {
+import 'package:study_connect/services/notification_service.dart';
+import 'package:study_connect/widgets/widgets.dart';
+import 'package:study_connect/utils/utils.dart';
+import 'package:youtube_explode_dart/youtube_explode_dart.dart';
+
+class MaterialViewPage extends StatefulWidget {
   final String tema;
-  final String ejercicioId;
-  const ExerciseViewPage({
+  final String materialId;
+  const MaterialViewPage({
     super.key,
     required this.tema,
-    required this.ejercicioId,
+    required this.materialId,
   });
 
   @override
-  State<ExerciseViewPage> createState() => _ExerciseViewPageState();
+  State<MaterialViewPage> createState() => _MaterialViewPageState();
 }
 
-class _ExerciseViewPageState extends State<ExerciseViewPage> {
+class _MaterialViewPageState extends State<MaterialViewPage> {
   final ScreenshotController _screenshotController = ScreenshotController();
-  Map<String, dynamic>? ejercicioData;
+  Map<String, dynamic>? materialData;
   List<String> pasos = [];
   List<String> descripciones = [];
   List<Map<String, dynamic>> comentarios = [];
@@ -36,55 +41,69 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
   List<Map<String, dynamic>> versiones = [];
   String? versionSeleccionada;
 
-  final Map<String, String> nombresTemas = {
-    'FnAlg': 'Funciones algebraicas y trascendentes',
-    'Lim': 'Límites de funciones y continuidad',
-    'Der': 'Derivada y optimización',
-    'TecInteg': 'Técnicas de integración',
-  };
-
   @override
   void initState() {
     super.initState();
-    _cargarDatosDesdeFirestore();
-    _cargarComentarios();
+    _cargarTodo();
   }
 
   Future<void> _cargarDatosDesdeFirestore() async {
-    final doc =
-        await FirebaseFirestore.instance
-            .collection('calculo')
-            .doc(widget.tema)
-            .collection('Ejer${widget.tema}')
-            .doc(widget.ejercicioId)
-            .get();
+    try {
+      final doc =
+          await FirebaseFirestore.instance
+              .collection('materiales')
+              .doc(widget.tema)
+              .collection('Mat${widget.tema}')
+              .doc(widget.materialId)
+              .get();
 
-    final versionId = doc['versionActual'];
-    final version =
-        await doc.reference.collection('Versiones').doc(versionId).get();
+      if (!doc.exists) {
+        throw Exception('Documento no encontrado');
+      }
 
-    setState(() {
-      ejercicioData = doc.data();
-      pasos = List<String>.from(version['PasosEjer'] ?? []);
-      descripciones = List<String>.from(version['DescPasos'] ?? []);
-    });
+      final versionId = doc['versionActual'];
+      final version =
+          await doc.reference.collection('Versiones').doc(versionId).get();
 
-    final versionesSnap =
-        await doc.reference
-            .collection('Versiones')
-            .orderBy('Fecha', descending: true)
-            .get();
+      setState(() {
+        materialData = doc.data();
+        pasos = List<String>.from(version['PasosEjer'] ?? []);
+        descripciones = List<String>.from(version['DescPasos'] ?? []);
+      });
 
-    versiones =
-        versionesSnap.docs.map((d) {
-          return {'id': d.id, 'fecha': d['Fecha']};
-        }).toList();
+      final versionesSnap =
+          await doc.reference
+              .collection('Versiones')
+              .orderBy('Fecha', descending: true)
+              .get();
 
-    versionSeleccionada = versionId;
+      versiones =
+          versionesSnap.docs
+              .map((d) => {'id': d.id, 'fecha': d['Fecha']})
+              .toList();
 
-    setState(() {
       versionSeleccionada = versionId;
-    });
+    } catch (e) {
+      print('Error al cargar datos: $e');
+      _mostrarError('Error al cargar datos', e.toString());
+    }
+  }
+
+  void _mostrarError(String titulo, String mensaje) {
+    showCustomDialog(
+      context: context,
+      titulo: titulo,
+      mensaje: mensaje,
+      tipo: CustomDialogType.error,
+      botones: [
+        DialogButton(
+          texto: 'Cerrar',
+          onPressed: () async {
+            Navigator.of(context).pop();
+          },
+        ),
+      ],
+    );
   }
 
   Future<void> _cargarVersionSeleccionada(String versionId) async {
@@ -92,7 +111,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
         .collection('calculo')
         .doc(widget.tema)
         .collection('Ejer${widget.tema}')
-        .doc(widget.ejercicioId);
+        .doc(widget.materialId);
 
     final versionDoc =
         await docRef.collection('Versiones').doc(versionId).get();
@@ -105,354 +124,890 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
   }
 
   Future<void> _cargarComentarios() async {
-    final snap =
-        await FirebaseFirestore.instance
-            .collection('comentarios_ejercicios')
-            .where('ejercicioId', isEqualTo: widget.ejercicioId)
+    try {
+      final snap =
+          await FirebaseFirestore.instance
+              .collection('comentarios_materiales')
+              .where('materialId', isEqualTo: widget.materialId)
+              .where('tema', isEqualTo: widget.tema)
+              .orderBy('timestamp', descending: true)
+              .get();
+
+      setState(() {
+        comentarios = snap.docs.map((e) => e.data()).toList();
+      });
+    } catch (e) {
+      _mostrarError('Error al cargar comentarios', e.toString());
+    }
+  }
+
+  Future<void> _eliminarComentario(Map<String, dynamic> comentario) async {
+    try {
+      final query =
+          await FirebaseFirestore.instance
+              .collection('comentarios_materiales')
+              .where('usuarioId', isEqualTo: comentario['usuarioId'])
+              .where('comentario', isEqualTo: comentario['comentario'])
+              .where('timestamp', isEqualTo: comentario['timestamp'])
+              .get();
+
+      for (final doc in query.docs) {
+        await doc.reference.delete();
+      }
+
+      await _cargarComentarios();
+      await _cargarDatosDesdeFirestore();
+
+      // 🎯 Mostrar SnackBar bonito
+      if (mounted) {
+        // Verificamos si el widget está montado
+        showFeedbackDialogAndSnackbar(
+          //  Mostrar el diálogo y Snackbar de éxito al eliminar
+          context: context,
+          titulo: '¡Éxito!',
+          mensaje: 'Comentario elimnado correctamente.',
+          tipo: CustomDialogType.success,
+          snackbarMessage: '✅ ¡Comentario Eliminado!',
+          snackbarSuccess: true,
+        );
+        //Opcion 1 para mostrar snackbar mas facil sin tanto clic
+        // showCustomSnackbar(
+        // context: context,
+        // message: ' Comentario eliminado con éxito',
+        // success: true,
+        // );
+      }
+    } catch (e) {
+      if (mounted) {
+        showFeedbackDialogAndSnackbar(
+          context: context,
+          titulo: 'Error',
+          mensaje: 'Ocurrió un error al eliminar el comentario.',
+          tipo: CustomDialogType.error,
+          snackbarMessage: 'Error al eliminar.',
+          snackbarSuccess: false,
+        );
+        // showCustomSnackbar(
+        //   context: context,
+        //   message: 'Error al eliminar comentario',
+        //   success: false,
+        // );
+      }
+    }
+  }
+
+  Future<void> _cargarTodo() async {
+    try {
+      final docRef = FirebaseFirestore.instance
+          .collection('materiales')
+          .doc(widget.tema)
+          .collection('Mat${widget.tema}')
+          .doc(widget.materialId);
+
+      final results = await Future.wait([
+        docRef.get(),
+        FirebaseFirestore.instance
+            .collection('comentarios_materiales')
+            .where('materialId', isEqualTo: widget.materialId)
             .where('tema', isEqualTo: widget.tema)
             .orderBy('timestamp', descending: true)
-            .get();
+            .get(),
+      ]);
 
-    setState(() {
-      comentarios = snap.docs.map((e) => e.data()).toList();
-    });
+      final doc = results[0] as DocumentSnapshot<Map<String, dynamic>>;
+      final comentariosSnap = results[1] as QuerySnapshot<Map<String, dynamic>>;
+
+      if (!doc.exists) {
+        throw Exception('No se encontró el material.');
+      }
+
+      final data = doc.data();
+      final versionId = data?['versionActual'];
+
+      Map<String, dynamic> versionData = {};
+      if (versionId != null) {
+        final versionDoc =
+            await docRef.collection('Versiones').doc(versionId).get();
+        versionData = versionDoc.data() ?? {};
+      }
+
+      final versionesSnap =
+          await docRef
+              .collection('Versiones')
+              .orderBy('Fecha', descending: true)
+              .get();
+
+      setState(() {
+        materialData = data;
+        versiones =
+            versionesSnap.docs
+                .map((d) => {'id': d.id, 'fecha': d['Fecha']})
+                .toList();
+        versionSeleccionada = versionId;
+        comentarios = comentariosSnap.docs.map((e) => e.data()).toList();
+        pasos = List<String>.from(versionData['PasosEjer'] ?? []);
+        descripciones = List<String>.from(versionData['DescPasos'] ?? []);
+      });
+    } catch (e) {
+      _mostrarError('Error al cargar datos', e.toString());
+    }
+  }
+
+  // Future<String?> obtenerTituloVideoYoutube(String url) async {
+  //   final yt = YoutubeExplode();
+  //   try {
+  //     final video = await yt.videos.get(url);
+  //     return video.title;
+  //   } catch (e) {
+  //     print('Error al obtener el título del video: $e');
+  //     return null;
+  //   } finally {
+  //     yt.close();
+  //   }
+  // }
+
+  Future<String?> obtenerTituloVideoYoutube(String url) async {
+    final videoId =
+        Uri.parse(url).queryParameters['v'] ?? Uri.parse(url).pathSegments.last;
+
+    final apiKey = 'AIzaSyAtBdlPLuf0Ctf4wDu7q6jzL3icUiUt7MM';
+    final apiUrl =
+        'https://www.googleapis.com/youtube/v3/videos?part=snippet&id=$videoId&key=$apiKey';
+
+    try {
+      final response = await http.get(Uri.parse(apiUrl));
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        final items = json['items'];
+        if (items != null && items.isNotEmpty) {
+          return items[0]['snippet']['title'];
+        }
+      }
+      return null;
+    } catch (e) {
+      print('Error al obtener título del video: $e');
+      return null;
+    }
+  }
+
+  Widget _columnaIzquierda({
+    required Map<String, dynamic> ejercicioData,
+    required String tema,
+    required String ejercicioId,
+    required List<Map<String, dynamic>> versiones,
+    required String? versionSeleccionada,
+    required List<Map<String, dynamic>> comentarios,
+    required void Function(String) onVersionChanged,
+  }) {
+    final autor = ejercicioData['autorNombre'] ?? 'Anónimo';
+
+    final fecha = (ejercicioData['FechMod'] as Timestamp?)?.toDate();
+    final calificacion = calcularPromedioEstrellas(comentarios);
+
+    final Map<String, String> nombresTemas = {
+      'FnAlg': 'Funciones algebraicas y trascendentes',
+      'Lim': 'Límites de funciones y continuidad',
+      'Der': 'Derivada y optimización',
+      'TecInteg': 'Técnicas de integración',
+    };
+
+    return Container(
+      margin: const EdgeInsets.only(right: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF055B84),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InfoWithIcon(
+            icon: Icons.person_outlined,
+            text: 'Autor: $autor',
+            alignment: MainAxisAlignment.center,
+            iconAlignment: Alignment.center,
+            textColor: Colors.white,
+            textSize: 20,
+            //maxWidthText: 335,
+          ),
+          const SizedBox(height: 8),
+          InfoWithIcon(
+            icon: Icons.book,
+            text: 'Tema: ${nombresTemas[tema] ?? tema}',
+            alignment: MainAxisAlignment.center,
+            iconAlignment: Alignment.center,
+            textColor: Colors.white,
+            textSize: 17,
+            //maxWidthText: 280,
+          ),
+          const SizedBox(height: 8),
+          InfoWithIcon(
+            icon: Icons.assignment,
+            text: 'Ejercicio: $ejercicioId',
+            alignment: MainAxisAlignment.center,
+            iconAlignment: Alignment.center,
+            textColor: Colors.white,
+            textSize: 17,
+          ),
+          const SizedBox(height: 8),
+          InfoWithIcon(
+            icon: Icons.update,
+            text: 'Versión actual: $versionSeleccionada',
+            alignment: MainAxisAlignment.center,
+            iconAlignment: Alignment.center,
+            textColor: Colors.white,
+            textSize: 17,
+          ),
+
+          const SizedBox(height: 8),
+
+          if (versiones.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(
+                  0xFFF6F3FA,
+                ), // mismo color de fondo de tus Cards
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Semantics(
+                label: 'Seleccionar la versión para calificar el ejercicio',
+                child: CustomDropdownVersiones(
+                  versionSeleccionada: versionSeleccionada,
+                  versiones: versiones,
+                  onChanged: (value) {
+                    setState(() {
+                      versionSeleccionada = value;
+                    });
+                    _cargarVersionSeleccionada(value);
+                  },
+                ),
+              ),
+            ),
+          const SizedBox(height: 8),
+          InfoWithIcon(
+            icon: Icons.change_circle,
+            text: 'Última modificación:',
+            alignment: MainAxisAlignment.center,
+            iconAlignment: Alignment.center,
+            textColor: Colors.white,
+            textSize: 17,
+          ),
+          const SizedBox(height: 4),
+          InfoWithIcon(
+            icon: Icons.calendar_today,
+            text:
+                fecha != null
+                    ? DateFormat('dd/MM/yyyy').format(fecha)
+                    : 'Sin fecha',
+            alignment: MainAxisAlignment.center,
+            iconAlignment: Alignment.center,
+            textColor: Colors.white,
+            textSize: 17,
+          ),
+
+          const SizedBox(height: 12),
+          InfoWithIcon(
+            icon: Icons.task_sharp,
+            text: 'Calificación promedio:',
+            alignment: MainAxisAlignment.center,
+            iconAlignment: Alignment.center,
+            textColor: Colors.white,
+            textSize: 17,
+          ),
+          const SizedBox(height: 8),
+          CustomStarRating(
+            valor: calificacion,
+            size: 30, // Puedes ajustar el tamaño si quieres
+            color: Colors.amber,
+            duration: const Duration(milliseconds: 800),
+          ), //promedio estrellas comentarios
+
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              '${calificacion.toStringAsFixed(1)} / 5.0',
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+          ),
+          const Divider(color: Colors.white54),
+          Center(
+            child: Text(
+              '${comentarios.length} comentario(s)',
+              style: const TextStyle(color: Colors.white60),
+            ),
+          ),
+          const SizedBox(height: 38),
+
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 285, minHeight: 220),
+            child: const ExerciseCarousel(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _columnaDerecha({
+    required Map<String, dynamic> materialData,
+    required List<Map<String, dynamic>> comentarios,
+    required bool esPantallaChica,
+  }) {
+    final titulo = materialData['titulo'] ?? '';
+    final descripcion = materialData['descripcion'] ?? '';
+
+    final List archivos = materialData['archivos'] ?? [];
+
+    final contenido = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Título del material:',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 10),
+        Card(
+          color: const Color(0xFFF6F3FA),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: CustomLatexText(
+                contenido: titulo,
+                fontSize: 22,
+                color: Colors.black,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        const Divider(color: Colors.black87),
+        const Text('Descripción del material:', style: TextStyle(fontSize: 18)),
+        const SizedBox(height: 10),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF6F3FA),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            dividirDescripcionEnLineas(descripcion),
+            style: const TextStyle(fontSize: 16),
+            textAlign: TextAlign.justify,
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Divider(color: Colors.black87),
+        const Text('Contenido:', style: TextStyle(fontSize: 18)),
+
+        ...archivos.map((archivo) {
+          final tipo = archivo['tipo'];
+          final nombre = archivo['nombre'] ?? 'Archivo';
+          final url =
+              tipo == 'link'
+                  ? archivo['contenido'] ?? ''
+                  : archivo['url'] ?? '';
+
+          IconData icon;
+          Color color;
+
+          // if (tipo == 'pdf') {
+          //   final viewId = 'pdf-$url';
+          //   ui.platformViewRegistry.registerViewFactory(viewId, (int viewId) {
+          //     final iframe =
+          //         html.IFrameElement()
+          //           ..src = url
+          //           ..style.border = 'none'
+          //           ..style.height = '600px'
+          //           ..style.width = '100%';
+          //     return iframe;
+          //   });
+
+          //   return Column(
+          //     crossAxisAlignment: CrossAxisAlignment.start,
+          //     children: [
+          //       ListTile(
+          //         leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
+          //         title: Text(nombre),
+          //         trailing: IconButton(
+          //           icon: const Icon(Icons.open_in_new),
+          //           onPressed: () => html.window.open(url, '_blank'),
+          //         ),
+          //       ),
+          //       const SizedBox(height: 12),
+          //       SizedBox(height: 600, child: HtmlElementView(viewType: viewId)),
+          //     ],
+          //   );
+          // }
+          if (tipo == 'pdf') {
+            icon = Icons.picture_as_pdf;
+            color = Colors.red;
+          } else if (tipo == 'image') {
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Image.network(url, fit: BoxFit.cover),
+                  ListTile(
+                    leading: const Icon(Icons.image, color: Colors.blue),
+                    title: Text(nombre),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.open_in_new),
+                      onPressed: () => html.window.open(url, '_blank'),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          } else if (tipo == 'video') {
+            icon = Icons.videocam;
+            color = Colors.orange;
+          } else if (tipo == 'link') {
+            icon = Icons.link;
+            color = Colors.green;
+          } else if (tipo == 'nota') {
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              color: const Color(0xFFF1F8E9),
+              child: ListTile(
+                leading: const Icon(Icons.notes, color: Colors.purple),
+                title: Text(nombre),
+              ),
+            );
+          } else {
+            icon = Icons.insert_drive_file;
+            color = Colors.grey;
+          }
+
+          final isYoutube =
+              tipo == 'link' &&
+              (url.contains('youtube.com') || url.contains('youtu.be'));
+
+          if (isYoutube) {
+            return FutureBuilder<String?>(
+              future: obtenerTituloVideoYoutube(url),
+              builder: (context, snapshot) {
+                final tituloVideo = snapshot.data ?? 'Video de YouTube';
+                final videoId =
+                    Uri.parse(url).queryParameters['v'] ??
+                    Uri.parse(url).pathSegments.last;
+                final thumbnailUrl =
+                    'https://img.youtube.com/vi/$videoId/0.jpg';
+
+                return Card(
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Image.network(thumbnailUrl, fit: BoxFit.cover),
+                      ListTile(
+                        leading: const Icon(
+                          Icons.play_circle_fill,
+                          color: Colors.red,
+                        ),
+                        title: Text(tituloVideo),
+                        subtitle: Text(url),
+                        trailing: ElevatedButton.icon(
+                          icon: const Icon(Icons.open_in_new),
+                          label: const Text('Ver video'),
+                          onPressed: () => html.window.open(url, '_blank'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.black,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          }
+
+          return ListTile(
+            leading: Icon(icon, color: color),
+            title: Text(
+              tipo == 'link'
+                  ? '$nombre (enlace)'
+                  : tipo == 'nota'
+                  ? '$nombre (nota)'
+                  : nombre,
+            ),
+            trailing:
+                tipo != 'nota'
+                    ? IconButton(
+                      icon: const Icon(Icons.open_in_new),
+                      onPressed: () {
+                        if (url.isNotEmpty) {
+                          html.window.open(url, '_blank');
+                        } else {
+                          showCustomSnackbar(
+                            context: context,
+                            message: '❌ Enlace no válido o vacío.',
+                            success: false,
+                          );
+                        }
+                      },
+                    )
+                    : null,
+          );
+        }).toList(),
+
+        const SizedBox(height: 20),
+        CustomExpansionTileComentarios(
+          comentarios: comentarios,
+          onEliminarComentario: _eliminarComentario,
+        ),
+        const SizedBox(height: 40),
+        CustomFeedbackCard(
+          accion: 'Calificar',
+          numeroComentarios: comentarios.length,
+          onCalificar: _mostrarDialogoCalificacion,
+          onCompartir: _compartirCapturaConFacebookWeb,
+        ),
+      ],
+    );
+
+    if (esPantallaChica) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: contenido,
+        ),
+      );
+    } else {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: ListView(
+          physics: const BouncingScrollPhysics(),
+          padding: EdgeInsets.zero,
+          children: [contenido],
+        ),
+      );
+    }
   }
 
   void _mostrarDialogoCalificacion() {
     final TextEditingController controller = TextEditingController();
-    bool comoAnonimo = false;
-    int rating = 0;
+    bool enviando = false;
 
-    showDialog(
+    int rating = 0; //
+    bool comoAnonimo = false;
+
+    showGeneralDialog(
       context: context,
       barrierDismissible: true,
-      builder:
-          (_) => StatefulBuilder(
-            builder:
-                (context, setState) => Dialog(
+      barrierLabel: "Cerrar",
+      transitionDuration: const Duration(milliseconds: 400),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return const SizedBox();
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curvedValue = Curves.easeInOut.transform(animation.value);
+        return Opacity(
+          opacity: animation.value,
+          child: Transform.translate(
+            offset: Offset(0, (1 - curvedValue) * 100),
+            child: StatefulBuilder(
+              builder: (context, setStateDialog) {
+                return AlertDialog(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  insetPadding: const EdgeInsets.all(24),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      color: Colors.white,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Califica este ejercicio',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close),
-                              onPressed: () => Navigator.pop(context),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(
-                            5,
-                            (i) => IconButton(
-                              icon: Icon(
-                                i < rating ? Icons.star : Icons.star_border,
-                                color: Colors.amber,
-                                size: 30,
-                              ),
-                              onPressed: () => setState(() => rating = i + 1),
-                            ),
-                          ),
-                        ),
-                        TextField(
-                          controller: controller,
-                          decoration: const InputDecoration(
-                            labelText: 'Comentario',
-                            border: OutlineInputBorder(),
-                          ),
-                          maxLines: 2,
-                        ),
-                        const SizedBox(height: 12),
-                        CheckboxListTile(
-                          value: comoAnonimo,
-                          onChanged:
-                              (val) => setState(() => comoAnonimo = val!),
-                          title: const Text('Comentar como anónimo'),
-                          controlAffinity: ListTileControlAffinity.leading,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                value: versionSeleccionada,
-                                items:
-                                    versiones.map<DropdownMenuItem<String>>((
-                                      ver,
-                                    ) {
-                                      final fecha =
-                                          (ver['fecha'] as Timestamp?)
-                                              ?.toDate();
-                                      final formatted =
-                                          fecha != null
-                                              ? DateFormat(
-                                                'dd/MM/yyyy',
-                                              ).format(fecha)
-                                              : 'Sin fecha';
-                                      return DropdownMenuItem<String>(
-                                        value: ver['id'],
-                                        child: Text(
-                                          'Versión ${ver['id']} - $formatted',
-                                        ),
-                                      );
-                                    }).toList(),
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    setState(() => versionSeleccionada = value);
-                                    _cargarVersionSeleccionada(value);
-                                  }
-                                },
-                                decoration: const InputDecoration(
-                                  labelText: 'Seleccionar versión',
-                                  border: OutlineInputBorder(),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Cancelar'),
-                            ),
-                            const SizedBox(width: 8),
-                            ElevatedButton.icon(
-                              icon: const Icon(Icons.send),
-                              label: const Text('Enviar'),
-                              onPressed: () async {
-                                final user = FirebaseAuth.instance.currentUser;
-                                if (user == null ||
-                                    controller.text.isEmpty ||
-                                    rating == 0) {
-                                  return;
-                                }
+                  contentPadding: const EdgeInsets.all(24),
+                  content: _buildContenidoDialogo(
+                    controller,
+                    () => comoAnonimo, //  lo pasamos como función getter
+                    (val) => setStateDialog(() => comoAnonimo = val),
+                    () => rating,
+                    (val) => setStateDialog(() => rating = val),
+                    enviando,
+                    (val) => setStateDialog(() => enviando = val),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
 
-                                final userData =
-                                    await FirebaseFirestore.instance
-                                        .collection('usuarios')
-                                        .doc(user.uid)
-                                        .get();
-
-                                final comentario = {
-                                  'usuarioId': user.uid,
-                                  'nombre':
-                                      comoAnonimo
-                                          ? 'Anónimo'
-                                          : userData['Nombre'],
-                                  'comentario': controller.text,
-                                  'estrellas': rating,
-                                  'timestamp': Timestamp.now(),
-                                  'tema': widget.tema,
-                                  'ejercicioId': widget.ejercicioId,
-                                  'modificado': false,
-                                };
-
-                                await FirebaseFirestore.instance
-                                    .collection('comentarios_ejercicios')
-                                    .add(comentario);
-
-                                // ACTUALIZAR PROMEDIO DE CALIFICACIONES
-                                final calSnap =
-                                    await FirebaseFirestore.instance
-                                        .collection('comentarios_ejercicios')
-                                        .where(
-                                          'ejercicioId',
-                                          isEqualTo: widget.ejercicioId,
-                                        )
-                                        .where('tema', isEqualTo: widget.tema)
-                                        .get();
-
-                                final ratings =
-                                    calSnap.docs
-                                        .map((d) => d['estrellas'] as int)
-                                        .toList();
-
-                                double promedio = 0.0;
-                                if (ratings.isNotEmpty) {
-                                  promedio =
-                                      ratings.reduce((a, b) => a + b) /
-                                      ratings.length;
-                                }
-
-                                await FirebaseFirestore.instance
-                                    .collection('calculo')
-                                    .doc(widget.tema)
-                                    .collection('Ejer${widget.tema}')
-                                    .doc(widget.ejercicioId)
-                                    .update({'CalPromedio': promedio});
-
-                                await _cargarDatosDesdeFirestore(); //Para actualizar estrellas en columna izquierda
-                                // MANDAR NOTIFICACIÓN AL AUTOR DEL EJERCICIO
-                                final autorId = ejercicioData?['AutorId'];
-                                final nombreEjer = ejercicioData?['Titulo'];
-
-                                if (autorId != null && autorId != user.uid) {
-                                  await NotificationService.crearNotificacion(
-                                    uidDestino: autorId,
-                                    tipo: 'calificacion',
-                                    titulo: 'Nueva calificación',
-                                    contenido:
-                                        'Han calificado tu ejercicio "$nombreEjer"',
-                                    referenciaId: widget.ejercicioId,
-                                    tema: widget.tema,
-                                    uidEmisor: user.uid,
-                                    nombreEmisor:
-                                        comoAnonimo
-                                            ? 'Anónimo'
-                                            : userData['Nombre'],
-                                  );
-                                }
-
-                                _cargarComentarios(); // recargar comentarios en pantalla
-                                Navigator.pop(context);
-
-                                showDialog(
-                                  context: context,
-                                  barrierDismissible: false,
-                                  builder: (dialogContext) {
-                                    // Capturamos el contexto del diálogo
-                                    final localContext = dialogContext;
-
-                                    // Cerrarlo automáticamente después de 2 segundos
-                                    WidgetsBinding.instance
-                                        .addPostFrameCallback((_) {
-                                          Future.delayed(
-                                            const Duration(seconds: 2),
-                                            () {
-                                              if (Navigator.canPop(
-                                                localContext,
-                                              )) {
-                                                Navigator.of(
-                                                  localContext,
-                                                  rootNavigator: true,
-                                                ).pop();
-                                              }
-                                            },
-                                          );
-                                        });
-
-                                    return const AlertDialog(
-                                      title: Text(
-                                        'Gracias por tu calificación',
-                                      ),
-                                      content: Text(
-                                        'Tu opinión ha sido enviada con éxito.',
-                                      ),
-                                    );
-                                  },
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ],
+  Widget _buildContenidoDialogo(
+    TextEditingController controller,
+    bool Function() getComoAnonimo,
+    void Function(bool) setComoAnonimo,
+    int Function() getRating,
+    void Function(int) setRating,
+    bool enviando,
+    void Function(bool) setEnviando,
+  ) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 500),
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Califica este ejercicio',
+                    style: GoogleFonts.ebGaramond(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
                     ),
                   ),
                 ),
-          ),
-    );
-  }
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            CustomRatingWidget(
+              rating: getRating(),
+              onRatingChanged: (nuevoValor) => setRating(nuevoValor),
+              enableHoverEffect: true,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Comentario',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 12),
+            CheckboxListTile(
+              value: getComoAnonimo(),
+              onChanged: (val) {
+                if (val != null) setComoAnonimo(val);
+              },
+              title: const Text('Comentar como anónimo'),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+            ),
+            const SizedBox(height: 16),
 
-  Widget _estrellaConDecimal(double valor) {
-    return Center(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: List.generate(5, (i) {
-          double estrellaValor = valor - i;
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF6F3FA),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: DropdownButtonFormField<String>(
+                value: versionSeleccionada,
+                isExpanded: true,
+                items:
+                    versiones.map((ver) {
+                      final fecha = (ver['fecha'] as Timestamp?)?.toDate();
+                      final formatted =
+                          fecha != null
+                              ? DateFormat('dd/MM/yyyy').format(fecha)
+                              : 'Sin fecha';
+                      return DropdownMenuItem<String>(
+                        value: ver['id'],
+                        child: Text('Versión ${ver['id']} - $formatted'),
+                      );
+                    }).toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => versionSeleccionada = value);
+                  }
+                },
+                decoration: const InputDecoration.collapsed(
+                  hintText: 'Seleccionar versión',
+                ),
+                dropdownColor: Colors.white,
+              ),
+            ),
 
-          return TweenAnimationBuilder<double>(
-            tween: Tween<double>(begin: 0, end: estrellaValor.clamp(0.0, 1.0)),
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeOut,
-            builder: (context, animValue, child) {
-              IconData icono;
-              if (animValue >= 0.75) {
-                icono = Icons.star;
-              } else if (animValue >= 0.25) {
-                icono = Icons.star_half;
-              } else {
-                icono = Icons.star_border;
-              }
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed:
+                      enviando
+                          ? null
+                          : () async {
+                            if (controller.text.trim().isEmpty ||
+                                getRating() == 0) {
+                              showCustomDialog(
+                                context: context,
+                                titulo: 'Campos incompletos',
+                                mensaje:
+                                    'Por favor escribe un comentario y selecciona una calificación.',
+                                tipo: CustomDialogType.error,
+                                botones: [
+                                  DialogButton(
+                                    texto: 'Aceptar',
+                                    onPressed: () async {
+                                      Navigator.of(context).pop();
+                                    },
+                                  ),
+                                  DialogButton(
+                                    texto: 'Intentar de nuevo',
+                                    onPressed: () async {
+                                      Navigator.of(context).pop();
+                                      _mostrarDialogoCalificacion();
+                                    },
+                                  ),
+                                ],
+                              );
 
-              final color = Color.lerp(
-                Colors.amber.withOpacity(0.5),
-                Colors.amber,
-                animValue,
-              );
+                              return;
+                            }
 
-              return Transform.scale(
-                scale: 1.0 + (0.1 * animValue), // efecto de zoom
-                child: Icon(icono, color: color, size: 24),
-              );
-            },
-          );
-        }),
+                            setEnviando(true);
+                            await _enviarComentario(
+                              controller.text
+                                  .trim(), // hacer trim sirve para eliminar espacios en blanco al inicio y al final
+                              getRating(),
+                              getComoAnonimo(),
+                            );
+                            setEnviando(false);
+                            Navigator.pop(context);
+                          },
+                  icon:
+                      enviando
+                          ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                          : const Icon(Icons.send),
+                  label: Text(enviando ? 'Enviando...' : 'Enviar'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  //Widget _estrellaConDecimal(double valor) {
-  //  return Center(
-  //    child: Row(
-  //      mainAxisSize: MainAxisSize.min,
-  //      children: List.generate(5, (i) {
-  //        if (valor >= i + 1) {
-  //          return const Icon(Icons.star, color: Color(0xFFFFC107), size: 22);
-  //        } else if (valor > i) {
-  //          return const Icon(
-  //            Icons.star_half,
-  //            color: Color(0xFFFFC107),
-  //            size: 22,
-  //          );
-  //        } else {
-  //          return const Icon(
-  //            Icons.star_border,
-  //            color: Colors.black38,
-  //            size: 22,
-  //          );
-  //        }
-  //      }),
-  //    ),
-  //  );
-  //}
+  Future<void> _enviarComentario(
+    String texto,
+    int rating,
+    bool comoAnonimo,
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || texto.isEmpty || rating == 0) return;
 
-  Widget _botonAccion(String texto, IconData icono, VoidCallback onPressed) {
-    return ElevatedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icono),
-      label: Text(texto),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF1A1A1A),
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-      ),
+    final userData =
+        await FirebaseFirestore.instance
+            .collection('usuarios')
+            .doc(user.uid)
+            .get();
+    final comentario = {
+      'usuarioId': user.uid,
+      'nombre': comoAnonimo ? 'Anónimo' : userData['Nombre'],
+      'comentario': texto,
+      'estrellas': rating,
+      'timestamp': Timestamp.now(),
+      'tema': widget.tema,
+      'ejercicioId': widget.materialId,
+      'modificado': false,
+    };
+
+    await FirebaseFirestore.instance
+        .collection('comentarios_materiales')
+        .add(comentario);
+
+    final calSnap =
+        await FirebaseFirestore.instance
+            .collection('comentarios_materiales')
+            .where('ejercicioId', isEqualTo: widget.materialId)
+            .where('tema', isEqualTo: widget.tema)
+            .get();
+
+    final ratings = calSnap.docs.map((d) => d['estrellas'] as int).toList();
+    double promedio = 0.0;
+    if (ratings.isNotEmpty) {
+      promedio = ratings.reduce((a, b) => a + b) / ratings.length;
+    }
+
+    await FirebaseFirestore.instance
+        .collection('materiales')
+        .doc(widget.tema)
+        .collection('Mat${widget.tema}')
+        .doc(widget.materialId)
+        .update({'calificacionPromedio': promedio});
+
+    await _cargarComentarios();
+    await _cargarDatosDesdeFirestore();
+    //Opcion 1
+    // if (context.mounted) {
+    // Navigator.of(
+    // context,
+    // rootNavigator: true,
+    // ).pop(); // cerrar el AlertDialog de calificación
+    // }
+    // showFeedbackDialogAndSnackbar(
+    //   context: context,
+    //   titulo: '¡Éxito!',
+    //   mensaje: ' Comentario enviado exitosamente.',
+    //   tipo: CustomDialogType.error,
+    //   snackbarMessage: '✅ Comentario enviado exitosamente.',
+    //   snackbarSuccess: true,
+    // );
+    // Opcion 2
+    // await closeDialogAndShowSnackbar(
+    // context: context,
+    // message: '✅ Comentario enviado exitosamente.',
+    // success: true,
+    // );
+
+    // Opción 3 para mostrar snackbar más fácil sin tanto clic
+    showCustomSnackbar(
+      context: context,
+      message: '✅ Comentario enviado exitosamente.',
+      success: true,
     );
   }
 
@@ -475,12 +1030,13 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
 
   @override
   Widget build(BuildContext context) {
-    final calificacion =
-        double.tryParse(ejercicioData?['CalPromedio'].toString() ?? '0') ?? 0.0;
-    final nombre = ejercicioData?['Titulo'] ?? '';
-    final autor = ejercicioData?['Autor'] ?? 'Anónimo';
-    final fecha = (ejercicioData?['FechMod'] as Timestamp?)?.toDate();
-    final desc = ejercicioData?['DesEjercicio'] ?? '';
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    final bool esMovilMuyPequeno = screenWidth <= 480;
+    final bool esMovilGrande = screenWidth > 480 && screenWidth <= 800;
+    final bool esTabletOLaptopChica = screenWidth > 800 && screenWidth <= 1200;
+    final bool esLaptopGrande = screenWidth > 1200 && screenWidth <= 1900;
+    final bool esUltraWide = screenWidth > 1900;
 
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
@@ -489,734 +1045,124 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
         title: const Text('Study Connect'),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.pushNamed(context, '/');
-            },
-            child: const Text('Inicio', style: TextStyle(color: Colors.white)),
+            onPressed: () => Navigator.pushNamed(context, '/'),
+            child: const Tooltip(
+              message: 'Ir a Inicio',
+              child: Text('Inicio', style: TextStyle(color: Colors.white)),
+            ),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.pushNamed(context, '/ranking');
-            },
-            child: const Text('Ranking', style: TextStyle(color: Colors.white)),
+            onPressed: () => Navigator.pushNamed(context, '/ranking'),
+            child: const Tooltip(
+              message: 'Ir a Ranking',
+              child: Text('Ranking', style: TextStyle(color: Colors.white)),
+            ),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.pushNamed(context, '/content');
-            },
-            child: const Text(
-              'Contenidos',
-              style: TextStyle(color: Colors.white),
+            onPressed: () => Navigator.pushNamed(context, '/content'),
+            child: const Tooltip(
+              message: 'Ir a Contenido',
+              child: Text('Contenido', style: TextStyle(color: Colors.white)),
             ),
           ),
           const NotificationIconWidget(),
           TextButton(
-            onPressed: () {
-              Navigator.pushNamed(context, '/profile');
-            },
+            onPressed: () => Navigator.pushNamed(context, '/user_profile'),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.white),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Text(
-                'Perfil',
-                style: TextStyle(color: Colors.white),
+              child: const Tooltip(
+                message: 'Ir a perfil',
+                child: Text('Perfil', style: TextStyle(color: Colors.white)),
               ),
             ),
           ),
           const SizedBox(width: 16),
         ],
       ),
-
       body: Screenshot(
         controller: _screenshotController,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Columna izquierda (info autor + imagen)
-              Expanded(
-                flex: 1,
-                child: Container(
-                  margin: const EdgeInsets.only(right: 16),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF055B84),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _infoConIcono(
-                        Icons.person,
-                        'Autor: $autor',
-                        alineacion: MainAxisAlignment.center,
-                      ),
-                      const SizedBox(height: 8),
-                      const SizedBox(height: 10),
-                      _infoConIcono(
-                        Icons.info,
-                        'Tema: ${nombresTemas[widget.tema] ?? widget.tema}',
-                        alineacion: MainAxisAlignment.center,
-                        tamanoTexto: 17,
-                      ),
-                      const SizedBox(height: 8),
-                      _infoConIcono(
-                        Icons.info,
-                        'Ejercicio: ${widget.ejercicioId}',
-                        alineacion: MainAxisAlignment.center,
-                        tamanoTexto: 17,
-                      ),
-                      const SizedBox(height: 8),
-                      Center(
-                        child: Text(
-                          'Version :',
-                          style: GoogleFonts.ebGaramond(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 2500),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (esMovilMuyPequeno || esMovilGrande) {
+                  return Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: CustomScrollView(
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: _columnaIzquierda(
+                            ejercicioData: materialData ?? {},
+                            tema: widget.tema,
+                            ejercicioId: widget.materialId,
+                            versiones: versiones,
+                            versionSeleccionada: versionSeleccionada,
+                            comentarios: comentarios,
+                            onVersionChanged: (newVersion) {
+                              setState(() {
+                                versionSeleccionada = newVersion;
+                              });
+                              _cargarVersionSeleccionada(newVersion);
+                            },
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (versiones.isNotEmpty)
-                        Center(
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              dropdownColor: Colors.white,
-                              value: versionSeleccionada,
-                              icon: const Icon(
-                                Icons.arrow_drop_down,
-                                color: Colors.white,
-                              ),
-                              style: GoogleFonts.ebGaramond(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                              items:
-                                  versiones.map((ver) {
-                                    final fecha =
-                                        (ver['fecha'] as Timestamp?)?.toDate();
-                                    final formatted =
-                                        fecha != null
-                                            ? DateFormat(
-                                              'dd/MM/yyyy',
-                                            ).format(fecha)
-                                            : 'Sin fecha';
-                                    return DropdownMenuItem<String>(
-                                      value: ver['id'] as String,
-                                      child: Text('${ver['id']} - $formatted'),
-                                    );
-                                  }).toList(),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() => versionSeleccionada = val);
-                                  _cargarVersionSeleccionada(val);
-                                }
-                              },
-                            ),
+                        SliverPadding(padding: const EdgeInsets.only(top: 20)),
+                        SliverToBoxAdapter(
+                          child: _columnaDerecha(
+                            materialData: materialData ?? {},
+                            comentarios: comentarios,
+                            esPantallaChica: false,
                           ),
                         ),
-
-                      Center(
-                        child: Text(
-                          'Última actualización :',
-                          style: GoogleFonts.ebGaramond(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                      ],
+                    ),
+                  );
+                } else {
+                  return Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: esTabletOLaptopChica ? 2 : 1,
+                          child: _columnaIzquierda(
+                            ejercicioData: materialData ?? {},
+                            tema: widget.tema,
+                            ejercicioId: widget.materialId,
+                            versiones: versiones,
+                            versionSeleccionada: versionSeleccionada,
+                            comentarios: comentarios,
+                            onVersionChanged: (newVersion) {
+                              setState(() {
+                                versionSeleccionada = newVersion;
+                              });
+                              _cargarVersionSeleccionada(newVersion);
+                            },
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Center(
-                        child: Text(
-                          fecha != null
-                              ? DateFormat('dd/MM/yy').format(fecha)
-                              : '---',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
+                        const SizedBox(width: 20),
+                        Expanded(
+                          flex: esTabletOLaptopChica ? 2 : 3,
+                          child: _columnaDerecha(
+                            materialData: materialData ?? {},
+                            comentarios: comentarios,
+                            esPantallaChica: true,
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      Center(
-                        child: Text(
-                          'Calificación :',
-                          style: GoogleFonts.ebGaramond(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      _estrellaConDecimal(calificacion),
-                      const SizedBox(height: 8),
-                      Center(
-                        child: Text(
-                          '${calificacion.toStringAsFixed(1)} / 5.0',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                      const Divider(color: Colors.white54),
-                      Center(
-                        child: Text(
-                          '${comentarios.length} comentario(s)',
-                          style: const TextStyle(color: Colors.white60),
-                        ),
-                      ),
-                      const SizedBox(height: 40),
-                      // Imagen decorativa
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: SizedBox(
-                          width:
-                              double
-                                  .infinity, // usa el ancho del contenedor padre
-                          child: AspectRatio(
-                            aspectRatio:
-                                4 / 3, // relación de aspecto recomendada
-                            child: Image.asset(
-                              'assets/images/funciones.png',
-                              fit: BoxFit.cover,
-                              errorBuilder:
-                                  (_, __, ___) => const Padding(
-                                    padding: EdgeInsets.all(8.0),
-                                    child: Text(
-                                      'No se pudo cargar la imagen.',
-                                      style: TextStyle(color: Colors.redAccent),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 20),
-              Expanded(
-                flex: 3,
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: ListView(
-                    children: [
-                      Text(
-                        'Título del ejercicio:',
-                        style: GoogleFonts.ebGaramond(
-                          fontSize: 19,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      Card(
-                        elevation: 3,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        color: const Color(0xFFF6F3FA),
-                        margin: const EdgeInsets.only(bottom: 16),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 16),
-                              SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: Math.tex(
-                                  nombre
-                                      .replaceAll(' ', r'\ ')
-                                      .replaceAll('\n', r'\\'),
-                                  mathStyle: MathStyle.display,
-                                  textStyle: const TextStyle(
-                                    fontSize: 22,
-                                    color: Colors.black,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 10),
-                      const Divider(color: Colors.black87, height: 20),
-
-                      const Text(
-                        'Descripción del ejercicio:',
-                        style: TextStyle(fontSize: 18, color: Colors.black),
-                      ),
-                      const SizedBox(height: 20),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF6F3FA),
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
-                              blurRadius: 6,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        child: Text(
-                          dividirDescripcionEnLineas(desc),
-                          style: GoogleFonts.ebGaramond(
-                            fontSize: 18,
-                            color: Colors.black,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          softWrap: true,
-                          textAlign: TextAlign.justify,
-                        ),
-                      ),
-
-                      //todo
-                      const SizedBox(height: 20),
-                      const Divider(color: Colors.black87, height: 20),
-                      const Text(
-                        'Pasos a seguir:',
-                        style: TextStyle(fontSize: 18, color: Colors.black),
-                      ),
-                      ...List.generate(
-                        pasos.length,
-                        (i) => Card(
-                          color: const Color(0xFFF6F3FA),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Paso ${i + 1}:'),
-                                const SizedBox(height: 6),
-
-                                // DESCRIPCIÓN y PASO (combinados)
-                                Builder(
-                                  builder: (_) {
-                                    try {
-                                      final pasoLatex = prepararLaTeX(pasos[i]);
-                                      final descLatex =
-                                          (i < descripciones.length)
-                                              ? prepararLaTeX(descripciones[i])
-                                              : '';
-
-                                      final mostrarAmbos =
-                                          pasoLatex != descLatex;
-
-                                      return Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          if (descLatex.isNotEmpty)
-                                            SingleChildScrollView(
-                                              scrollDirection: Axis.horizontal,
-                                              child: Math.tex(
-                                                descLatex,
-                                                mathStyle: MathStyle.display,
-                                                textStyle: const TextStyle(
-                                                  fontSize: 16,
-                                                  color: Colors.black,
-                                                ),
-                                              ),
-                                            ),
-                                          if (mostrarAmbos &&
-                                              pasoLatex.isNotEmpty)
-                                            const SizedBox(height: 10),
-                                          if (mostrarAmbos &&
-                                              pasoLatex.isNotEmpty)
-                                            SingleChildScrollView(
-                                              scrollDirection: Axis.horizontal,
-                                              child: Math.tex(
-                                                pasoLatex,
-                                                mathStyle: MathStyle.display,
-                                                textStyle: const TextStyle(
-                                                  fontSize: 18,
-                                                  color: Colors.black87,
-                                                ),
-                                              ),
-                                            ),
-                                          if (pasoLatex.isNotEmpty)
-                                            Align(
-                                              alignment: Alignment.centerRight,
-                                              child: TextButton.icon(
-                                                onPressed: () async {
-                                                  await Clipboard.setData(
-                                                    ClipboardData(
-                                                      text: pasos[i],
-                                                    ),
-                                                  );
-                                                  ScaffoldMessenger.of(
-                                                    context,
-                                                  ).showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text(
-                                                        'Código LaTeX copiado',
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                                icon: const Icon(
-                                                  Icons.copy,
-                                                  size: 18,
-                                                ),
-                                                label: const Text(
-                                                  'Copiar LaTeX',
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      );
-                                    } catch (e) {
-                                      return const Text(
-                                        '⚠️ Error al mostrar el paso',
-                                        style: TextStyle(
-                                          color: Colors.redAccent,
-                                        ),
-                                      );
-                                    }
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      // la dividi en en 4 casos para que se desplieguen bien , descripcion y paso son iguales Solo se muestra uno una vez , si el paso y la descripcion son diferentes se muestran ambos uno arriba de otro , solo hay paso solo se muestra paso y si solo hay descripcion solo se muestra la descripcion :D
-                      //todo
-                      const SizedBox(height: 16),
-                      ExpansionTile(
-                        title: Text(
-                          'Comentarios (${comentarios.length})',
-                          style: const TextStyle(color: Colors.black),
-                        ),
-                        children:
-                            comentarios.map((c) {
-                              final fecha =
-                                  (c['timestamp'] as Timestamp?)?.toDate();
-                              final formatted =
-                                  fecha != null
-                                      ? DateFormat(
-                                        'dd/MM/yyyy HH:mm',
-                                      ).format(fecha)
-                                      : '';
-                              final editable =
-                                  c['usuarioId'] ==
-                                  FirebaseAuth.instance.currentUser?.uid;
-
-                              return ListTile(
-                                leading: const Icon(
-                                  Icons.person,
-                                  color: Colors.black,
-                                ),
-                                title: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        c['nombre'] ?? 'Anónimo',
-                                        style: const TextStyle(
-                                          color: Colors.black,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                    _estrellaConDecimal(
-                                      (c['estrellas'] ?? 0).toDouble(),
-                                    ),
-                                  ],
-                                ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      formatted,
-                                      style: const TextStyle(
-                                        color: Colors.black54,
-                                      ),
-                                    ),
-                                    Text(
-                                      c['comentario'] ?? '',
-                                      style: const TextStyle(
-                                        color: Colors.black,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                trailing:
-                                    editable
-                                        ? IconButton(
-                                          icon: const Icon(
-                                            Icons.delete,
-                                            color: Colors.redAccent,
-                                          ),
-                                          onPressed: () async {
-                                            final docs =
-                                                await FirebaseFirestore.instance
-                                                    .collection(
-                                                      'comentarios_ejercicios',
-                                                    )
-                                                    .where(
-                                                      'usuarioId',
-                                                      isEqualTo: c['usuarioId'],
-                                                    )
-                                                    .where(
-                                                      'comentario',
-                                                      isEqualTo:
-                                                          c['comentario'],
-                                                    )
-                                                    .where(
-                                                      'timestamp',
-                                                      isEqualTo: c['timestamp'],
-                                                    )
-                                                    .get();
-
-                                            for (final d in docs.docs) {
-                                              await d.reference.delete();
-                                            }
-
-                                            await _cargarComentarios();
-                                            await _cargarDatosDesdeFirestore(); //  Para actualizar calificación dinámica
-
-                                            showDialog(
-                                              // Mostrar AlertDialog que se cierra automáticamente
-                                              context: context,
-                                              barrierDismissible:
-                                                  false, // no se puede cerrar tocando afuera
-                                              builder: (context) {
-                                                // Cerrar automáticamente después de 2 segundos
-                                                Future.delayed(
-                                                  const Duration(seconds: 2),
-                                                  () {
-                                                    if (Navigator.canPop(
-                                                      context,
-                                                    )) {
-                                                      Navigator.of(
-                                                        context,
-                                                      ).pop();
-                                                    }
-                                                  },
-                                                );
-
-                                                return const AlertDialog(
-                                                  title: Text(
-                                                    'Comentario eliminado',
-                                                  ),
-                                                  content: Text(
-                                                    'Tu comentario ha sido eliminado correctamente.',
-                                                  ),
-                                                );
-                                              },
-                                            );
-                                          },
-                                        )
-                                        : null,
-                              );
-                            }).toList(),
-                      ),
-
-                      const SizedBox(height: 16),
-                      const SizedBox(height: 40),
-                      Card(
-                        color: const Color(0xFFF6F3FA),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        elevation: 6,
-                        margin: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 20,
-                            horizontal: 24,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              const Text(
-                                '¿Te fue útil este ejercicio?',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                              if (comentarios.isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${comentarios.length} persona(s) ya lo calificaron',
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.black54,
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 16),
-                              Wrap(
-                                spacing: 20,
-                                runSpacing: 12,
-                                alignment: WrapAlignment.center,
-                                children: [
-                                  currentUser != null
-                                      ? _botonAccion(
-                                        'Calificar',
-                                        Icons.star,
-                                        _mostrarDialogoCalificacion,
-                                      )
-                                      : ElevatedButton.icon(
-                                        onPressed:
-                                            () => showDialog(
-                                              context: context,
-                                              builder:
-                                                  (_) => AlertDialog(
-                                                    title: const Text(
-                                                      'Inicia sesión',
-                                                    ),
-                                                    content: const Text(
-                                                      'Debes iniciar sesión para comentar.',
-                                                    ),
-                                                    actions: [
-                                                      TextButton(
-                                                        onPressed:
-                                                            () =>
-                                                                Navigator.pushNamed(
-                                                                  context,
-                                                                  '/login',
-                                                                ),
-                                                        child: const Text(
-                                                          'Iniciar sesión',
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                            ),
-                                        icon: const Icon(Icons.lock),
-                                        label: const Text('Inicia sesión'),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.grey,
-                                        ),
-                                      ),
-                                  _botonAccion(
-                                    'Compartir',
-                                    Icons.share,
-                                    _compartirCapturaConFacebookWeb,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              const Text(
-                                '¡Comparte este ejercicio con tus compañeros!',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontStyle: FontStyle.italic,
-                                  color: Colors.black54,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+                      ],
+                    ),
+                  );
+                }
+              },
+            ),
           ),
         ),
       ),
     );
   }
-}
-
-String prepararLaTeX(String texto) {
-  try {
-    return texto
-        .replaceAllMapped(
-          RegExp(r'(?<!\\) '),
-          (m) => r'\ ',
-        ) // espacios normales
-        .replaceAll('\n', r'\\') // saltos de línea
-        .replaceAllMapped(
-          RegExp(r'([{}])'),
-          (m) => '\\${m[0]}',
-        ); // escapa {} si aparecen sueltos
-  } catch (_) {
-    return 'Contenido inválido';
-  }
-}
-
-String dividirDescripcionEnLineas(
-  String texto, {
-  int maxPalabrasPorLinea = 25,
-}) {
-  final palabras = texto.split(' ');
-  final buffer = StringBuffer();
-
-  for (int i = 0; i < palabras.length; i++) {
-    buffer.write(palabras[i]);
-    if ((i + 1) % maxPalabrasPorLinea == 0 && i != palabras.length - 1) {
-      buffer.write('\n'); // salto de línea visible
-    } else if (i != palabras.length - 1) {
-      buffer.write(' ');
-    }
-  }
-
-  return buffer.toString();
-}
-
-Widget _infoConIcono(
-  IconData icon,
-  String texto, {
-  MainAxisAlignment alineacion = MainAxisAlignment.start,
-  Color colorTexto = Colors.white, // Nuevo parámetro
-  double tamanoTexto = 18, // Nuevo parámetro
-}) {
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 6),
-    child: Row(
-      mainAxisAlignment: alineacion,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Icon(icon, color: colorTexto, size: 18),
-        const SizedBox(width: 8),
-        Text(
-          texto,
-          style: GoogleFonts.ebGaramond(
-            color: colorTexto,
-            fontSize: tamanoTexto,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    ),
-  );
 }
