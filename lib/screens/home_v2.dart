@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:study_connect/widgets/notification_icon_widget.dart';
+import 'package:study_connect/widgets/widgets.dart';
 
 // 🎨 Colores personalizados
 const Color azulPrimario = Color(0xFF0D47A1); // Azul profundo
@@ -303,6 +304,8 @@ class _HomePageState extends State<HomePage> {
             fit: BoxFit.cover,
           ),
         ),
+
+        //NoticiasCarouselApi(),
         const SizedBox(height: 10),
         _buildContenidosCard(),
       ],

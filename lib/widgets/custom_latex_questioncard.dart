@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:study_connect/widgets/custom_latex_text.dart';
 
+import '../utils/utils.dart';
+
 class CustomLatexQuestionCard extends StatefulWidget {
   final String pregunta;
   final int numero;
@@ -76,6 +78,7 @@ class _CustomLatexQuestionCardState extends State<CustomLatexQuestionCard>
             fontSize: 18,
             color: Colors.black87,
             scrollHorizontal: false,
+            prepararLatex: prepararLaTeX,
           ),
           const SizedBox(height: 12),
           Column(
@@ -142,6 +145,7 @@ class _CustomLatexQuestionCardState extends State<CustomLatexQuestionCard>
                           "Respuesta correcta: ${widget.respuestaCorrecta}) ${widget.opciones[widget.respuestaCorrecta]}",
                       fontSize: 16,
                       color: Colors.green.shade800,
+                      prepararLatex: prepararLaTeX,
                     ),
                   ),
                 ],

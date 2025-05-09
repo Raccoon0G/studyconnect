@@ -18,7 +18,7 @@ class CreditsPage extends StatelessWidget {
             ),
             SizedBox(height: 10),
             Text(
-              '• Jeovanny Martínez - Diseño y desarrollo de frontend y lógica de usuarios.',
+              '• Jeovanny Martínez - Diseño y desarrollo de frontend y backend.',
             ),
             Text(
               '• Equipo de Firebase - Backend como servicio para autenticación y base de datos.',

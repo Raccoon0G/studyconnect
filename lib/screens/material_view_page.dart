@@ -676,6 +676,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                 contenido: titulo,
                 fontSize: 22,
                 color: Colors.black,
+                prepararLatex: prepararLaTeX,
               ),
             ),
           ),

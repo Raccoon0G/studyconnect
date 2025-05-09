@@ -22,3 +22,6 @@ export 'package:study_connect/widgets/custom_feedback_card.dart';
 export 'package:study_connect/widgets/chat_bubble.dart';
 export 'package:study_connect/widgets/chat_date_separator.dart';
 export 'package:study_connect/widgets/chat_shimmer.dart';
+export 'package:study_connect/widgets/custom_podium_widget.dart';
+
+//export 'package:study_connect/probes/noticias_carousel_api_widget.dart';

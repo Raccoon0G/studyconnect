@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:study_connect/screens/screens.dart';
 
 import 'services/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,6 +15,11 @@ void main() async {
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
+
+  Future<void> main() async {
+    await dotenv.load(); // carga el .env
+    runApp(const MyApp());
+  }
 
   @override
   Widget build(BuildContext context) {
