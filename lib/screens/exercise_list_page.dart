@@ -7,6 +7,8 @@ import 'package:study_connect/widgets/custom_action_button.dart';
 import 'package:study_connect/services/services.dart';
 import 'package:study_connect/widgets/widgets.dart';
 
+import '../utils/utils.dart';
+
 class ExerciseListPage extends StatelessWidget {
   const ExerciseListPage({super.key});
 
@@ -260,6 +262,7 @@ class ExerciseListPage extends StatelessWidget {
                                             child: CustomLatexText(
                                               contenido: data['Titulo'] ?? '',
                                               fontSize: 16,
+                                              prepararLatex: prepararLaTeX,
                                             ),
                                           ),
                                         ),

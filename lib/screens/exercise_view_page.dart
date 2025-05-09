@@ -446,6 +446,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                     contenido: nombre,
                     fontSize: 22,
                     color: Colors.black,
+                    prepararLatex: prepararLaTeX,
                   ),
                 ),
               ],

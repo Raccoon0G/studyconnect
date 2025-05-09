@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:study_connect/utils/utils.dart';
 import 'package:study_connect/widgets/custom_latex_text.dart';
 import 'package:study_connect/widgets/custom_star_rating.dart';
 import 'package:study_connect/widgets/custom_action_button.dart';
@@ -259,6 +260,7 @@ class MaterialListPage extends StatelessWidget {
                                             child: CustomLatexText(
                                               contenido: data['titulo'] ?? '',
                                               fontSize: 16,
+                                              prepararLatex: prepararLaTeX,
                                             ),
                                           ),
                                         ),
