@@ -32,7 +32,7 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 
-/build/	
+
 # Symbolication related
 app.*.symbols
 
@@ -52,5 +52,6 @@ app.*.map.json
 # Firebase generated Dart file with API keys
 lib/firebase_options.dart
 
+/build/	
 lib/probes/
 lib/config/secrets.dart
