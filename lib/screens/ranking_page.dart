@@ -203,19 +203,19 @@ class _RankingPageState extends State<RankingPage> {
                                         sortColumnIndex: _sortColumnIndex,
                                         sortAscending: _sortAscending,
                                         headingRowHeight: 56,
-                                        dataRowMinHeight: 64,
-                                        dataRowMaxHeight: 72,
+                                        dataRowMinHeight: 60,
+                                        dataRowMaxHeight: 70,
                                         horizontalMargin: 16,
-                                        columnSpacing: 28,
+                                        columnSpacing: 32,
                                         headingRowColor:
                                             WidgetStateProperty.all(
-                                              const Color(0xFF0288D1),
+                                              const Color(0xFF0277BD),
                                             ),
-                                        dividerThickness: 0.5,
+                                        dividerThickness: 0.4,
                                         border: TableBorder(
                                           horizontalInside: BorderSide(
-                                            color: Colors.white30,
-                                            width: 0.5,
+                                            color: Colors.white24,
+                                            width: 0.4,
                                           ),
                                         ),
                                         columns: [
@@ -226,22 +226,22 @@ class _RankingPageState extends State<RankingPage> {
                                                 color: Colors.white,
                                               ),
                                             ),
-                                            onSort: (columnIndex, ascending) {
-                                              setState(() {
-                                                _sortColumnIndex = columnIndex;
-                                                _sortAscending = ascending;
-                                                ranking.sort(
-                                                  (a, b) =>
-                                                      ascending
-                                                          ? a['uid'].compareTo(
-                                                            b['uid'],
-                                                          )
-                                                          : b['uid'].compareTo(
-                                                            a['uid'],
-                                                          ),
-                                                );
-                                              });
-                                            },
+                                            // onSort: (index, ascending) {
+                                            //   setState(() {
+                                            //     _sortColumnIndex = index;
+                                            //     _sortAscending = ascending;
+                                            //     ranking.sort(
+                                            //       (a, b) =>
+                                            //           ascending
+                                            //               ? a['uid'].compareTo(
+                                            //                 b['uid'],
+                                            //               )
+                                            //               : b['uid'].compareTo(
+                                            //                 a['uid'],
+                                            //               ),
+                                            //     );
+                                            //   });
+                                            // },
                                           ),
                                           DataColumn(
                                             label: const Text(
@@ -252,16 +252,20 @@ class _RankingPageState extends State<RankingPage> {
                                             ),
                                           ),
                                           DataColumn(
-                                            label: const Text(
-                                              'Ejercicios',
-                                              style: TextStyle(
-                                                color: Colors.white,
+                                            label: Expanded(
+                                              child: Center(
+                                                child: Text(
+                                                  'Ejercicios',
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                             numeric: true,
-                                            onSort: (columnIndex, ascending) {
+                                            onSort: (index, ascending) {
                                               setState(() {
-                                                _sortColumnIndex = columnIndex;
+                                                _sortColumnIndex = index;
                                                 _sortAscending = ascending;
                                                 ranking.sort(
                                                   (a, b) =>
@@ -276,14 +280,21 @@ class _RankingPageState extends State<RankingPage> {
                                               });
                                             },
                                           ),
+
                                           DataColumn(
-                                            label: const Icon(
-                                              Icons.star,
-                                              color: Colors.amberAccent,
+                                            label: Expanded(
+                                              child: Center(
+                                                child: Text(
+                                                  'Promedio',
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                              ),
                                             ),
-                                            onSort: (columnIndex, ascending) {
+                                            onSort: (index, ascending) {
                                               setState(() {
-                                                _sortColumnIndex = columnIndex;
+                                                _sortColumnIndex = index;
                                                 _sortAscending = ascending;
                                                 ranking.sort(
                                                   (a, b) =>
@@ -299,7 +310,6 @@ class _RankingPageState extends State<RankingPage> {
                                             },
                                           ),
                                         ],
-
                                         rows: List.generate(ranking.length, (
                                           index,
                                         ) {
@@ -314,80 +324,71 @@ class _RankingPageState extends State<RankingPage> {
                                           return DataRow(
                                             cells: [
                                               DataCell(
-                                                SizedBox(
-                                                  width: 60,
-                                                  child: Text(
-                                                    '${index + 1}',
-                                                    style: const TextStyle(
-                                                      color: Colors.white,
-                                                    ),
+                                                Text(
+                                                  '${index + 1}',
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
                                                   ),
                                                 ),
                                               ),
                                               DataCell(
-                                                SizedBox(
-                                                  width: 200,
-                                                  child: Row(
-                                                    children: [
-                                                      CircleAvatar(
-                                                        radius: 18,
-                                                        backgroundImage:
-                                                            foto.isNotEmpty
-                                                                ? NetworkImage(
-                                                                  foto,
-                                                                )
-                                                                : null,
-                                                        child:
-                                                            foto.isEmpty
-                                                                ? const Icon(
-                                                                  Icons.person,
-                                                                  size: 16,
-                                                                )
-                                                                : null,
-                                                      ),
-                                                      const SizedBox(width: 8),
-                                                      Flexible(
-                                                        child: Text(
-                                                          '$nombre ${isTop3 ? badge[index] : ''}',
-                                                          style:
-                                                              const TextStyle(
-                                                                color:
-                                                                    Colors
-                                                                        .white,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w500,
-                                                              ),
-                                                          overflow:
-                                                              TextOverflow
-                                                                  .ellipsis,
+                                                Row(
+                                                  children: [
+                                                    CircleAvatar(
+                                                      radius: 18,
+                                                      backgroundImage:
+                                                          foto.isNotEmpty
+                                                              ? NetworkImage(
+                                                                foto,
+                                                              )
+                                                              : null,
+                                                      child:
+                                                          foto.isEmpty
+                                                              ? const Icon(
+                                                                Icons.person,
+                                                                size: 16,
+                                                              )
+                                                              : null,
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Flexible(
+                                                      child: Text(
+                                                        '$nombre ${isTop3 ? badge[index] : ''}',
+                                                        overflow:
+                                                            TextOverflow
+                                                                .ellipsis,
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontWeight:
+                                                              FontWeight.w600,
                                                         ),
                                                       ),
-                                                    ],
-                                                  ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
                                               DataCell(
-                                                SizedBox(
-                                                  width: 100,
-                                                  child: Text(
-                                                    '${r['ej']}',
-                                                    style: const TextStyle(
-                                                      color: Colors.white,
+                                                Center(
+                                                  child: SizedBox(
+                                                    width: 80,
+                                                    child: Text(
+                                                      '${r['ej']}',
+                                                      textAlign:
+                                                          TextAlign.center,
+                                                      style: TextStyle(
+                                                        color: Colors.white,
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
                                               ),
                                               DataCell(
-                                                SizedBox(
-                                                  width: 140,
-                                                  child: Center(
-                                                    child: CustomStarRating(
-                                                      valor: prom,
-                                                      size: 20,
-                                                      geometryAlignment:
-                                                          Alignment.center,
-                                                    ),
+                                                Center(
+                                                  child: CustomStarRating(
+                                                    valor: prom,
+                                                    size: 22,
+                                                    geometryAlignment:
+                                                        Alignment.center,
                                                   ),
                                                 ),
                                               ),
