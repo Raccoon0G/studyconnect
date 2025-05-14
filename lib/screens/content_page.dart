@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:study_connect/widgets/card_tema.dart';
 import 'package:study_connect/widgets/notification_icon_widget.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ContentPage extends StatelessWidget {
   const ContentPage({super.key});
@@ -28,6 +29,54 @@ class ContentPage extends StatelessWidget {
       'imagen': 'tecnicas2.png',
     },
   ];
+
+  Widget _botonProtegido(
+    BuildContext context, {
+    required IconData icono,
+    required String texto,
+    required String ruta,
+  }) {
+    final isLoggedIn = FirebaseAuth.instance.currentUser != null;
+
+    return ElevatedButton.icon(
+      onPressed: () {
+        if (!isLoggedIn) {
+          showDialog(
+            context: context,
+            builder:
+                (context) => AlertDialog(
+                  title: const Text('Inicio de sesión requerido'),
+                  content: const Text(
+                    'Para realizar esta acción necesitas iniciar sesión.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancelar'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamed(context, '/login');
+                      },
+                      child: const Text('Iniciar sesión'),
+                    ),
+                  ],
+                ),
+          );
+        } else {
+          Navigator.pushNamed(context, ruta);
+        }
+      },
+      icon: Icon(icono),
+      label: Text(texto),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.white,
+        foregroundColor: isLoggedIn ? Colors.black : Colors.grey.shade600,
+        elevation: isLoggedIn ? 4 : 0,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -153,29 +202,47 @@ class ContentPage extends StatelessWidget {
             //              .toList(),
             //    ),
             const SizedBox(height: 30),
+            // Row(
+            //   mainAxisAlignment: MainAxisAlignment.center,
+            //   children: [
+            //     ElevatedButton.icon(
+            //       onPressed:
+            //           () => Navigator.pushNamed(context, '/exercise_upload'),
+            //       icon: const Icon(Icons.add),
+            //       label: const Text('Agregar ejercicio'),
+            //       style: ElevatedButton.styleFrom(
+            //         backgroundColor: Colors.white,
+            //         foregroundColor: Colors.black,
+            //       ),
+            //     ),
+            //     const SizedBox(width: 16),
+            //     ElevatedButton.icon(
+            //       onPressed:
+            //           () => Navigator.pushNamed(context, '/upload_material'),
+            //       icon: const Icon(Icons.add),
+            //       label: const Text('Agregar material'),
+            //       style: ElevatedButton.styleFrom(
+            //         backgroundColor: Colors.white,
+            //         foregroundColor: Colors.black,
+            //       ),
+            //     ),
+            //   ],
+            // ),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                ElevatedButton.icon(
-                  onPressed:
-                      () => Navigator.pushNamed(context, '/exercise_upload'),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Agregar ejercicio'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                  ),
+                _botonProtegido(
+                  context,
+                  icono: Icons.add,
+                  texto: 'Agregar ejercicio',
+                  ruta: '/exercise_upload',
                 ),
                 const SizedBox(width: 16),
-                ElevatedButton.icon(
-                  onPressed:
-                      () => Navigator.pushNamed(context, '/upload_material'),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Agregar material'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                  ),
+                _botonProtegido(
+                  context,
+                  icono: Icons.add,
+                  texto: 'Agregar material',
+                  ruta: '/upload_material',
                 ),
               ],
             ),

@@ -14,7 +14,7 @@ export 'package:study_connect/screens/terms_page.dart';
 export 'package:study_connect/screens/credits_page.dart';
 export 'package:study_connect/screens/faq_page.dart';
 export 'package:study_connect/screens/user_exercises_page.dart';
-export 'package:study_connect/screens/upload_material_page.dart';
+export 'package:study_connect/screens/material_upload_page.dart';
 export 'package:study_connect/screens/autoevaluation_page.dart';
 export 'package:study_connect/screens/material_list_page.dart';
 export 'package:study_connect/screens/material_view_page.dart';

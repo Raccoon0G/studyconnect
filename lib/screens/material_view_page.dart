@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:screenshot/screenshot.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:study_connect/widgets/widgets.dart';
 import 'package:study_connect/utils/utils.dart';
@@ -278,7 +279,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     }
   }
 
-  Widget _buildVistaArchivo(Map<String, dynamic> archivo) {
+  Widget _buildVistaArchivo(Map<String, dynamic> archivo, double screenWidth) {
     final tipo = archivo['tipo'];
     final nombre = archivo['nombre'] ?? 'Archivo';
     final url =
@@ -288,6 +289,8 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     final bool esPdf = extension == 'pdf';
     final bool esMp3 = extension == 'mp3';
     final bool esMp4 = extension == 'mp4';
+
+    final dimensiones = obtenerDimensionesMultimedia(screenWidth);
 
     if (tipo == 'pdf' || tipo == 'word' || tipo == 'excel' || tipo == 'ppt') {
       IconData icono = Icons.insert_drive_file;
@@ -324,11 +327,24 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
     if (tipo == 'image') {
       return Card(
-        margin: const EdgeInsets.symmetric(vertical: 8),
+        margin: EdgeInsets.symmetric(vertical: dimensiones['margen']),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(dimensiones['radio']),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Image.network(url, fit: BoxFit.cover),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Center(
+                child: Image.network(
+                  url,
+                  fit: BoxFit.contain,
+                  height: obtenerDimensionesMultimedia(screenWidth)['altura'],
+                ),
+              ),
+            ),
+
             ListTile(
               leading: const Icon(Icons.image, color: Colors.blue),
               title: Text(nombre),
@@ -361,7 +377,10 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
             title: Text(nombre),
           ),
           const SizedBox(height: 8),
-          SizedBox(height: 300, child: HtmlElementView(viewType: viewId)),
+          SizedBox(
+            height: dimensiones['altura'],
+            child: HtmlElementView(viewType: viewId),
+          ),
         ],
       );
     }
@@ -402,11 +421,24 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
           builder: (context, snapshot) {
             final tituloVideo = snapshot.data ?? 'Video de YouTube';
             return Card(
-              margin: const EdgeInsets.symmetric(vertical: 8),
+              margin: EdgeInsets.symmetric(vertical: dimensiones['margen']),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(dimensiones['radio']),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Image.network(thumbnailUrl, fit: BoxFit.cover),
+                  ClipRRect(
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(dimensiones['radio']),
+                    ),
+                    child: Image.network(
+                      thumbnailUrl,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: dimensiones['altura'],
+                    ),
+                  ),
                   ListTile(
                     leading: const Icon(
                       Icons.play_circle_fill,
@@ -443,7 +475,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
     if (tipo == 'nota') {
       return Card(
-        margin: const EdgeInsets.symmetric(vertical: 8),
+        margin: EdgeInsets.symmetric(vertical: dimensiones['margen']),
         color: const Color(0xFFF1F8E9),
         child: ListTile(
           leading: const Icon(Icons.notes, color: Colors.purple),
@@ -460,6 +492,20 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         onPressed: () => html.window.open(url, '_blank'),
       ),
     );
+  }
+
+  Map<String, dynamic> obtenerDimensionesMultimedia(double width) {
+    if (width <= 480) {
+      return {'altura': 180.0, 'margen': 8.0, 'radio': 12.0};
+    } else if (width <= 800) {
+      return {'altura': 220.0, 'margen': 10.0, 'radio': 14.0};
+    } else if (width <= 1200) {
+      return {'altura': 260.0, 'margen': 12.0, 'radio': 16.0};
+    } else if (width <= 1900) {
+      return {'altura': 220.0, 'margen': 16.0, 'radio': 16.0};
+    } else {
+      return {'altura': 200.0, 'margen': 20.0, 'radio': 20.0};
+    }
   }
 
   Widget _columnaIzquierda({
@@ -633,6 +679,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     required Map<String, dynamic> materialData,
     required List<Map<String, dynamic>> comentarios,
     required bool esPantallaChica,
+    required double screenWidth,
   }) {
     final titulo = materialData['titulo'] ?? '';
     final descripcion = materialData['descripcion'] ?? '';
@@ -661,20 +708,25 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     final contenido = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Título del material:',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontSize: screenWidth < 600 ? 16 : 18,
+            fontWeight: FontWeight.bold,
+          ),
         ),
+
         const SizedBox(height: 10),
         Card(
           color: const Color(0xFFF6F3FA),
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(screenWidth < 600 ? 10 : 16),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: CustomLatexText(
                 contenido: titulo,
-                fontSize: 22,
+                fontSize: screenWidth < 600 ? 18 : 22,
+
                 color: Colors.black,
                 prepararLatex: prepararLaTeX,
               ),
@@ -714,94 +766,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
             ),
             children:
                 lista.map<Widget>((archivo) {
-                  final nombre = archivo['nombre'] ?? 'Archivo';
-                  final url = archivo['url'] ?? archivo['contenido'] ?? '';
-
-                  if (tipo == 'image') {
-                    return Card(
-                      margin: const EdgeInsets.symmetric(vertical: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Image.network(url, fit: BoxFit.cover),
-                          ListTile(
-                            leading: Icon(iconosTipo[tipo]),
-                            title: Text(nombre),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.open_in_new),
-                              onPressed: () => html.window.open(url, '_blank'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  if (tipo == 'nota') {
-                    return Card(
-                      margin: const EdgeInsets.symmetric(vertical: 8),
-                      color: const Color(0xFFF1F8E9),
-                      child: ListTile(
-                        leading: Icon(iconosTipo[tipo]),
-                        title: Text(nombre),
-                      ),
-                    );
-                  }
-
-                  final isYoutube =
-                      tipo == 'link' &&
-                      (url.contains('youtube.com') || url.contains('youtu.be'));
-
-                  if (isYoutube) {
-                    return FutureBuilder<String?>(
-                      future: obtenerTituloVideoYoutube(url),
-                      builder: (context, snapshot) {
-                        final tituloVideo = snapshot.data ?? 'Video de YouTube';
-                        final videoId =
-                            Uri.parse(url).queryParameters['v'] ??
-                            Uri.parse(url).pathSegments.last;
-                        final thumbnailUrl =
-                            'https://img.youtube.com/vi/$videoId/0.jpg';
-
-                        return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 8),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Image.network(thumbnailUrl, fit: BoxFit.cover),
-                              ListTile(
-                                leading: const Icon(
-                                  Icons.play_circle_fill,
-                                  color: Colors.red,
-                                ),
-                                title: Text(tituloVideo),
-                                subtitle: Text(url),
-                                trailing: ElevatedButton.icon(
-                                  icon: const Icon(Icons.open_in_new),
-                                  label: const Text('Ver video'),
-                                  onPressed:
-                                      () => html.window.open(url, '_blank'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.black,
-                                    foregroundColor: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    );
-                  }
-
-                  return ListTile(
-                    leading: Icon(iconosTipo[tipo], color: Colors.grey[800]),
-                    title: Text(nombre),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.open_in_new),
-                      onPressed: () => html.window.open(url, '_blank'),
-                    ),
-                  );
+                  return _buildVistaArchivo(archivo, screenWidth);
                 }).toList(),
           );
         }).toList(),
@@ -811,11 +776,34 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
           onEliminarComentario: _eliminarComentario,
         ),
         const SizedBox(height: 40),
+        // CustomFeedbackCard(
+        //   accion: 'Calificar',
+        //   numeroComentarios: comentarios.length,
+        //   onCalificar: _mostrarDialogoCalificacion,
+        //   onCompartir: _compartirCapturaConFacebookWeb,
+        // ),
         CustomFeedbackCard(
           accion: 'Calificar',
           numeroComentarios: comentarios.length,
           onCalificar: _mostrarDialogoCalificacion,
-          onCompartir: _compartirCapturaConFacebookWeb,
+          onCompartir:
+              screenWidth < 800
+                  ? () {
+                    final titulo = materialData?['titulo'] ?? 'Material';
+                    _compartirCapturaYSharePlus(
+                      titulo,
+                      widget.tema,
+                      widget.materialId,
+                    );
+                  }
+                  : () {
+                    final titulo = materialData?['titulo'] ?? 'Material';
+                    _compartirCapturaYFacebook(
+                      titulo,
+                      widget.tema,
+                      widget.materialId,
+                    );
+                  },
         ),
       ],
     );
@@ -833,16 +821,18 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         ),
       );
     } else {
-      return Container(
+      return SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: ListView(
-          physics: const BouncingScrollPhysics(),
-          padding: EdgeInsets.zero,
-          children: [contenido],
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [contenido],
+          ),
         ),
       );
     }
@@ -1055,7 +1045,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     final comentario = {
       'usuarioId': user.uid,
       'nombre': nombreUsuario,
-      'fotoUrl': fotoUrl, // <-- nueva propiedad
+      'fotoUrl': fotoUrl,
       'comentario': texto,
       'estrellas': rating,
       'timestamp': Timestamp.now(),
@@ -1089,6 +1079,21 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         .doc(widget.materialId)
         .update({'calificacionPromedio': promedio});
 
+    // 🔽 Obtener el UID del autor del material
+    final materialDoc =
+        await FirebaseFirestore.instance
+            .collection('materiales')
+            .doc(widget.tema)
+            .collection('Mat${widget.tema}')
+            .doc(widget.materialId)
+            .get();
+
+    final autorId = materialDoc.data()?['autorId'];
+
+    if (autorId != null && autorId is String && autorId.trim().isNotEmpty) {
+      await actualizarTodoCalculoDeUsuario(uid: autorId);
+    }
+
     await _cargarComentarios();
     await _cargarDatosDesdeFirestore();
     //Opcion 1
@@ -1121,26 +1126,87 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     );
   }
 
-  Future<void> _compartirCapturaConFacebookWeb() async {
+  Future<void> _compartirCapturaYFacebook(
+    String titulo,
+    String tema,
+    String ejercicioId,
+  ) async {
+    final Uint8List? image = await _screenshotController.capture();
+    if (image != null) {
+      // Descargar la imagen localmente
+      final blob = html.Blob([image]);
+      final urlBlob = html.Url.createObjectUrlFromBlob(blob);
+
+      final link =
+          html.AnchorElement(href: urlBlob)
+            ..setAttribute('download', 'captura_material.png')
+            ..click();
+
+      html.Url.revokeObjectUrl(urlBlob);
+
+      // Después, compartir en Facebook
+      final urlEjercicio = Uri.encodeComponent(
+        'https://tuapp.com/$tema/$ejercicioId',
+      ); // CAMBIA aquí tu dominio real
+      final quote = Uri.encodeComponent('¡Revisa este material: $titulo!');
+      final facebookUrl =
+          'https://www.facebook.com/sharer/sharer.php?u=$urlEjercicio&quote=$quote';
+
+      html.window.open(facebookUrl, '_blank');
+    }
+  }
+
+  Future<void> _compartirCapturaYSharePlus(
+    String titulo,
+    String tema,
+    String ejercicioId,
+  ) async {
     final Uint8List? image = await _screenshotController.capture();
     if (image != null) {
       final blob = html.Blob([image]);
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      html.AnchorElement(href: url)
-        ..target = '_blank'
-        ..download = "captura.png"
-        ..click();
-      html.Url.revokeObjectUrl(url);
-      html.window.open(
-        'https://www.facebook.com/sharer/sharer.php?u=https://tu-sitio.com',
-        '_blank',
-      );
+      final urlBlob = html.Url.createObjectUrlFromBlob(blob);
+
+      // Descargar la imagen
+      final link =
+          html.AnchorElement(href: urlBlob)
+            ..setAttribute('download', 'captura_material.png')
+            ..click();
+
+      html.Url.revokeObjectUrl(urlBlob);
     }
+
+    final urlEjercicio =
+        'https://tuapp.com/$tema/$ejercicioId'; // CAMBIA por tu dominio real
+    await Share.share('📘 $titulo\n$urlEjercicio');
+  }
+
+  void compartirEnFacebook(String titulo, String tema, String ejercicioId) {
+    final url = Uri.encodeComponent(
+      'https://tuapp.com/$tema/$ejercicioId',
+    ); // <-- CAMBIA por tu dominio real
+    final quote = Uri.encodeComponent('¡Revisa este material: $titulo!');
+    final facebookUrl =
+        'https://www.facebook.com/sharer/sharer.php?u=$url&quote=$quote';
+    html.window.open(facebookUrl, '_blank');
+  }
+
+  void compartirGenerico(String titulo, String tema, String ejercicioId) {
+    final url =
+        'https://tuapp.com/$tema/$ejercicioId'; // <-- CAMBIA por tu dominio real
+    Share.share('$titulo\n$url');
   }
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
+
+    // 👇 NUEVA LÍNEA para validar que los datos ya se cargaron
+    if (materialData == null) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF036799),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     final bool esMovilMuyPequeno = screenWidth <= 480;
     final bool esMovilGrande = screenWidth > 480 && screenWidth <= 800;
@@ -1198,6 +1264,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 2500),
+
             child: LayoutBuilder(
               builder: (context, constraints) {
                 if (esMovilMuyPequeno || esMovilGrande) {
@@ -1227,6 +1294,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                             materialData: materialData ?? {},
                             comentarios: comentarios,
                             esPantallaChica: false,
+                            screenWidth: screenWidth,
                           ),
                         ),
                       ],
@@ -1262,6 +1330,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                             materialData: materialData ?? {},
                             comentarios: comentarios,
                             esPantallaChica: true,
+                            screenWidth: screenWidth,
                           ),
                         ),
                       ],

@@ -144,6 +144,8 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
         });
       }
 
+      await actualizarTodoCalculoDeUsuario(uid: user!.uid);
+
       if (!mounted) return;
       showDialog(
         context: context,
@@ -435,22 +437,23 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
         title: const Text('Study Connect'),
         actions: [
           TextButton(
-            onPressed: () {},
+            onPressed: () => Navigator.pushNamed(context, '/'),
             child: const Text('Inicio', style: TextStyle(color: Colors.white)),
           ),
           TextButton(
-            onPressed: () {},
+            onPressed: () => Navigator.pushNamed(context, '/ranking'),
             child: const Text('Ranking', style: TextStyle(color: Colors.white)),
           ),
           TextButton(
-            onPressed: () {},
+            onPressed: () => Navigator.pushNamed(context, '/content'),
             child: const Text(
               'Contenidos',
               style: TextStyle(color: Colors.white),
             ),
           ),
+          const NotificationIconWidget(),
           TextButton(
-            onPressed: () {},
+            onPressed: () => Navigator.pushNamed(context, '/user_profile'),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(

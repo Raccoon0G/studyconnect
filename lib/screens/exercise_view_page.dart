@@ -9,9 +9,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:intl/intl.dart';
 
-import 'package:study_connect/services/notification_service.dart';
+import 'package:study_connect/services/services.dart';
 import 'package:study_connect/widgets/widgets.dart';
 import 'package:study_connect/utils/utils.dart';
+import 'package:share_plus/share_plus.dart';
 
 class ExerciseViewPage extends StatefulWidget {
   final String tema;
@@ -412,6 +413,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     required List<String> descripciones,
     required List<Map<String, dynamic>> comentarios,
     required bool esPantallaChica,
+    required double screenWidth,
   }) {
     final nombre = ejercicioData['Titulo'] ?? '';
     final desc = ejercicioData['DesEjercicio'] ?? '';
@@ -597,14 +599,35 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
         ),
 
         const SizedBox(height: 40),
+        // CustomFeedbackCard(
+        //   accion: 'Calificar',
+        //   numeroComentarios: comentarios.length,
+        //   onCalificar: _mostrarDialogoCalificacion,
+        //   onCompartir: _compartirCapturaConFacebookWeb,
+        // ),
         CustomFeedbackCard(
           accion: 'Calificar',
           numeroComentarios: comentarios.length,
           onCalificar: _mostrarDialogoCalificacion,
-          onCompartir: _compartirCapturaConFacebookWeb,
+          onCompartir:
+              screenWidth < 800
+                  ? () {
+                    final titulo = ejercicioData?['Titulo'] ?? 'Ejercicio';
+                    _compartirCapturaYSharePlus(
+                      titulo,
+                      widget.tema,
+                      widget.ejercicioId,
+                    );
+                  }
+                  : () {
+                    final titulo = ejercicioData?['Titulo'] ?? 'Ejercicio';
+                    _compartirCapturaYFacebook(
+                      titulo,
+                      widget.tema,
+                      widget.ejercicioId,
+                    );
+                  },
         ),
-
-        const SizedBox(height: 20),
       ],
     );
     if (esPantallaChica) {
@@ -922,6 +945,21 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
         .doc(widget.ejercicioId)
         .update({'CalPromedio': promedio});
 
+    // 🔽 Actualizar calificación del autor (ejercicios, materiales y global)
+    final ejercicioDoc =
+        await FirebaseFirestore.instance
+            .collection('calculo')
+            .doc(widget.tema)
+            .collection('Ejer${widget.tema}')
+            .doc(widget.ejercicioId)
+            .get();
+
+    final autorId = ejercicioDoc.data()?['AutorId'];
+
+    if (autorId != null && autorId.toString().isNotEmpty) {
+      await actualizarTodoCalculoDeUsuario(uid: autorId);
+    }
+
     await _cargarComentarios();
     await _cargarDatosDesdeFirestore();
     //Opcion 1
@@ -954,21 +992,74 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     );
   }
 
-  Future<void> _compartirCapturaConFacebookWeb() async {
+  Future<void> _compartirCapturaYFacebook(
+    String titulo,
+    String tema,
+    String ejercicioId,
+  ) async {
+    final Uint8List? image = await _screenshotController.capture();
+    if (image != null) {
+      // Descargar la imagen localmente
+      final blob = html.Blob([image]);
+      final urlBlob = html.Url.createObjectUrlFromBlob(blob);
+
+      final link =
+          html.AnchorElement(href: urlBlob)
+            ..setAttribute('download', 'captura_ejercicio.png')
+            ..click();
+
+      html.Url.revokeObjectUrl(urlBlob);
+
+      // Después, compartir en Facebook
+      final urlEjercicio = Uri.encodeComponent(
+        'https://tuapp.com/$tema/$ejercicioId',
+      ); // CAMBIA aquí tu dominio real
+      final quote = Uri.encodeComponent('¡Revisa este ejercicio: $titulo!');
+      final facebookUrl =
+          'https://www.facebook.com/sharer/sharer.php?u=$urlEjercicio&quote=$quote';
+
+      html.window.open(facebookUrl, '_blank');
+    }
+  }
+
+  Future<void> _compartirCapturaYSharePlus(
+    String titulo,
+    String tema,
+    String ejercicioId,
+  ) async {
     final Uint8List? image = await _screenshotController.capture();
     if (image != null) {
       final blob = html.Blob([image]);
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      html.AnchorElement(href: url)
-        ..target = '_blank'
-        ..download = "captura.png"
-        ..click();
-      html.Url.revokeObjectUrl(url);
-      html.window.open(
-        'https://www.facebook.com/sharer/sharer.php?u=https://tu-sitio.com',
-        '_blank',
-      );
+      final urlBlob = html.Url.createObjectUrlFromBlob(blob);
+
+      // Descargar la imagen
+      final link =
+          html.AnchorElement(href: urlBlob)
+            ..setAttribute('download', 'captura_ejercicio.png')
+            ..click();
+
+      html.Url.revokeObjectUrl(urlBlob);
     }
+
+    final urlEjercicio =
+        'https://tuapp.com/$tema/$ejercicioId'; // CAMBIA por tu dominio real
+    await Share.share('📘 $titulo\n$urlEjercicio');
+  }
+
+  void compartirEnFacebook(String titulo, String tema, String ejercicioId) {
+    final url = Uri.encodeComponent(
+      'https://tuapp.com/$tema/$ejercicioId',
+    ); // <-- CAMBIA por tu dominio real
+    final quote = Uri.encodeComponent('¡Revisa este ejercicio: $titulo!');
+    final facebookUrl =
+        'https://www.facebook.com/sharer/sharer.php?u=$url&quote=$quote';
+    html.window.open(facebookUrl, '_blank');
+  }
+
+  void compartirGenerico(String titulo, String tema, String ejercicioId) {
+    final url =
+        'https://tuapp.com/$tema/$ejercicioId'; // <-- CAMBIA por tu dominio real
+    Share.share('$titulo\n$url');
   }
 
   @override
@@ -1062,6 +1153,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                             descripciones: descripciones,
                             comentarios: comentarios,
                             esPantallaChica: true,
+                            screenWidth: screenWidth,
                           ),
                         ),
                       ],
@@ -1099,6 +1191,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                             descripciones: descripciones,
                             comentarios: comentarios,
                             esPantallaChica: false,
+                            screenWidth: screenWidth,
                           ),
                         ),
                       ],

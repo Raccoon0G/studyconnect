@@ -1,6 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:study_connect/services/notification_service.dart';
 import 'package:study_connect/widgets/notification_icon_widget.dart';
 import 'package:study_connect/widgets/widgets.dart';
 
@@ -11,74 +12,244 @@ class RankingPage extends StatefulWidget {
   State<RankingPage> createState() => _RankingPageState();
 }
 
-class _RankingPageState extends State<RankingPage> {
+class _RankingPageState extends State<RankingPage>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   List<Map<String, dynamic>> ranking = [];
   bool loading = true;
-  int _sortColumnIndex = 0;
-  bool _sortAscending = true;
 
   @override
   void initState() {
     super.initState();
-    _cargarRanking();
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) return;
+      _cargarRankingPorTipo(_tabController.index);
+    });
+    _cargarRankingPorTipo(0); // Carga inicial
   }
 
-  Future<void> _cargarRanking() async {
-    final comentariosSnap =
-        await FirebaseFirestore.instance
-            .collection('comentarios_ejercicios')
-            .get();
-
-    final Map<String, List<int>> calificacionesPorUsuario = {};
-
-    for (var doc in comentariosSnap.docs) {
-      final data = doc.data();
-      final uid = data['usuarioId'] ?? 'anon';
-      final estrellas = (data['estrellas'] ?? 0) as int;
-
-      if (!calificacionesPorUsuario.containsKey(uid)) {
-        calificacionesPorUsuario[uid] = [];
-      }
-      calificacionesPorUsuario[uid]!.add(estrellas);
-    }
-
+  Future<void> _cargarRankingPorTipo(int index) async {
+    setState(() => loading = true);
+    final tipo = ['ejercicios', 'materiales', 'combinado'][index];
     final usuariosSnap =
         await FirebaseFirestore.instance.collection('usuarios').get();
 
-    final Map<String, Map<String, dynamic>> datosUsuarioPorUid = {
-      for (var doc in usuariosSnap.docs)
-        doc.id: {
-          'nombre': doc.data()['Nombre'] ?? 'Anónimo',
-          'foto': doc.data()['FotoPerfil'] ?? '', // Puede estar vacío
-        },
-    };
-    final List<Map<String, dynamic>> resultado =
-        calificacionesPorUsuario.entries.map((entry) {
-            final uid = entry.key;
-            final califs = entry.value;
-            final promedio = califs.reduce((a, b) => a + b) / califs.length;
+    final List<Map<String, dynamic>> ranking = [];
 
-            // Actualiza o crea el campo Calificacion en la colección usuarios
-            FirebaseFirestore.instance.collection('usuarios').doc(uid).set({
-              'Calificacion': promedio,
-              'EjerSubidos': califs.length,
-            }, SetOptions(merge: true));
+    for (var doc in usuariosSnap.docs) {
+      final data = doc.data();
+      final uid = doc.id;
 
-            return {
-              'uid': uid,
-              'nombre': datosUsuarioPorUid[uid]?['nombre'] ?? 'Anónimo',
-              'foto': datosUsuarioPorUid[uid]?['foto'] ?? '',
+      final nombre = data['Nombre'] ?? 'Anónimo';
+      final foto = data['FotoPerfil'] ?? '';
+      final califEj = (data['CalificacionEjercicios'] ?? 0.0).toDouble();
+      final califMat = (data['CalificacionMateriales'] ?? 0.0).toDouble();
+      final ejer = int.tryParse('${data['EjerSubidos']}') ?? 0;
+      final mat = int.tryParse('${data['MaterialesSubidos']}') ?? 0;
 
-              'ej': califs.length,
-              'prom': promedio,
-            };
-          }).toList()
-          ..sort((a, b) => b['prom'].compareTo(a['prom']));
+      int aportaciones = 0;
+      double puntaje = 0.0;
+
+      switch (tipo) {
+        case 'ejercicios':
+          puntaje = califEj;
+          aportaciones = ejer;
+          break;
+        case 'materiales':
+          puntaje = califMat;
+          aportaciones = mat;
+          break;
+        case 'combinado':
+          aportaciones = ejer + mat;
+          puntaje = ((califEj * ejer) + (califMat * mat)) / (aportaciones + 1);
+          break;
+      }
+
+      if (aportaciones == 0 && puntaje == 0) continue;
+
+      ranking.add({
+        'uid': uid,
+        'nombre': nombre,
+        'foto': foto,
+        'aportaciones': aportaciones,
+        'prom': double.parse(puntaje.toStringAsFixed(2)),
+      });
+    }
+
+    ranking.sort((a, b) {
+      final cmp = b['prom'].compareTo(a['prom']);
+      if (cmp != 0) return cmp;
+      return b['aportaciones'].compareTo(a['aportaciones']);
+    });
 
     setState(() {
-      ranking = resultado;
+      this.ranking = ranking;
       loading = false;
     });
+
+    // Notificar a top 3 si aún no han sido notificados hoy
+    final hoy = DateTime.now();
+    final hoyStr =
+        '${hoy.year}-${hoy.month.toString().padLeft(2, '0')}-${hoy.day.toString().padLeft(2, '0')}';
+
+    for (int i = 0; i < ranking.length && i < 3; i++) {
+      final user = ranking[i];
+      final uidDestino = user['uid'];
+      final nombre = user['nombre'];
+      final referenciaId = uidDestino;
+      final posicion = i + 1;
+
+      final usuarioDoc =
+          await FirebaseFirestore.instance
+              .collection('usuarios')
+              .doc(uidDestino)
+              .get();
+      final notificado =
+          (usuarioDoc.data()?['rankingNotificado'] ?? {})
+              as Map<String, dynamic>;
+
+      if (notificado[tipo] == hoyStr) continue;
+
+      await NotificationService.crearNotificacion(
+        uidDestino: uidDestino,
+        tipo: 'ranking',
+        titulo: '¡Felicidades $nombre!',
+        contenido:
+            'Estás en el top $posicion del ranking de ${tipo.toUpperCase()} 🎉',
+        referenciaId: referenciaId,
+      );
+
+      await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(uidDestino)
+          .update({'rankingNotificado.$tipo': hoyStr});
+    }
+  }
+
+  Widget _buildPodioSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF015C8B),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 10,
+            offset: const Offset(2, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          const Text(
+            '🏅 Líderes del Aprendizaje',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 10),
+          PodiumWidget(top3: ranking.take(3).toList()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListaSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF015C8B),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '📊 Tabla de Posiciones',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const Divider(color: Colors.white54),
+          const SizedBox(height: 8),
+          Expanded(
+            child: ListView.builder(
+              itemCount: ranking.length,
+              itemBuilder: (context, index) {
+                final r = ranking[index];
+                final badge = ['🥇', '🥈', '🥉'];
+                final nombre = r['nombre'] ?? 'Desconocido';
+                final foto = r['foto'] ?? '';
+                final puntos = r['prom'] ?? 0.0;
+                final aportaciones = r['aportaciones'] ?? 0;
+                final isTop3 = index < 3;
+
+                return Container(
+                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade800.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        '${index + 1}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      CircleAvatar(
+                        backgroundImage:
+                            foto.isNotEmpty ? NetworkImage(foto) : null,
+                        radius: 20,
+                        child: foto.isEmpty ? const Icon(Icons.person) : null,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '$nombre ${isTop3 ? badge[index] : ''}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              'Aportaciones: $aportaciones',
+                              style: const TextStyle(color: Colors.white70),
+                            ),
+                            Text(
+                              'Puntaje: ${puntos.toStringAsFixed(2)}',
+                              style: const TextStyle(color: Colors.white70),
+                            ),
+                          ],
+                        ),
+                      ),
+                      CustomStarRating(
+                        valor: puntos,
+                        size: 20,
+                        duration: const Duration(milliseconds: 600),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -102,7 +273,7 @@ class _RankingPageState extends State<RankingPage> {
           ),
           const NotificationIconWidget(),
           TextButton(
-            onPressed: () {},
+            onPressed: () => Navigator.pushNamed(context, '/user_profile'),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
@@ -117,346 +288,51 @@ class _RankingPageState extends State<RankingPage> {
           ),
           const SizedBox(width: 16),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Ejercicios'),
+            Tab(text: 'Materiales'),
+            Tab(text: 'Combinado'),
+          ],
+          labelColor: Colors.white,
+          indicatorColor: Colors.purpleAccent,
+        ),
       ),
       body:
           loading
               ? const Center(child: CircularProgressIndicator())
-              : Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Ranking',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Expanded(
-                      child: Row(
-                        children: [
-                          // Podio
-                          Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Color(0xFF0D47A1), // Azul profundo
-                                  Color(0xFF002B60), // Azul oscuro tipo navy
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Colors.black45,
-                                  blurRadius: 8,
-                                  offset: Offset(2, 4),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
+              : LayoutBuilder(
+                builder: (context, constraints) {
+                  final esMovil = constraints.maxWidth < 800;
+                  return Padding(
+                    padding: const EdgeInsets.all(16),
+                    child:
+                        esMovil
+                            ? Column(
                               children: [
-                                const Text(
-                                  'Líderes del Aprendizaje',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                PodiumWidget(top3: ranking.take(3).toList()),
+                                _buildPodioSection(),
+                                const SizedBox(height: 20),
+                                Expanded(child: _buildListaSection()),
+                              ],
+                            )
+                            : Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(flex: 4, child: _buildPodioSection()),
+                                const SizedBox(width: 20),
+                                Expanded(flex: 6, child: _buildListaSection()),
                               ],
                             ),
-                          ),
-
-                          const SizedBox(width: 20),
-                          // Tabla
-                          Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF005B96),
-                                borderRadius: BorderRadius.circular(16),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Colors.black38,
-                                    blurRadius: 6,
-                                    offset: Offset(2, 4),
-                                  ),
-                                ],
-                              ),
-                              child: LayoutBuilder(
-                                builder: (context, constraints) {
-                                  return SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: SizedBox(
-                                      width: constraints.maxWidth,
-                                      height: constraints.maxHeight,
-                                      child: DataTable(
-                                        sortColumnIndex: _sortColumnIndex,
-                                        sortAscending: _sortAscending,
-                                        headingRowHeight: 56,
-                                        dataRowMinHeight: 60,
-                                        dataRowMaxHeight: 70,
-                                        horizontalMargin: 16,
-                                        columnSpacing: 32,
-                                        headingRowColor:
-                                            WidgetStateProperty.all(
-                                              const Color(0xFF0277BD),
-                                            ),
-                                        dividerThickness: 0.4,
-                                        border: TableBorder(
-                                          horizontalInside: BorderSide(
-                                            color: Colors.white24,
-                                            width: 0.4,
-                                          ),
-                                        ),
-                                        columns: [
-                                          DataColumn(
-                                            label: const Text(
-                                              'Posición',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                            // onSort: (index, ascending) {
-                                            //   setState(() {
-                                            //     _sortColumnIndex = index;
-                                            //     _sortAscending = ascending;
-                                            //     ranking.sort(
-                                            //       (a, b) =>
-                                            //           ascending
-                                            //               ? a['uid'].compareTo(
-                                            //                 b['uid'],
-                                            //               )
-                                            //               : b['uid'].compareTo(
-                                            //                 a['uid'],
-                                            //               ),
-                                            //     );
-                                            //   });
-                                            // },
-                                          ),
-                                          DataColumn(
-                                            label: const Text(
-                                              'Nombre',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ),
-                                          DataColumn(
-                                            label: Expanded(
-                                              child: Center(
-                                                child: Text(
-                                                  'Ejercicios',
-                                                  style: TextStyle(
-                                                    color: Colors.white,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            numeric: true,
-                                            onSort: (index, ascending) {
-                                              setState(() {
-                                                _sortColumnIndex = index;
-                                                _sortAscending = ascending;
-                                                ranking.sort(
-                                                  (a, b) =>
-                                                      ascending
-                                                          ? a['ej'].compareTo(
-                                                            b['ej'],
-                                                          )
-                                                          : b['ej'].compareTo(
-                                                            a['ej'],
-                                                          ),
-                                                );
-                                              });
-                                            },
-                                          ),
-
-                                          DataColumn(
-                                            label: Expanded(
-                                              child: Center(
-                                                child: Text(
-                                                  'Promedio',
-                                                  style: TextStyle(
-                                                    color: Colors.white,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            onSort: (index, ascending) {
-                                              setState(() {
-                                                _sortColumnIndex = index;
-                                                _sortAscending = ascending;
-                                                ranking.sort(
-                                                  (a, b) =>
-                                                      ascending
-                                                          ? a['prom'].compareTo(
-                                                            b['prom'],
-                                                          )
-                                                          : b['prom'].compareTo(
-                                                            a['prom'],
-                                                          ),
-                                                );
-                                              });
-                                            },
-                                          ),
-                                        ],
-                                        rows: List.generate(ranking.length, (
-                                          index,
-                                        ) {
-                                          final r = ranking[index];
-                                          final nombre =
-                                              r['nombre'] ?? 'Desconocido';
-                                          final foto = r['foto'] ?? '';
-                                          final prom = r['prom'] ?? 0.0;
-                                          final isTop3 = index < 3;
-                                          final badge = ['🥇', '🥈', '🥉'];
-
-                                          return DataRow(
-                                            cells: [
-                                              DataCell(
-                                                Text(
-                                                  '${index + 1}',
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                  ),
-                                                ),
-                                              ),
-                                              DataCell(
-                                                Row(
-                                                  children: [
-                                                    CircleAvatar(
-                                                      radius: 18,
-                                                      backgroundImage:
-                                                          foto.isNotEmpty
-                                                              ? NetworkImage(
-                                                                foto,
-                                                              )
-                                                              : null,
-                                                      child:
-                                                          foto.isEmpty
-                                                              ? const Icon(
-                                                                Icons.person,
-                                                                size: 16,
-                                                              )
-                                                              : null,
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    Flexible(
-                                                      child: Text(
-                                                        '$nombre ${isTop3 ? badge[index] : ''}',
-                                                        overflow:
-                                                            TextOverflow
-                                                                .ellipsis,
-                                                        style: const TextStyle(
-                                                          color: Colors.white,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              DataCell(
-                                                Center(
-                                                  child: SizedBox(
-                                                    width: 80,
-                                                    child: Text(
-                                                      '${r['ej']}',
-                                                      textAlign:
-                                                          TextAlign.center,
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                              DataCell(
-                                                Center(
-                                                  child: CustomStarRating(
-                                                    valor: prom,
-                                                    size: 22,
-                                                    geometryAlignment:
-                                                        Alignment.center,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          );
-                                        }),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                  );
+                },
               ),
     );
   }
-}
-
-class _PodiumPlace extends StatelessWidget {
-  final String nombre;
-  final int puntos;
-  final Color color;
-  final String medal;
-  final String foto;
-
-  const _PodiumPlace({
-    required this.nombre,
-    required this.puntos,
-    required this.color,
-    required this.medal,
-    required this.foto,
-  });
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        CircleAvatar(
-          radius: 24,
-          backgroundImage: foto.isNotEmpty ? NetworkImage(foto) : null,
-          child:
-              foto.isEmpty
-                  ? Text(medal, style: const TextStyle(fontSize: 20))
-                  : null,
-          backgroundColor: Colors.white,
-        ),
-        const SizedBox(height: 8),
-        Container(
-          width: 90,
-          height: 90,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Center(
-            child: Text(
-              '$nombre\n$puntos pts',
-              style: const TextStyle(color: Colors.white, fontSize: 12),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
-      ],
-    );
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 }

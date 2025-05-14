@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:study_connect/widgets/widgets.dart';
 
 class PodiumWidget extends StatelessWidget {
   final List<Map<String, dynamic>> top3;
@@ -141,14 +142,8 @@ class PodiumWidget extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Text(
-          '${puntos.toStringAsFixed(2)}',
-          style: const TextStyle(
-            color: Colors.orangeAccent,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+        SingleAnimatedStarRating(valor: puntos),
+
         const SizedBox(height: 12),
         TweenAnimationBuilder<double>(
           duration: const Duration(seconds: 2),

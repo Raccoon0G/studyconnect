@@ -523,12 +523,6 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
         return;
       }
 
-      final uid = user!.uid;
-      final nombre =
-          (user!.displayName == null || user!.displayName!.isEmpty)
-              ? "Anónimo"
-              : user!.displayName!;
-
       final tema = temasSeleccionados.first;
       final nuevasPreguntas = await evaluacionService
           .obtenerPreguntasDesdeFirestore(tema, cantidad: cantidadPreguntas);
@@ -958,6 +952,8 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                                                                   fontSize: 18,
                                                                   scrollHorizontal:
                                                                       false,
+                                                                  prepararLatex:
+                                                                      prepararLaTeX,
                                                                 ),
                                                                 const SizedBox(
                                                                   height: 10,
@@ -972,6 +968,8 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                                                                           .shade800,
                                                                   scrollHorizontal:
                                                                       false,
+                                                                  prepararLatex:
+                                                                      prepararLaTeX,
                                                                 ),
                                                                 CustomLatexText(
                                                                   contenido:
@@ -987,6 +985,8 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                                                                               .shade800,
                                                                   scrollHorizontal:
                                                                       false,
+                                                                  prepararLatex:
+                                                                      prepararLaTeX,
                                                                 ),
                                                               ],
                                                             ),

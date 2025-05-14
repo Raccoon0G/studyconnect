@@ -35,6 +35,8 @@ class _ChatHomePageState extends State<ChatHomePage> {
   List<String> _selectedForGroup = [];
   final TextEditingController _groupNameController = TextEditingController();
   Uint8List? _imagenGrupo;
+  String? hoveredUserId;
+  final ValueNotifier<String?> hoveredChatId = ValueNotifier<String?>(null);
 
   @override
   void initState() {
@@ -557,7 +559,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
     return ConstrainedBox(
       constraints: BoxConstraints(minWidth: 200, maxWidth: 320),
       child: Container(
-        color: Colors.lightBlue.shade300,
+        color: const Color(0xFF015C8B),
         child: DefaultTabController(
           length: 3,
           child: Column(
@@ -576,7 +578,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                           'Chats',
                           style: TextStyle(
                             color: Colors.white,
-                            fontSize: 20,
+                            fontSize: 22,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -760,11 +762,11 @@ class _ChatHomePageState extends State<ChatHomePage> {
     required bool filterUnread,
     required bool filterGroups,
   }) {
-    // 1) Si hay texto en el buscador, muestro usuarios
     if (filtro.isNotEmpty) {
       if (_usuarios.isEmpty) {
         return const Center(child: Text('No se encontraron usuarios'));
       }
+
       return ListView.builder(
         padding: const EdgeInsets.symmetric(vertical: 4),
         itemCount: _usuarios.length,
@@ -772,27 +774,102 @@ class _ChatHomePageState extends State<ChatHomePage> {
           final userDoc = _usuarios[i];
           final nombre = userDoc['Nombre'] ?? 'Usuario';
           final foto = cacheUsuarios[userDoc.id]?['foto'] ?? '';
-          return ListTile(
-            dense: true,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 4,
+
+          return MouseRegion(
+            cursor: SystemMouseCursors.click,
+            onEnter: (_) => setState(() => hoveredUserId = userDoc.id),
+            onExit: (_) => setState(() => hoveredUserId = null),
+            child: Tooltip(
+              message: 'Haz clic para chatear con $nombre',
+              waitDuration: const Duration(milliseconds: 300),
+              child: GestureDetector(
+                onTap: () => _iniciarChat(userDoc.id),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  transform:
+                      hoveredUserId == userDoc.id
+                          ? (Matrix4.identity()..scale(1.02))
+                          : Matrix4.identity(),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient:
+                        hoveredUserId == userDoc.id
+                            ? const LinearGradient(
+                              colors: [Color(0xFF1976D2), Color(0xFF42A5F5)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            )
+                            : null,
+                    color:
+                        hoveredUserId != userDoc.id
+                            ? const Color(0xFF1565C0)
+                            : null,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color:
+                            hoveredUserId == userDoc.id
+                                ? Colors.blueAccent.withOpacity(0.6)
+                                : Colors.black.withOpacity(0.2),
+                        blurRadius: hoveredUserId == userDoc.id ? 12 : 6,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 26,
+                        backgroundImage:
+                            foto.isNotEmpty
+                                ? NetworkImage(foto)
+                                : const AssetImage('assets/images/avatar1.png')
+                                    as ImageProvider,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              nombre,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Haz clic para iniciar conversación',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(
+                        Icons.arrow_forward_ios,
+                        color: Colors.white54,
+                        size: 16,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
-            leading: CircleAvatar(
-              backgroundImage:
-                  foto.isNotEmpty
-                      ? NetworkImage(foto)
-                      : const AssetImage('assets/images/avatar1.png')
-                          as ImageProvider,
-            ),
-            title: Text(nombre, style: const TextStyle(color: Colors.white)),
-            onTap: () => _iniciarChat(userDoc.id),
           );
         },
       );
     }
 
-    // 2) Si no hay texto, muestro el StreamBuilder de Chats
+    // 👇 Se mantiene la lógica para mostrar los chats existentes
     return StreamBuilder<QuerySnapshot>(
       stream:
           FirebaseFirestore.instance
@@ -829,46 +906,30 @@ class _ChatHomePageState extends State<ChatHomePage> {
             final bool isGroup = (data['isGroup'] as bool?) == true;
             final String chatId = chatDoc.id;
 
-            // Determinar "other" para 1‑a‑1 con orElse
             final String? other =
                 isGroup
                     ? null
-                    : (() {
-                      final lista = otherIds.where((id) => id != uid).toList();
-                      return lista.isNotEmpty ? lista.first : null;
-                    })();
+                    : otherIds.firstWhere((id) => id != uid, orElse: () => '');
 
-            // Si es 1‑a‑1 y aún no está en cache, mostramos shimmer
             if (!isGroup &&
                 (other == null || !cacheUsuarios.containsKey(other))) {
               return const ShimmerChatTile();
             }
 
-            final String? creatorId = data['createdBy'] as String?;
-            final String creatorName =
-                (creatorId != null && cacheUsuarios.containsKey(creatorId))
-                    ? cacheUsuarios[creatorId]!['nombre']!
-                    : 'Usuario';
-
-            final String preview;
-            if ((data['lastMessage'] as String?)?.trim().isNotEmpty == true) {
-              preview = data['lastMessage'] as String;
-            } else if (isGroup) {
-              preview = '$creatorName ha creado el grupo';
-            } else {
-              preview = '— sin mensajes —';
-            }
+            final String preview =
+                (data['lastMessage'] as String?)?.trim().isNotEmpty == true
+                    ? data['lastMessage']
+                    : isGroup
+                    ? '${cacheUsuarios[data['createdBy']]?['nombre'] ?? "Usuario"} ha creado el grupo'
+                    : '— sin mensajes —';
 
             final String title =
                 isGroup
-                    ? (data['groupName'] as String? ??
-                        'Grupo (${otherIds.length})')
+                    ? (data['groupName'] ?? 'Grupo (${otherIds.length})')
                     : cacheUsuarios[other]!['nombre']!;
 
             final String? photoUrl =
-                isGroup
-                    ? (data['groupPhoto'] as String?)
-                    : cacheUsuarios[other]!['foto']!;
+                isGroup ? data['groupPhoto'] : cacheUsuarios[other]!['foto'];
 
             final String hora =
                 data['lastMessageAt'] != null
@@ -877,95 +938,195 @@ class _ChatHomePageState extends State<ChatHomePage> {
                     )
                     : '';
 
-            final Map<String, dynamic> unreadMap =
+            final unreadMap =
                 data['unreadCounts'] as Map<String, dynamic>? ?? {};
             final int unreadCount = (unreadMap[uid] as int?) ?? 0;
 
-            return Container(
-              color:
-                  chatIdSeleccionado == chatId
-                      ? Colors.blue.shade100
-                      : Colors.transparent,
-              child: ListTile(
-                dense: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 4,
-                ),
-                leading: CircleAvatar(
-                  backgroundImage:
-                      photoUrl?.isNotEmpty == true
-                          ? NetworkImage(photoUrl!)
-                          : const AssetImage('assets/images/avatar1.png')
-                              as ImageProvider,
-                ),
-                title: Text(title, style: const TextStyle(color: Colors.white)),
-                subtitle: Row(
-                  children: [
-                    if (preview.contains('ha creado el grupo')) ...[
-                      const Icon(
-                        Icons.group_add,
-                        size: 14,
-                        color: Colors.white70,
-                      ),
-                      const SizedBox(width: 4),
-                    ],
-                    Expanded(
-                      child: Text(
-                        preview,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+            return ValueListenableBuilder<String?>(
+              valueListenable: hoveredChatId,
+              builder: (context, hovered, _) {
+                final isHovered = hovered == chatId;
 
-                trailing: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      hora,
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 10,
+                return MouseRegion(
+                  onEnter: (_) => hoveredChatId.value = chatId,
+                  onExit: (_) => hoveredChatId.value = null,
+                  child: GestureDetector(
+                    onTap: () {
+                      if (isGroup) {
+                        setState(() {
+                          chatIdSeleccionado = chatId;
+                          otroUid = null;
+                          _showList = false;
+                        });
+                      } else {
+                        _iniciarChat(other!);
+                      }
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 250),
+                      transform:
+                          isHovered
+                              ? (Matrix4.identity()..scale(1.015))
+                              : Matrix4.identity(),
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color:
+                            isHovered
+                                ? Colors.blue.shade800
+                                : const Color(0xFF015C8B),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                isHovered
+                                    ? Colors.black.withOpacity(0.3)
+                                    : Colors.black26,
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CircleAvatar(
+                            radius: 26,
+                            backgroundImage:
+                                photoUrl?.isNotEmpty == true
+                                    ? NetworkImage(photoUrl!)
+                                    : const AssetImage(
+                                          'assets/images/avatar1.png',
+                                        )
+                                        as ImageProvider,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Título y hora
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        title,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      hora,
+                                      style: const TextStyle(
+                                        color: Colors.white54,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+
+                                // Último mensaje
+                                Row(
+                                  children: [
+                                    if (preview.contains('ha creado el grupo'))
+                                      const Icon(
+                                        Icons.group_add,
+                                        size: 14,
+                                        color: Colors.white70,
+                                      ),
+                                    if (preview.contains('ha creado el grupo'))
+                                      const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        preview,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              if (unreadCount > 0)
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    '$unreadCount',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              PopupMenuButton<String>(
+                                icon: const Icon(
+                                  Icons.more_vert,
+                                  color: Colors.white,
+                                ),
+                                onSelected: (value) {
+                                  if (value == 'archivar') {
+                                    // TODO
+                                  } else if (value == 'silenciar') {
+                                    // TODO
+                                  } else if (value == 'eliminar') {
+                                    // TODO
+                                  }
+                                },
+                                itemBuilder:
+                                    (context) => const [
+                                      PopupMenuItem(
+                                        value: 'archivar',
+                                        child: Text('Archivar chat'),
+                                      ),
+                                      PopupMenuItem(
+                                        value: 'silenciar',
+                                        child: Text('Silenciar'),
+                                      ),
+                                      PopupMenuItem(
+                                        value: 'eliminar',
+                                        child: Text('Eliminar chat'),
+                                      ),
+                                    ],
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                    if (unreadCount > 0)
-                      Container(
-                        margin: const EdgeInsets.only(top: 4),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '$unreadCount',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                onTap: () {
-                  if (isGroup) {
-                    setState(() {
-                      chatIdSeleccionado = chatId;
-                      otroUid = null;
-                      _showList = false;
-                    });
-                  } else {
-                    _iniciarChat(other!);
-                  }
-                },
-              ),
+                  ),
+                );
+              },
             );
           },
         );

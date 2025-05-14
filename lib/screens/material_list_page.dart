@@ -165,6 +165,7 @@ class MaterialListPage extends StatelessWidget {
                                           CustomLatexText(
                                             contenido: data['titulo'] ?? '',
                                             fontSize: fontSize,
+                                            prepararLatex: prepararLaTeX,
                                           ),
                                           const SizedBox(height: 8),
                                           Text(
@@ -285,6 +286,7 @@ class MaterialListPage extends StatelessWidget {
                                                   data['autorNombre'] ??
                                                   'Anónimo',
                                               fontSize: 16,
+                                              prepararLatex: prepararLaTeX,
                                             ),
                                           ),
                                         ),

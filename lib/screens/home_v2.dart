@@ -21,6 +21,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final _auth = FirebaseAuth.instance;
+
   String? nombreUsuario;
   Map<String, int> ejerciciosPorTema = {};
   int totalEjercicios = 0;
@@ -109,7 +110,7 @@ class _HomePageState extends State<HomePage> {
         'uid': userId,
         'nombre': data['Nombre'] ?? 'Usuario',
         'foto': data['FotoPerfil'],
-        'calificacion': data['Calificacion'] ?? 0.0,
+        'calificacion': data['CalificacionEjercicios'] ?? 0.0,
         'ejercicios': totalEjer,
       });
     }
@@ -147,6 +148,7 @@ class _HomePageState extends State<HomePage> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 800;
     final user = _auth.currentUser;
+    final isLoggedIn = user != null;
 
     return Scaffold(
       backgroundColor: fondoOscuro,
@@ -268,33 +270,55 @@ class _HomePageState extends State<HomePage> {
                   ],
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            _preloadIcons(), // <- Forzamos precarga de íconos
-            isMobile
-                ? Column(
-                  children: [
-                    _buildBienvenida(user),
-                    const SizedBox(height: 20),
-                    _buildContenidosCard(),
-                    const SizedBox(height: 20),
-                    _buildRightColumn(context, isMobile),
-                  ],
-                )
-                : Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: _buildLeftColumn()),
-                    const SizedBox(width: 20),
-                    Expanded(child: _buildBienvenida(user)),
-                    const SizedBox(width: 20),
-                    Expanded(child: _buildRightColumn(context, isMobile)),
-                  ],
+      body: Column(
+        children: [
+          Expanded(
+            child: Stack(
+              children: [
+                SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      _preloadIcons(),
+                      isMobile
+                          ? Column(
+                            children: [
+                              _buildBienvenida(user),
+                              const SizedBox(height: 20),
+                              _buildContenidosCard(),
+                              const SizedBox(height: 20),
+                              _buildRightColumn(context, isMobile),
+                            ],
+                          )
+                          : Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: _buildLeftColumn()),
+                              const SizedBox(width: 20),
+                              Expanded(child: _buildBienvenida(user)),
+                              const SizedBox(width: 20),
+                              Expanded(
+                                child: _buildRightColumn(context, isMobile),
+                              ),
+                            ],
+                          ),
+                      const SizedBox(
+                        height: 100,
+                      ), // Espacio para no tapar el footer flotante
+                    ],
+                  ),
                 ),
-          ],
-        ),
+                // ⭐ Botón flotante de Chat
+                Positioned(
+                  bottom: 30,
+                  right: 30,
+                  child: _buildChatButton(context, isLoggedIn),
+                ),
+              ],
+            ),
+          ),
+          _buildFooter(context),
+        ],
       ),
     );
   }
@@ -307,7 +331,7 @@ class _HomePageState extends State<HomePage> {
           child: Image.asset(
             'assets/images/profe.jpg',
             width: double.infinity,
-            height: 600,
+            height: 560,
             fit: BoxFit.cover,
           ),
         ),
@@ -381,7 +405,7 @@ class _HomePageState extends State<HomePage> {
               ),
               child: const Text('Registrarse'),
             ),
-          const SizedBox(height: 120),
+          const SizedBox(height: 40),
           ElevatedButton.icon(
             onPressed: () => Navigator.pushNamed(context, '/content'),
             style: ElevatedButton.styleFrom(
@@ -392,6 +416,7 @@ class _HomePageState extends State<HomePage> {
             icon: const Icon(Icons.play_arrow),
             label: const Text('Ver contenidos'),
           ),
+          const SizedBox(height: 40),
         ],
       ),
     );
@@ -512,7 +537,7 @@ class _HomePageState extends State<HomePage> {
             borderRadius: BorderRadius.circular(16),
             child: Image.asset(
               'assets/images/alumno.jpg',
-              height: 260,
+              height: 200,
               width: double.infinity,
               fit: BoxFit.cover,
             ),
@@ -529,79 +554,79 @@ class _HomePageState extends State<HomePage> {
         ),
         const SizedBox(height: 20),
         // Botón de chat (sin cambios)
-        GestureDetector(
-          onTap: () {
-            if (!isLoggedIn) {
-              showDialog(
-                context: context,
-                builder:
-                    (context) => AlertDialog(
-                      title: const Text('Inicio de sesión requerido'),
-                      content: const Text(
-                        'Para usar el chat necesitas iniciar sesión.',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Cancelar'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            Navigator.pushNamed(context, '/login');
-                          },
-                          child: const Text('Iniciar sesión'),
-                        ),
-                      ],
-                    ),
-              );
-            } else {
-              Navigator.pushNamed(context, '/chat');
-            }
-          },
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  if (isLoggedIn)
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 5,
-                      offset: const Offset(0, 2),
-                    ),
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 14,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isLoggedIn
-                          ? Icons.chat_bubble_outline
-                          : Icons.lock_outline,
-                      color: Colors.blueGrey,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      isLoggedIn ? 'Chat' : 'Inicia sesión',
-                      style: const TextStyle(
-                        color: Colors.blueGrey,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
+        // GestureDetector(
+        //   onTap: () {
+        //     if (!isLoggedIn) {
+        //       showDialog(
+        //         context: context,
+        //         builder:
+        //             (context) => AlertDialog(
+        //               title: const Text('Inicio de sesión requerido'),
+        //               content: const Text(
+        //                 'Para usar el chat necesitas iniciar sesión.',
+        //               ),
+        //               actions: [
+        //                 TextButton(
+        //                   onPressed: () => Navigator.pop(context),
+        //                   child: const Text('Cancelar'),
+        //                 ),
+        //                 ElevatedButton(
+        //                   onPressed: () {
+        //                     Navigator.pop(context);
+        //                     Navigator.pushNamed(context, '/login');
+        //                   },
+        //                   child: const Text('Iniciar sesión'),
+        //                 ),
+        //               ],
+        //             ),
+        //       );
+        //     } else {
+        //       Navigator.pushNamed(context, '/chat');
+        //     }
+        //   },
+        //   child: MouseRegion(
+        //     cursor: SystemMouseCursors.click,
+        //     child: Container(
+        //       decoration: BoxDecoration(
+        //         color: Colors.white,
+        //         borderRadius: BorderRadius.circular(30),
+        //         boxShadow: [
+        //           if (isLoggedIn)
+        //             BoxShadow(
+        //               color: Colors.black.withOpacity(0.05),
+        //               blurRadius: 5,
+        //               offset: const Offset(0, 2),
+        //             ),
+        //         ],
+        //       ),
+        //       child: Padding(
+        //         padding: const EdgeInsets.symmetric(
+        //           horizontal: 24,
+        //           vertical: 14,
+        //         ),
+        //         child: Row(
+        //           mainAxisSize: MainAxisSize.min,
+        //           children: [
+        //             Icon(
+        //               isLoggedIn
+        //                   ? Icons.chat_bubble_outline
+        //                   : Icons.lock_outline,
+        //               color: Colors.blueGrey,
+        //             ),
+        //             const SizedBox(width: 8),
+        //             Text(
+        //               isLoggedIn ? 'Chat' : 'Inicia sesión',
+        //               style: const TextStyle(
+        //                 color: Colors.blueGrey,
+        //                 fontWeight: FontWeight.w500,
+        //               ),
+        //             ),
+        //           ],
+        //         ),
+        //       ),
+        //     ),
+        //   ),
+        // ),
         const SizedBox(height: 20),
       ],
     );
@@ -904,6 +929,110 @@ class _HomePageState extends State<HomePage> {
           Icon(Icons.star_half),
           Icon(Icons.assignment_turned_in),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFooter(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+      margin: const EdgeInsets.only(top: 40),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: Colors.white24)),
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 32,
+        runSpacing: 16,
+        children: [
+          TextButton(
+            onPressed: () => Navigator.pushNamed(context, '/credits'),
+            child: const Text(
+              'Créditos',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pushNamed(context, '/faq'),
+            child: const Text(
+              'Preguntas frecuentes',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+          const Text(
+            '© 2025 Study Connect | ESCOM IPN',
+            style: TextStyle(color: Colors.white38),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChatButton(BuildContext context, bool isLoggedIn) {
+    return GestureDetector(
+      onTap: () {
+        if (!isLoggedIn) {
+          showDialog(
+            context: context,
+            builder:
+                (context) => AlertDialog(
+                  title: const Text('Inicio de sesión requerido'),
+                  content: const Text(
+                    'Para usar el chat necesitas iniciar sesión.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancelar'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamed(context, '/login');
+                      },
+                      child: const Text('Iniciar sesión'),
+                    ),
+                  ],
+                ),
+          );
+        } else {
+          Navigator.pushNamed(context, '/chat');
+        }
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: [
+              if (isLoggedIn)
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.15),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isLoggedIn ? Icons.chat_bubble_outline : Icons.lock_outline,
+                color: Colors.blueGrey,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isLoggedIn ? 'Chat' : 'Inicia sesión',
+                style: const TextStyle(
+                  color: Colors.blueGrey,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

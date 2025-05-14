@@ -66,7 +66,10 @@ class _RegisterPageState extends State<RegisterPage> {
         'rol': 'Estudiante',
         'id': uid,
         'FotoPerfil': '',
-        'EjerSubidos': '',
+        'CalificacionEjercicios': 0.0,
+        'CalificacionMateriales': 0.0,
+        'EjerSubidos': 0,
+        'MaterialesSubidos': 0,
         'Acerca de mi': '',
         'Config': {
           'ModoOscuro': true,

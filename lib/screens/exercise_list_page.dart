@@ -167,6 +167,7 @@ class ExerciseListPage extends StatelessWidget {
                                           CustomLatexText(
                                             contenido: data['Titulo'] ?? '',
                                             fontSize: fontSize,
+                                            prepararLatex: prepararLaTeX,
                                           ),
                                           const SizedBox(height: 8),
                                           Text(
@@ -288,6 +289,7 @@ class ExerciseListPage extends StatelessWidget {
                                               contenido:
                                                   data['Autor'] ?? 'Anónimo',
                                               fontSize: 16,
+                                              prepararLatex: prepararLaTeX,
                                             ),
                                           ),
                                         ),

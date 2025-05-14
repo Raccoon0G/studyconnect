@@ -123,6 +123,7 @@ class _CustomLatexQuestionCardState extends State<CustomLatexQuestionCard>
                       contenido: "$letra) $texto",
                       fontSize: 16,
                       color: colorTexto,
+                      prepararLatex: prepararLaTeX,
                     ),
                     secondary: icono,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 0),
