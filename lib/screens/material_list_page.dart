@@ -30,7 +30,7 @@ class MaterialListPage extends StatelessWidget {
         .collection('materiales')
         .doc(temaKey)
         .collection('Mat$temaKey')
-        .orderBy('fecha', descending: true);
+        .orderBy('calificacionPromedio', descending: true);
 
     return Scaffold(
       backgroundColor: const Color(0xFF036799),

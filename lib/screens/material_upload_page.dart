@@ -42,10 +42,67 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
   bool _subiendo = false;
   bool _exitoAlSubir = false;
 
+  String? _materialId;
+  bool _modoEdicion = false;
+  bool _modoNuevaVersion = false;
+
   @override
   void initState() {
     super.initState();
     _cargarNombreUsuario();
+  }
+
+  Future<void> _cargarMaterialParaEditar() async {
+    if (_temaSeleccionado == null || _materialId == null) return;
+
+    final doc =
+        await FirebaseFirestore.instance
+            .collection('materiales')
+            .doc(_temaSeleccionado)
+            .collection('Mat$_temaSeleccionado')
+            .doc(_materialId)
+            .get();
+
+    if (!doc.exists) return;
+
+    final data = doc.data()!;
+    // Carga los datos generales
+    _tituloController.text = data['titulo'] ?? '';
+    _descripcionController.text = data['descripcion'] ?? '';
+    _subtemaController.text = data['subtema'] ?? '';
+
+    // Siempre obtén la versión actual (o la que se va a editar)
+    final versionId = data['versionActual'];
+    final versionDoc =
+        await doc.reference.collection('Versiones').doc(versionId).get();
+
+    if (versionDoc.exists) {
+      final vData = versionDoc.data()!;
+      _descripcionController.text = vData['Descripcion'] ?? '';
+      // Para edición o nueva versión, carga los archivos de la versión actual
+      final archivos = List<Map<String, dynamic>>.from(vData['archivos'] ?? []);
+      setState(() {
+        _archivos.clear();
+        _archivos.addAll(archivos);
+      });
+    }
+
+    setState(() {});
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)?.settings.arguments as Map?;
+    if (args != null) {
+      _temaSeleccionado ??= args['tema'];
+      _materialId = args['materialId'];
+      _modoEdicion = args['editar'] == true;
+      _modoNuevaVersion = args['nuevaVersion'] == true;
+      if (_modoEdicion || _modoNuevaVersion) {
+        _cargarMaterialParaEditar();
+      }
+    }
   }
 
   Future<void> _confirmarEliminarArchivo(int index) async {
@@ -204,24 +261,33 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
           .doc(_temaSeleccionado!)
           .collection('Mat$_temaSeleccionado');
 
-      final snapshot = await coleccionMateriales.get();
-      final materialId =
-          '${_temaSeleccionado}_${(snapshot.docs.length + 1).toString().padLeft(2, '0')}';
-      final versionId = 'Version_01';
+      // Limpia archivos inválidos que NO tienen bytes ni url (solo si no son link/nota)
+      _archivos.removeWhere(
+        (a) =>
+            (a['tipo'] == 'pdf' ||
+                a['tipo'] == 'image' ||
+                a['tipo'] == 'video' ||
+                a['tipo'] == 'audio') &&
+            a['bytes'] == null &&
+            (a['url'] == null || a['url'].toString().isEmpty),
+      );
 
       // Subida de archivos a Storage y recopilación de contenido
       final List<Map<String, dynamic>> contenido = [];
       for (var archivo in _archivos) {
-        if (archivo['tipo'] == 'pdf' ||
-            archivo['tipo'] == 'image' ||
-            archivo['tipo'] == 'video') {
+        // Para archivos NUEVOS: tienen 'bytes' y NO tienen 'url'
+        if ((archivo['tipo'] == 'pdf' ||
+                archivo['tipo'] == 'image' ||
+                archivo['tipo'] == 'video' ||
+                archivo['tipo'] == 'audio') &&
+            archivo['bytes'] != null) {
           final nombreArchivo =
               '${DateTime.now().millisecondsSinceEpoch}_${archivo['nombre']}';
           final ref = FirebaseStorage.instance
               .ref()
               .child('materiales')
               .child(_temaSeleccionado!)
-              .child(uid!) // uid ya lo tienes arriba
+              .child(uid!)
               .child(nombreArchivo);
 
           await ref.putData(archivo['bytes']);
@@ -233,7 +299,22 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
             'url': url,
             'extension': archivo['extension'],
           });
-        } else if (archivo['tipo'] == 'link' || archivo['tipo'] == 'nota') {
+        }
+        // Para archivos YA EXISTENTES en la nube: tienen 'url' y NO tienen 'bytes'
+        else if ((archivo['tipo'] == 'pdf' ||
+                archivo['tipo'] == 'image' ||
+                archivo['tipo'] == 'video' ||
+                archivo['tipo'] == 'audio') &&
+            archivo['url'] != null) {
+          contenido.add({
+            'tipo': archivo['tipo'],
+            'nombre': archivo['nombre'],
+            'url': archivo['url'],
+            'extension': archivo['extension'],
+          });
+        }
+        // Links o notas (no se suben a storage, solo se guardan como texto)
+        else if (archivo['tipo'] == 'link' || archivo['tipo'] == 'nota') {
           contenido.add({
             'tipo': archivo['tipo'],
             'contenido': archivo['nombre'],
@@ -241,111 +322,217 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
         }
       }
 
-      // Guardar documento principal
-      final materialRef = coleccionMateriales.doc(materialId);
-      await materialRef.set({
-        'id': materialId,
-        'autorId': uid,
-        'autorNombre': _nombreUsuario ?? 'Usuario',
-        'tema': _temaSeleccionado,
-        'subtema': _subtemaController.text.trim(),
-        'titulo': _tituloController.text.trim(),
-        'descripcion': _descripcionController.text.trim(),
-        'archivos': contenido,
-        'fecha': now,
-        'FechMod': now,
-        'calificacionPromedio': 0.0,
-        'versionActual': versionId,
-        'carpetaStorage': 'materiales/$_temaSeleccionado/$uid',
-      });
+      // --------- Determinación de modo: edición, nueva versión, nuevo ----------
+      String materialId;
+      String versionId;
 
-      // Guardar versión inicial
-      await materialRef.collection('Versiones').doc(versionId).set({
-        'Descripcion': _descripcionController.text.trim(),
-        'Fecha': now,
-        'AutorId': uid,
-        'archivos': contenido,
-      });
+      if (_modoEdicion || _modoNuevaVersion) {
+        materialId = _materialId!;
+        if (_modoNuevaVersion) {
+          // ---- NUEVA VERSIÓN ----
+          final doc = await coleccionMateriales.doc(materialId).get();
+          final versionesSnap =
+              await doc.reference.collection('Versiones').get();
+          final versionNum = versionesSnap.docs.length + 1;
+          final nuevaVersionId =
+              'Version_${versionNum.toString().padLeft(2, '0')}';
 
-      // --- GAMIFICACIÓN: Contador de materiales subidos
-      final userRef = FirebaseFirestore.instance
-          .collection('usuarios')
-          .doc(uid);
-      final userSnap = await userRef.get();
-      final datosUsuario = userSnap.data() ?? {};
-      final materialesSubidos = (datosUsuario['MaterialesSubidos'] ?? 0) as int;
-      final totalSubidos = materialesSubidos + 1;
-      await userRef.update({'MaterialesSubidos': totalSubidos});
+          // 1. Crear nueva versión (nuevo doc)
+          await doc.reference.collection('Versiones').doc(nuevaVersionId).set({
+            'Descripcion': _descripcionController.text.trim(),
+            'Fecha': now,
+            'AutorId': uid,
+            'archivos': contenido, // SOLO aquí guardas archivos
+          });
 
-      // 🔄 Aquí llamas correctamente a la función unificada
-      if (uid != null) {
-        await actualizarTodoCalculoDeUsuario(uid: uid);
+          // 2. Actualizar SOLO metadatos generales y el versionActual
+          await doc.reference.update({
+            'titulo': _tituloController.text.trim(),
+            'descripcion': _descripcionController.text.trim(),
+            'subtema': _subtemaController.text.trim(),
+            // NO actualices el campo 'archivos' aquí (ni lo pongas)
+            'FechMod': now,
+            'versionActual': nuevaVersionId, // <--- Muy importante
+          });
+
+          await NotificationService.crearNotificacion(
+            uidDestino: uid!,
+            tipo: 'material',
+            titulo: '¡Nueva versión de material!',
+            contenido: 'Se subió una nueva versión de tu material.',
+            referenciaId: materialId,
+            uidEmisor: uid,
+            nombreEmisor: _nombreUsuario ?? 'Tú',
+            tema: _temaSeleccionado,
+          );
+
+          await LocalNotificationService.show(
+            title: 'Material actualizado',
+            body: '¡Tu material fue actualizado con una nueva versión!',
+          );
+
+          await reproducirSonidoExito();
+
+          await showFeedbackDialogAndSnackbar(
+            context: context,
+            titulo: '¡Nueva versión!',
+            mensaje: 'Nueva versión del material agregada exitosamente.',
+            tipo: CustomDialogType.success,
+            snackbarMessage: 'Nueva versión guardada',
+            snackbarSuccess: true,
+          );
+
+          setState(() {
+            _exitoAlSubir = true;
+            _subiendo = false;
+          });
+          return;
+        } else {
+          // ---- EDICIÓN NORMAL ----
+          final doc = await coleccionMateriales.doc(materialId).get();
+          final versionActualId = doc['versionActual'];
+
+          // Actualiza doc principal
+          await doc.reference.update({
+            'titulo': _tituloController.text.trim(),
+            'descripcion': _descripcionController.text.trim(),
+            'subtema': _subtemaController.text.trim(),
+            'archivos': contenido,
+            'FechMod': now,
+          });
+
+          // Actualiza versión actual
+          await doc.reference
+              .collection('Versiones')
+              .doc(versionActualId)
+              .update({
+                'Descripcion': _descripcionController.text.trim(),
+                'Fecha': now,
+                'AutorId': uid,
+                'archivos': contenido,
+              });
+
+          await NotificationService.crearNotificacion(
+            uidDestino: uid!,
+            tipo: 'material',
+            titulo: '¡Material editado!',
+            contenido: 'Se editaron los datos de tu material.',
+            referenciaId: materialId,
+            uidEmisor: uid,
+            nombreEmisor: _nombreUsuario ?? 'Tú',
+            tema: _temaSeleccionado,
+          );
+
+          await LocalNotificationService.show(
+            title: 'Material editado',
+            body: '¡Tu material fue editado exitosamente!',
+          );
+
+          await reproducirSonidoExito();
+
+          await showFeedbackDialogAndSnackbar(
+            context: context,
+            titulo: '¡Editado!',
+            mensaje: 'El material fue editado correctamente.',
+            tipo: CustomDialogType.success,
+            snackbarMessage: 'Material editado',
+            snackbarSuccess: true,
+          );
+
+          setState(() {
+            _exitoAlSubir = true;
+            _subiendo = false;
+          });
+          return;
+        }
+      } else {
+        // ---- NUEVO MATERIAL ----
+        final snapshot = await coleccionMateriales.get();
+        materialId =
+            '${_temaSeleccionado}_${(snapshot.docs.length + 1).toString().padLeft(2, '0')}';
+        versionId = 'Version_01';
+
+        // Guardar documento principal
+        final materialRef = coleccionMateriales.doc(materialId);
+        await materialRef.set({
+          'id': materialId,
+          'autorId': uid,
+          'autorNombre': _nombreUsuario ?? 'Usuario',
+          'tema': _temaSeleccionado,
+          'subtema': _subtemaController.text.trim(),
+          'titulo': _tituloController.text.trim(),
+          'descripcion': _descripcionController.text.trim(),
+          'archivos': contenido,
+          'fecha': now,
+          'FechMod': now,
+          'calificacionPromedio': 0.0,
+          'versionActual': versionId,
+          'carpetaStorage': 'materiales/$_temaSeleccionado/$uid',
+        });
+
+        // Guardar versión inicial
+        await materialRef.collection('Versiones').doc(versionId).set({
+          'Descripcion': _descripcionController.text.trim(),
+          'Fecha': now,
+          'AutorId': uid,
+          'archivos': contenido,
+        });
+
+        // --- GAMIFICACIÓN: Contador de materiales subidos
+        final userRef = FirebaseFirestore.instance
+            .collection('usuarios')
+            .doc(uid);
+        final userSnap = await userRef.get();
+        final datosUsuario = userSnap.data() ?? {};
+        final materialesSubidos =
+            (datosUsuario['MaterialesSubidos'] ?? 0) as int;
+        final totalSubidos = materialesSubidos + 1;
+        await userRef.update({'MaterialesSubidos': totalSubidos});
+
+        // Actualizar ranking, etc.
+        if (uid != null) {
+          await actualizarTodoCalculoDeUsuario(uid: uid);
+        }
+
+        // --- Notificación motivacional
+        await NotificationService.crearNotificacion(
+          uidDestino: uid!,
+          tipo: 'material',
+          titulo: '¡Material subido correctamente!',
+          contenido: obtenerMensajeLogroMaterial(totalSubidos),
+          referenciaId: materialId,
+          uidEmisor: uid,
+          nombreEmisor: _nombreUsuario ?? 'Tú',
+          tema: _temaSeleccionado,
+        );
+
+        // --- Notificación local
+        await LocalNotificationService.show(
+          title: 'Material subido',
+          body: 'Tu material en $nombreTema fue guardado exitosamente',
+        );
+
+        await reproducirSonidoExito();
+
+        await showFeedbackDialogAndSnackbar(
+          context: context,
+          titulo: '¡Éxito!',
+          mensaje: 'El material se subió correctamente a la plataforma.',
+          tipo: CustomDialogType.success,
+          snackbarMessage: 'Material guardado con éxito',
+          snackbarSuccess: true,
+        );
+
+        // Limpiar campos
+        setState(() {
+          _temaSeleccionado = null;
+          _subtemaController.clear();
+          _notaController.clear();
+          _archivos.clear();
+          _tituloController.clear();
+          _descripcionController.clear();
+        });
       }
-
-      // --- Mensaje gamificado
-      // String obtenerMensajeGamificacion(int total) {
-      //   if (total == 1) {
-      //     return "¡Acabas de subir tu primer material! 📚 ¡Eres parte clave del proyecto!";
-      //   } else if (total == 5) {
-      //     return "¡Ya llevas 5 materiales! 🥇 ¡Sigue compartiendo recursos!";
-      //   } else if (total == 10) {
-      //     return "¡10 materiales subidos! 🏆 ¡Inspiras a tus compañeros!";
-      //   } else if (total == 20) {
-      //     return "¡20 materiales! 🎓 ¡Tu contribución hace la diferencia!";
-      //   } else if (total % 10 == 0) {
-      //     return "¡$total materiales! 🎉 ¡Nivel leyenda en la comunidad!";
-      //   } else {
-      //     final mensajes = [
-      //       "¡Buen trabajo! Cada recurso ayuda a todos.",
-      //       "¡Sigue así, tu aporte es valioso!",
-      //       "¡Tu material facilita el aprendizaje de muchos!",
-      //       "¡Uno más para la comunidad! 🚀",
-      //       "¡Aportar te acerca al top del ranking!",
-      //       "¡No pares de compartir!",
-      //     ];
-      //     return mensajes[DateTime.now().millisecondsSinceEpoch %
-      //         mensajes.length];
-      //   }
-      // }
-
-      // --- Notificación motivacional
-      await NotificationService.crearNotificacion(
-        uidDestino: uid!,
-        tipo: 'material',
-        titulo: '¡Material subido correctamente!',
-        contenido: obtenerMensajeLogroMaterial(totalSubidos),
-        referenciaId: materialId,
-        uidEmisor: uid,
-        nombreEmisor: _nombreUsuario ?? 'Tú',
-        tema: _temaSeleccionado,
-      );
-
-      // --- Notificación local
-      await LocalNotificationService.show(
-        title: 'Material subido',
-        body: 'Tu material en $nombreTema fue guardado exitosamente',
-      );
-
-      await reproducirSonidoExito();
-
-      await showFeedbackDialogAndSnackbar(
-        context: context,
-        titulo: '¡Éxito!',
-        mensaje: 'El material se subió correctamente a la plataforma.',
-        tipo: CustomDialogType.success,
-        snackbarMessage: 'Material guardado con éxito',
-        snackbarSuccess: true,
-      );
-
-      // Limpiar campos
-      setState(() {
-        _temaSeleccionado = null;
-        _subtemaController.clear();
-        _notaController.clear();
-        _archivos.clear();
-        _tituloController.clear();
-        _descripcionController.clear();
-      });
     } catch (e) {
       await reproducirSonidoError();
       await showFeedbackDialogAndSnackbar(
@@ -502,85 +689,139 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
     html.window.open(url, '_blank');
   }
 
-  Widget _buildArchivoPreview(Map<String, dynamic> archivo) {
+  Widget _buildArchivoPreview(Map<String, dynamic> archivo, int index) {
     final tipo = archivo['tipo'];
     final nombre = archivo['nombre'] ?? '';
     final extension = (archivo['extension'] ?? '').toString().toLowerCase();
 
-    if (extension == 'pdf') {
-      return ListTile(
-        leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
-        title: Text(nombre),
-      );
-    } else if (extension == 'mp3') {
-      return ListTile(
-        leading: const Icon(Icons.audiotrack, color: Colors.purple),
-        title: Text('$nombre (Audio MP3)'),
-      );
-    } else if (extension == 'mp4') {
-      return ListTile(
-        leading: const Icon(Icons.movie, color: Colors.deepOrange),
-        title: Text('$nombre (Video MP4)'),
-      );
-    } else if (tipo == 'image') {
-      return ListTile(
-        leading: const Icon(Icons.image, color: Colors.blue),
-        title: Text(nombre),
-      );
-    } else if (tipo == 'link') {
-      final link = archivo['nombre'];
-      final isYoutube =
-          link.contains("youtube.com") || link.contains("youtu.be");
-      if (isYoutube) {
-        final videoId = _extractYoutubeId(link);
-        final thumbnailUrl = 'https://img.youtube.com/vi/$videoId/0.jpg';
+    Widget? leading;
+    String? subtitle;
+    IconData? icon;
 
-        return Card(
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Image.network(thumbnailUrl, fit: BoxFit.cover),
-              ListTile(
-                leading: const Icon(Icons.play_circle, color: Colors.red),
-                title: FutureBuilder<String?>(
-                  future: obtenerTituloVideoYoutube(link),
-                  builder: (context, snapshot) {
-                    return Text(snapshot.data ?? 'Video de YouTube');
-                  },
-                ),
-                subtitle: Text(link),
-                trailing: ElevatedButton.icon(
-                  onPressed: () => _abrirEnlaceEnWeb(link),
-                  icon: const Icon(Icons.open_in_new),
-                  label: const Text("Ver video"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    foregroundColor: Colors.white,
+    // Iconos y subtítulos según tipo
+    if (extension == 'pdf') {
+      icon = Icons.picture_as_pdf;
+    } else if (extension == 'mp3') {
+      icon = Icons.audiotrack;
+      subtitle = 'Audio MP3';
+    } else if (extension == 'mp4') {
+      icon = Icons.movie;
+      subtitle = 'Video MP4';
+    } else if (tipo == 'image') {
+      icon = Icons.image;
+    } else if (tipo == 'link') {
+      icon = Icons.link;
+      subtitle = archivo['nombre'];
+    } else if (tipo == 'nota') {
+      icon = Icons.notes;
+      subtitle = archivo['nombre'];
+    }
+
+    // Para enlaces de YouTube muestra la miniatura y el botón eliminar
+    if (tipo == 'link' &&
+        (nombre.contains("youtube.com") || nombre.contains("youtu.be"))) {
+      final videoId = _extractYoutubeId(nombre);
+      final thumbnailUrl = 'https://img.youtube.com/vi/$videoId/0.jpg';
+
+      return Card(
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        child: Stack(
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Image.network(thumbnailUrl, fit: BoxFit.cover),
+                ListTile(
+                  leading: Icon(Icons.play_circle, color: Colors.red),
+                  title: FutureBuilder<String?>(
+                    future: obtenerTituloVideoYoutube(nombre),
+                    builder: (context, snapshot) {
+                      return Text(snapshot.data ?? 'Video de YouTube');
+                    },
+                  ),
+                  subtitle: Text(nombre),
+                  trailing: ElevatedButton.icon(
+                    onPressed: () => _abrirEnlaceEnWeb(nombre),
+                    icon: Icon(Icons.open_in_new),
+                    label: Text("Ver video"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                    ),
                   ),
                 ),
+              ],
+            ),
+            // --- Botón X (arriba a la derecha) ---
+            Positioned(
+              right: 0,
+              top: 0,
+              child: IconButton(
+                icon: Icon(Icons.close, color: Colors.red.shade700, size: 24),
+                onPressed: () async {
+                  final confirm = await showCustomDialog<bool>(
+                    context: context,
+                    titulo: '¿Eliminar archivo?',
+                    mensaje: '¿Estás seguro de eliminar este archivo?',
+                    tipo: CustomDialogType.warning,
+                    botones: [
+                      DialogButton<bool>(texto: 'Cancelar', value: false),
+                      DialogButton<bool>(texto: 'Eliminar', value: true),
+                    ],
+                  );
+                  if (confirm == true) {
+                    setState(() {
+                      _archivos.removeAt(index);
+                    });
+                    showCustomSnackbar(
+                      context: context,
+                      message: 'Archivo eliminado.',
+                      success: true,
+                    );
+                  }
+                },
               ),
-            ],
-          ),
-        );
-      } else {
-        return ListTile(
-          leading: const Icon(Icons.link, color: Colors.green),
-          title: Text(link),
-          trailing: IconButton(
-            icon: const Icon(Icons.open_in_new),
-            onPressed: () => _abrirEnlaceEnWeb(link),
-          ),
-        );
-      }
-    } else if (tipo == 'nota') {
-      return ListTile(
-        leading: const Icon(Icons.notes, color: Colors.purple),
-        title: Text(nombre),
+            ),
+          ],
+        ),
       );
-    } else {
-      return const SizedBox.shrink();
     }
+
+    // Otros tipos (PDF, imagen, audio, nota, etc.)
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 0),
+      child: ListTile(
+        leading: Icon(icon, color: Colors.blueGrey),
+        title: Text(nombre),
+        subtitle: subtitle != null ? Text(subtitle) : null,
+        // --- Botón X ---
+        trailing: IconButton(
+          icon: Icon(Icons.close, color: Colors.red.shade700, size: 24),
+          onPressed: () async {
+            final confirm = await showCustomDialog<bool>(
+              context: context,
+              titulo: '¿Eliminar archivo?',
+              mensaje: '¿Estás seguro de eliminar este archivo?',
+              tipo: CustomDialogType.warning,
+              botones: [
+                DialogButton<bool>(texto: 'Cancelar', value: false),
+                DialogButton<bool>(texto: 'Eliminar', value: true),
+              ],
+            );
+            if (confirm == true) {
+              setState(() {
+                _archivos.removeAt(index);
+              });
+              showCustomSnackbar(
+                context: context,
+                message: 'Archivo eliminado.',
+                success: true,
+              );
+            }
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -809,7 +1050,7 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
                     itemCount: _archivos.length,
                     itemBuilder:
                         (context, index) =>
-                            _buildArchivoPreview(_archivos[index]),
+                            _buildArchivoPreview(_archivos[index], index),
                   ),
                 ),
 

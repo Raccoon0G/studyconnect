@@ -474,10 +474,10 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   ElevatedButton.icon(
-                    icon: const Icon(Icons.edit),
-                    label: const Text('Editar'),
+                    icon: Icon(Icons.edit, color: Colors.white),
+                    label: Text("Editar"),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange.shade700,
+                      backgroundColor: Colors.blueAccent,
                     ),
                     onPressed: () async {
                       // Navegar a ExerciseUploadPage en modo edición
@@ -494,11 +494,12 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                   ),
                   const SizedBox(width: 12),
                   ElevatedButton.icon(
-                    icon: const Icon(Icons.library_add),
-                    label: const Text('Nueva versión'),
+                    icon: Icon(Icons.add_circle_outline, color: Colors.white),
+                    label: Text("Nueva versión"),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade800,
+                      backgroundColor: Colors.orangeAccent,
                     ),
+
                     onPressed: () async {
                       // Navegar a ExerciseUploadPage en modo nueva versión
                       Navigator.pushNamed(
@@ -514,10 +515,10 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                   ),
                   const SizedBox(width: 12),
                   ElevatedButton.icon(
-                    icon: const Icon(Icons.delete),
-                    label: const Text('Eliminar'),
+                    icon: Icon(Icons.delete, color: Colors.white),
+                    label: Text("Eliminar"),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade700,
+                      backgroundColor: Colors.redAccent,
                     ),
                     onPressed:
                         () => _confirmarEliminarEjercicio(

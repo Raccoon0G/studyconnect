@@ -55,6 +55,13 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     return agrupados;
   }
 
+  bool get esAutor {
+    if (materialData == null) return false;
+    final autorId = materialData!['autorId'];
+    final currentUser = FirebaseAuth.instance.currentUser;
+    return autorId != null && currentUser != null && autorId == currentUser.uid;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -122,19 +129,27 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
   Future<void> _cargarVersionSeleccionada(String versionId) async {
     final docRef = FirebaseFirestore.instance
-        .collection('calculo')
+        .collection('materiales')
         .doc(widget.tema)
-        .collection('Ejer${widget.tema}')
+        .collection('Mat${widget.tema}')
         .doc(widget.materialId);
 
     final versionDoc =
         await docRef.collection('Versiones').doc(versionId).get();
-    final versionData = versionDoc.data();
 
-    setState(() {
-      pasos = List<String>.from(versionData?['PasosEjer'] ?? []);
-      descripciones = List<String>.from(versionData?['DescPasos'] ?? []);
-    });
+    if (versionDoc.exists) {
+      final versionData = versionDoc.data();
+      setState(() {
+        // Aquí se actualizan solo los archivos y la descripción
+        materialData = {
+          ...?materialData, // Mantén los demás datos (titulo, autor, etc.)
+          'archivos': List<Map<String, dynamic>>.from(
+            versionData?['archivos'] ?? [],
+          ),
+          'descripcion': versionData?['Descripcion'] ?? '',
+        };
+      });
+    }
   }
 
   Future<void> _cargarComentarios() async {
@@ -667,11 +682,119 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
           const SizedBox(height: 38),
 
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 285, minHeight: 220),
+            constraints: const BoxConstraints(maxHeight: 260, minHeight: 120),
             child: const ExerciseCarousel(),
           ),
+          const SizedBox(height: 16),
+          if (esAutor)
+            Row(
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _editarMaterial,
+                  icon: Icon(Icons.edit, color: Colors.white),
+                  label: Text("Editar"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: _confirmarEliminarMaterial,
+                  icon: Icon(Icons.delete, color: Colors.white),
+                  label: Text("Eliminar"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: _agregarNuevaVersion,
+                  icon: Icon(Icons.add_circle_outline, color: Colors.white),
+                  label: Text("Nueva versión"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orangeAccent,
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
+    );
+  }
+
+  void _editarMaterial() {
+    Navigator.pushNamed(
+      context,
+      '/upload_material',
+      arguments: {
+        'tema': widget.tema,
+        'materialId': widget.materialId,
+        'editar': true,
+      },
+    );
+  }
+
+  void _confirmarEliminarMaterial() async {
+    final confirm = await showCustomDialog<bool>(
+      context: context,
+      titulo: '¿Eliminar material?',
+      mensaje:
+          'Esta acción eliminará permanentemente este material y todas sus versiones. ¿Estás seguro?',
+      tipo: CustomDialogType.warning,
+      botones: [
+        DialogButton<bool>(texto: 'Cancelar', value: false),
+        DialogButton<bool>(texto: 'Eliminar', value: true),
+      ],
+    );
+    if (confirm == true) {
+      await _eliminarMaterial();
+    }
+  }
+
+  Future<void> _eliminarMaterial() async {
+    try {
+      final ref = FirebaseFirestore.instance
+          .collection('materiales')
+          .doc(widget.tema)
+          .collection('Mat${widget.tema}')
+          .doc(widget.materialId);
+      await ref.delete();
+
+      // Elimina también los comentarios relacionados (opcional)
+      final comentarios =
+          await FirebaseFirestore.instance
+              .collection('comentarios_materiales')
+              .where('materialId', isEqualTo: widget.materialId)
+              .get();
+      for (final c in comentarios.docs) {
+        await c.reference.delete();
+      }
+
+      showCustomSnackbar(
+        context: context,
+        message: 'Material eliminado.',
+        success: true,
+      );
+
+      Navigator.pop(context); // Regresa a la lista de materiales
+    } catch (e) {
+      showCustomSnackbar(
+        context: context,
+        message: 'Error al eliminar: $e',
+        success: false,
+      );
+    }
+  }
+
+  void _agregarNuevaVersion() {
+    Navigator.pushNamed(
+      context,
+      '/upload_material',
+      arguments: {
+        'tema': widget.tema,
+        'materialId': widget.materialId,
+        'nuevaVersion': true,
+      },
     );
   }
 
@@ -683,6 +806,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
   }) {
     final titulo = materialData['titulo'] ?? '';
     final descripcion = materialData['descripcion'] ?? '';
+
     final List archivos = materialData['archivos'] ?? [];
 
     final Map<String, IconData> iconosTipo = {
@@ -737,6 +861,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         const Divider(color: Colors.black87),
         const Text('Descripción del material:', style: TextStyle(fontSize: 18)),
         const SizedBox(height: 10),
+
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(12),
