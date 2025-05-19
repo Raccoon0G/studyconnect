@@ -8,14 +8,29 @@ import 'package:study_connect/utils/custom_dialog_type.dart';
 /// Muestra un diálogo personalizado con un título, mensaje y botones opcionales.
 /// y ya se puede cerrar al hacer clic en el botón "Aceptar".
 
-/// Función para mostrar un diálogo bonito y dinámico
-Future<void> showCustomDialog({
+// --- Clase DialogButton con soporte para value
+class DialogButton<T> {
+  final String texto;
+  final Future<void> Function()? onPressed;
+  final bool cierraDialogo;
+  final T? value;
+
+  const DialogButton({
+    required this.texto,
+    this.onPressed,
+    this.cierraDialogo = true,
+    this.value,
+  });
+}
+
+// --- Función showCustomDialog mejorada
+Future<T?> showCustomDialog<T>({
   required BuildContext context,
   required String titulo,
   required String mensaje,
   CustomDialogType tipo = CustomDialogType.info,
-  List<DialogButton> botones = const [],
-}) async {
+  List<DialogButton<T>> botones = const [],
+}) {
   // Definir ícono y color dinámico basado en el tipo
   IconData icono;
   Color color;
@@ -40,7 +55,7 @@ Future<void> showCustomDialog({
       break;
   }
 
-  return showDialog(
+  return showDialog<T>(
     context: context,
     barrierDismissible: true,
     builder:
@@ -82,7 +97,7 @@ Future<void> showCustomDialog({
                     return TextButton(
                       onPressed: () async {
                         if (boton.cierraDialogo) {
-                          Navigator.of(context).pop();
+                          Navigator.of(context).pop(boton.value);
                         }
                         if (boton.onPressed != null) {
                           await boton.onPressed!();
@@ -93,17 +108,4 @@ Future<void> showCustomDialog({
                   }).toList(),
         ),
   );
-}
-
-/// Modelo para definir botones del diálogo
-class DialogButton {
-  final String texto;
-  final Future<void> Function()? onPressed;
-  final bool cierraDialogo;
-
-  const DialogButton({
-    required this.texto,
-    this.onPressed,
-    this.cierraDialogo = true,
-  });
 }

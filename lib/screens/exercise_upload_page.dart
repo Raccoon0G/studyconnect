@@ -42,6 +42,11 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
   bool _subiendo = false;
   bool _exitoAlSubir = false;
 
+  String? _ejercicioId; // Si es edición o nueva versión
+  String? _modo; // 'editar', 'nueva_version' o null
+  String? _versionActualId;
+  bool _cargando = true;
+
   Future<void> reproducirSonidoExito() async {
     final player = AudioPlayer();
     await player.play(AssetSource('audio/successed.mp3'));
@@ -133,17 +138,9 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
         .collection(subcoleccion);
 
     try {
-      final snapshot = await ejerciciosRef.get();
-      final ejercicioId =
-          '${_temaSeleccionado}_${(snapshot.docs.length + 1).toString().padLeft(2, '0')}';
-      final versionId = 'Version_01';
-
       final pasosLimpios =
           _stepsControllers
-              .map((step) {
-                final rawInput = step['latex'].text;
-                return prepararLaTeXSeguro(rawInput);
-              })
+              .map((step) => prepararLaTeXSeguro(step['latex'].text))
               .where((p) => p.isNotEmpty)
               .toList();
 
@@ -153,131 +150,168 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
               .where((d) => d.isNotEmpty)
               .toList();
 
-      final ejerRef = ejerciciosRef.doc(ejercicioId);
-
-      String autorNombre = '';
-      if (user != null) {
-        final userDoc =
-            await firestore.collection('usuarios').doc(user.uid).get();
-        autorNombre = userDoc.data()?['Nombre'] ?? '';
-      }
-
-      // Guardar el ejercicio principal
-      await ejerRef.set({
-        'Titulo': titulo,
-        'DesEjercicio': descripcion,
-        'Autor': autorNombre,
-        'AutorId': user?.uid ?? '',
-        'CalPromedio': 0.0,
-        'FechCreacion': now,
-        'FechMod': now,
-        'versionActual': versionId,
-      });
-
-      // Guardar la versión inicial
-      await ejerRef.collection('Versiones').doc(versionId).set({
-        'Titulo': 'Versión 1',
-        'Descripcion': descripcion,
-        'Fecha': now,
-        'AutorId': user?.uid ?? '',
-        'PasosEjer': pasosLimpios,
-        'DescPasos': descripciones,
-      });
-
-      int totalSubidos = 1;
-      // 🔄 Incrementar contador y obtener nuevo total
-      if (user != null) {
-        final userRef = firestore.collection('usuarios').doc(user.uid);
-        await firestore.runTransaction((transaction) async {
-          final snapshot = await transaction.get(userRef);
-          final actual = snapshot.data()?['EjerSubidos'] ?? 0;
-          totalSubidos = actual + 1;
-          transaction.update(userRef, {'EjerSubidos': totalSubidos});
+      // Determina si es editar, nueva versión o nuevo
+      if (_modo == 'editar' && _ejercicioId != null) {
+        // --- Editar ejercicio existente y versión actual ---
+        final ejerRef = ejerciciosRef.doc(_ejercicioId);
+        await ejerRef.update({
+          'Titulo': titulo,
+          'DesEjercicio': descripcion,
+          'FechMod': now,
         });
-      }
 
-      await actualizarTodoCalculoDeUsuario(uid: user!.uid);
+        // Actualiza la versión actual
+        await ejerRef.collection('Versiones').doc(_versionActualId).update({
+          'Titulo': 'Versión editada',
+          'Descripcion': descripcion,
+          'Fecha': now,
+          'PasosEjer': pasosLimpios,
+          'DescPasos': descripciones,
+        });
 
-      // --- GAMIFICACIÓN: Mensaje motivacional dinámico
-      // String obtenerMensajeGamificacion(int total) {
-      //   if (total == 1) {
-      //     return "¡Acabas de subir tu primer ejercicio! 🚀 ¡Bienvenido como autor!";
-      //   } else if (total == 5) {
-      //     return "¡Ya llevas 5 ejercicios! 🥇 ¡Sigue así, vas por buen camino!";
-      //   } else if (total == 10) {
-      //     return "¡10 ejercicios subidos! 🏆 ¡Eres un verdadero colaborador!";
-      //   } else if (total == 20) {
-      //     return "¡20 ejercicios! 🎓 ¡Tu impacto es enorme!";
-      //   } else if (total % 10 == 0) {
-      //     return "¡$total ejercicios! 🎉 ¡Eres una inspiración para la comunidad!";
-      //   } else {
-      //     // Mensaje motivacional random
-      //     final mensajes = [
-      //       "¡Buen trabajo! Sigue compartiendo tu conocimiento.",
-      //       "¡Tu aportación ayuda a toda la comunidad!",
-      //       "¡Así se hace! Cada ejercicio cuenta.",
-      //       "¡Genial! ¡Otro paso hacia el top del ranking!",
-      //       "¡No te detengas! 💪",
-      //       "¡Eres parte clave de la comunidad Study Connect!",
-      //     ];
-      //     return mensajes[DateTime.now().millisecondsSinceEpoch %
-      //         mensajes.length];
-      //   }
-      // }
-      // Mensaje de logro/medalla
-      final mensajeGamificacion = obtenerMensajeLogroEjercicio(totalSubidos);
-      // --- Notificación gamificada
-      if (user != null) {
-        await NotificationService.crearNotificacion(
-          uidDestino: user.uid,
-          tipo: 'ejercicio',
-          titulo: '¡Ejercicio subido correctamente!',
-          contenido: mensajeGamificacion,
-          referenciaId: ejercicioId,
-          tema: _temaSeleccionado,
-          uidEmisor: user.uid,
-          nombreEmisor: autorNombre.isNotEmpty ? autorNombre : 'Tú',
+        await showFeedbackDialogAndSnackbar(
+          context: context,
+          titulo: '¡Editado!',
+          mensaje: 'El ejercicio fue editado exitosamente.',
+          tipo: CustomDialogType.success,
+          snackbarMessage: 'Ejercicio editado',
+          snackbarSuccess: true,
+        );
+      } else if (_modo == 'nueva_version' && _ejercicioId != null) {
+        // --- Crear nueva versión y actualizar campo versionActual ---
+        final ejerRef = ejerciciosRef.doc(_ejercicioId);
+        final versiones = await ejerRef.collection('Versiones').get();
+        final versionNum = versiones.docs.length + 1;
+        final nuevaVersionId =
+            'Version_${versionNum.toString().padLeft(2, '0')}';
+
+        await ejerRef.collection('Versiones').doc(nuevaVersionId).set({
+          'Titulo': 'Versión $versionNum',
+          'Descripcion': descripcion,
+          'Fecha': now,
+          'AutorId': user?.uid ?? '',
+          'PasosEjer': pasosLimpios,
+          'DescPasos': descripciones,
+        });
+
+        await ejerRef.update({
+          'Titulo': titulo,
+          'DesEjercicio': descripcion,
+          'FechMod': now,
+          'versionActual': nuevaVersionId,
+        });
+
+        await showFeedbackDialogAndSnackbar(
+          context: context,
+          titulo: '¡Nueva versión!',
+          mensaje: 'Nueva versión agregada exitosamente.',
+          tipo: CustomDialogType.success,
+          snackbarMessage: 'Nueva versión guardada',
+          snackbarSuccess: true,
+        );
+      } else {
+        // --- Crear nuevo ejercicio (original) ---
+        final snapshot = await ejerciciosRef.get();
+        final ejercicioId =
+            '${_temaSeleccionado}_${(snapshot.docs.length + 1).toString().padLeft(2, '0')}';
+        final versionId = 'Version_01';
+
+        String autorNombre = '';
+        if (user != null) {
+          final userDoc =
+              await firestore.collection('usuarios').doc(user.uid).get();
+          autorNombre = userDoc.data()?['Nombre'] ?? '';
+        }
+
+        final ejerRef = ejerciciosRef.doc(ejercicioId);
+
+        await ejerRef.set({
+          'Titulo': titulo,
+          'DesEjercicio': descripcion,
+          'Autor': autorNombre,
+          'AutorId': user?.uid ?? '',
+          'CalPromedio': 0.0,
+          'FechCreacion': now,
+          'FechMod': now,
+          'versionActual': versionId,
+        });
+
+        await ejerRef.collection('Versiones').doc(versionId).set({
+          'Titulo': 'Versión 1',
+          'Descripcion': descripcion,
+          'Fecha': now,
+          'AutorId': user?.uid ?? '',
+          'PasosEjer': pasosLimpios,
+          'DescPasos': descripciones,
+        });
+
+        int totalSubidos = 1;
+        if (user != null) {
+          final userRef = firestore.collection('usuarios').doc(user.uid);
+          await firestore.runTransaction((transaction) async {
+            final snapshot = await transaction.get(userRef);
+            final actual = snapshot.data()?['EjerSubidos'] ?? 0;
+            totalSubidos = actual + 1;
+            transaction.update(userRef, {'EjerSubidos': totalSubidos});
+          });
+        }
+
+        await actualizarTodoCalculoDeUsuario(uid: user!.uid);
+
+        final mensajeGamificacion = obtenerMensajeLogroEjercicio(totalSubidos);
+        if (user != null) {
+          await NotificationService.crearNotificacion(
+            uidDestino: user.uid,
+            tipo: 'ejercicio',
+            titulo: '¡Ejercicio subido correctamente!',
+            contenido: mensajeGamificacion,
+            referenciaId: ejercicioId,
+            tema: _temaSeleccionado,
+            uidEmisor: user.uid,
+            nombreEmisor: autorNombre.isNotEmpty ? autorNombre : 'Tú',
+          );
+        }
+
+        await LocalNotificationService.show(
+          title: 'Ejercicio subido',
+          body: '¡Tu ejercicio fue guardado exitosamente!',
+        );
+
+        await reproducirSonidoExito();
+
+        await showFeedbackDialogAndSnackbar(
+          context: context,
+          titulo: '¡Éxito!',
+          mensaje: 'El ejercicio se subió correctamente a la plataforma.',
+          tipo: CustomDialogType.success,
+          snackbarMessage: 'Ejercicio guardado con éxito',
+          snackbarSuccess: true,
         );
       }
 
-      // --- Notificación local tipo push (opcional)
-      await LocalNotificationService.show(
-        title: 'Ejercicio subido',
-        body: '¡Tu ejercicio fue guardado exitosamente!',
-      );
-
-      await reproducirSonidoExito();
-
-      // --- Feedback visual (diálogo y snackbar)
       setState(() {
         _exitoAlSubir = true;
-      });
-
-      await showFeedbackDialogAndSnackbar(
-        context: context,
-        titulo: '¡Éxito!',
-        mensaje: 'El ejercicio se subió correctamente a la plataforma.',
-        tipo: CustomDialogType.success,
-        snackbarMessage: 'Ejercicio guardado con éxito',
-        snackbarSuccess: true,
-      );
-
-      // --- Limpiar campos
-      setState(() {
-        _temaSeleccionado = null;
-        _titleController.clear();
-        _descriptionController.clear();
-        _stepsControllers.clear();
-        _stepsControllers.add({
-          'latex': TextEditingController(),
-          'desc': TextEditingController(),
-          'locked': false,
-        });
-        _showKeyboard.clear();
-        _recentSymbols.clear();
-        _exitoAlSubir = false;
         _subiendo = false;
       });
+
+      // Limpiar campos si es nuevo (solo si quieres)
+      if (_modo == null) {
+        setState(() {
+          _temaSeleccionado = null;
+          _titleController.clear();
+          _descriptionController.clear();
+          _stepsControllers.clear();
+          _stepsControllers.add({
+            'latex': TextEditingController(),
+            'desc': TextEditingController(),
+            'locked': false,
+          });
+          _showKeyboard.clear();
+          _recentSymbols.clear();
+          _exitoAlSubir = false;
+          _subiendo = false;
+        });
+      }
     } catch (e) {
       await reproducirSonidoError();
       setState(() => _subiendo = false);
@@ -536,7 +570,90 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _leerArgumentosYPreparar();
+  }
+
+  Future<void> _cargarDatosEjercicio() async {
+    if (_ejercicioId == null || _temaSeleccionado == null) return;
+    final temasSubcoleccion = {
+      'Der': 'EjerDer',
+      'FnAlg': 'EjerFnAlg',
+      'Lim': 'EjerLim',
+      'TecInteg': 'EjerTecInteg',
+    };
+    final subcoleccion =
+        temasSubcoleccion[_temaSeleccionado!] ?? 'EjerDesconocido';
+    final ejerRef = FirebaseFirestore.instance
+        .collection('calculo')
+        .doc(_temaSeleccionado)
+        .collection(subcoleccion)
+        .doc(_ejercicioId);
+
+    final doc = await ejerRef.get();
+    if (!doc.exists) return;
+
+    final data = doc.data()!;
+    _titleController.text = data['Titulo'] ?? '';
+    _descriptionController.text = data['DesEjercicio'] ?? '';
+
+    // Obtener la versión actual
+    final versionId = data['versionActual'] ?? 'Version_01';
+    _versionActualId = versionId;
+    final versionDoc =
+        await ejerRef.collection('Versiones').doc(versionId).get();
+
+    final pasos = List<String>.from(versionDoc['PasosEjer'] ?? []);
+    final descripciones = List<String>.from(versionDoc['DescPasos'] ?? []);
+
+    // Cargar en _stepsControllers
+    _stepsControllers.clear();
+    for (int i = 0; i < pasos.length; i++) {
+      _stepsControllers.add({
+        'latex': TextEditingController(text: pasos[i]),
+        'desc': TextEditingController(
+          text: i < descripciones.length ? descripciones[i] : '',
+        ),
+        'locked': false,
+      });
+    }
+    if (_stepsControllers.isEmpty) {
+      _stepsControllers.add({
+        'latex': TextEditingController(),
+        'desc': TextEditingController(),
+        'locked': false,
+      });
+    }
+  }
+
+  Future<void> _leerArgumentosYPreparar() async {
+    // Esperar a que el contexto esté listo
+    await Future.delayed(Duration.zero);
+
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
+    if (args != null) {
+      _modo = args['modo'] as String?;
+      _ejercicioId = args['ejercicioId'] as String?;
+      _temaSeleccionado = args['tema'] as String?;
+
+      if (_modo == 'editar' || _modo == 'nueva_version') {
+        await _cargarDatosEjercicio();
+      }
+    }
+    setState(() {
+      _cargando = false;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_cargando) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     final int activeStepIndex = _stepsControllers.lastIndexWhere(
       (step) => step['locked'] == false,
     );

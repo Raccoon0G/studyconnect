@@ -241,6 +241,69 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     }
   }
 
+  void _confirmarEliminarEjercicio(
+    BuildContext context,
+    String tema,
+    String ejercicioId,
+  ) async {
+    final confirm = await showCustomDialog(
+      context: context,
+      titulo: '¿Eliminar ejercicio?',
+      mensaje:
+          'Esta acción no se puede deshacer. ¿Seguro que deseas eliminar este ejercicio?',
+      tipo: CustomDialogType.warning,
+      botones: [
+        DialogButton(
+          texto: 'Cancelar',
+          onPressed: () async => Navigator.of(context).pop(false),
+        ),
+        DialogButton(
+          texto: 'Eliminar',
+          onPressed: () async => Navigator.of(context).pop(true),
+        ),
+      ],
+    );
+
+    if (confirm == true) {
+      try {
+        // Borra ejercicio
+        final ref = FirebaseFirestore.instance
+            .collection('calculo')
+            .doc(tema)
+            .collection('Ejer$tema')
+            .doc(ejercicioId);
+        await ref.delete();
+
+        // Borra comentarios asociados
+        final commentsSnap =
+            await FirebaseFirestore.instance
+                .collection('comentarios_ejercicios')
+                .where('ejercicioId', isEqualTo: ejercicioId)
+                .where('tema', isEqualTo: tema)
+                .get();
+        for (final c in commentsSnap.docs) {
+          await c.reference.delete();
+        }
+
+        if (context.mounted) {
+          showCustomSnackbar(
+            context: context,
+            message: 'Ejercicio eliminado con éxito.',
+            success: true,
+          );
+          Navigator.pop(context); // Vuelve atrás
+        }
+      } catch (e) {
+        showCustomDialog(
+          context: context,
+          titulo: 'Error al eliminar',
+          mensaje: e.toString(),
+          tipo: CustomDialogType.error,
+        );
+      }
+    }
+  }
+
   Widget _columnaIzquierda({
     required Map<String, dynamic> ejercicioData,
     required String tema,
@@ -399,9 +462,73 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
           const SizedBox(height: 38),
 
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 285, minHeight: 220),
+            constraints: const BoxConstraints(maxHeight: 220, minHeight: 120),
             child: const ExerciseCarousel(),
           ),
+
+          if (ejercicioData['AutorId'] ==
+              FirebaseAuth.instance.currentUser?.uid)
+            Padding(
+              padding: const EdgeInsets.only(top: 30.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.edit),
+                    label: const Text('Editar'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange.shade700,
+                    ),
+                    onPressed: () async {
+                      // Navegar a ExerciseUploadPage en modo edición
+                      Navigator.pushNamed(
+                        context,
+                        '/exercise_upload',
+                        arguments: {
+                          'tema': tema,
+                          'ejercicioId': ejercicioId,
+                          'modo': 'editar',
+                        },
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.library_add),
+                    label: const Text('Nueva versión'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade800,
+                    ),
+                    onPressed: () async {
+                      // Navegar a ExerciseUploadPage en modo nueva versión
+                      Navigator.pushNamed(
+                        context,
+                        '/exercise_upload',
+                        arguments: {
+                          'tema': tema,
+                          'ejercicioId': ejercicioId,
+                          'modo': 'nueva_version',
+                        },
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.delete),
+                    label: const Text('Eliminar'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                    ),
+                    onPressed:
+                        () => _confirmarEliminarEjercicio(
+                          context,
+                          tema,
+                          ejercicioId,
+                        ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
