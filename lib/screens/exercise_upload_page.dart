@@ -52,6 +52,40 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
     await player.play(AssetSource('audio/error.mp3'));
   }
 
+  String obtenerMensajeLogroEjercicio(int total) {
+    if (total == 1) {
+      return "¡Subiste tu primer ejercicio! 🥳 Bienvenido a la comunidad de creadores.";
+    } else if (total == 5) {
+      return "¡5 ejercicios subidos! 🥈 Logro: Colaborador Activo. ¡Sigue así!";
+    } else if (total == 10) {
+      return "¡10 ejercicios! 🥇 Logro: Colaborador Avanzado. ¡Tu esfuerzo está marcando la diferencia!";
+    } else if (total == 20) {
+      return "¡20 ejercicios! 🏆 Logro: Master Contributor. Eres un ejemplo para todos.";
+    } else if (total % 10 == 0) {
+      return "¡$total ejercicios! ⭐ ¡Nivel leyenda en la comunidad! Sigue sumando éxitos.";
+    } else if (total >= 3 && total < 5) {
+      return "¡Vas por buen camino! Ya llevas $total ejercicios.";
+    } else if (total > 20 && total % 5 == 0) {
+      return "¡Wow! $total ejercicios subidos. Eres inspiración total. 👏";
+    } else {
+      // Mensaje random motivacional para otros casos
+      final frases = [
+        "¡Genial! Cada ejercicio cuenta.",
+        "¡Buen aporte! Sigamos aprendiendo juntos.",
+        "¡Suma puntos para el ranking con cada aporte!",
+        "¡Estás ayudando a muchos estudiantes!",
+        "¡No te detengas! Cada vez eres mejor.",
+        "¡Buen trabajo! Sigue compartiendo tu conocimiento.",
+        "¡Tu aportación ayuda a toda la comunidad!",
+        "¡Así se hace! Cada ejercicio cuenta.",
+        "¡Genial! ¡Otro paso hacia el top del ranking!",
+        "¡No te detengas! 💪",
+        "¡Eres parte clave de la comunidad Study Connect!",
+      ];
+      return frases[DateTime.now().millisecondsSinceEpoch % frases.length];
+    }
+  }
+
   Future<void> _subirEjercicioAFirestore() async {
     if (_subiendo) return;
 
@@ -91,31 +125,6 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
       'TecInteg': 'EjerTecInteg',
     };
 
-    String obtenerMensajeGamificacion(int total) {
-      if (total == 1) {
-        return "¡Acabas de subir tu primer ejercicio! 🚀 ¡Bienvenido como autor!";
-      } else if (total == 5) {
-        return "¡Ya llevas 5 ejercicios! 🥇 ¡Sigue así, vas por buen camino!";
-      } else if (total == 10) {
-        return "¡10 ejercicios subidos! 🏆 ¡Eres un verdadero colaborador!";
-      } else if (total == 20) {
-        return "¡20 ejercicios! 🎓 ¡Tu impacto es enorme!";
-      } else if (total % 10 == 0) {
-        return "¡$total ejercicios! 🎉 ¡Eres una inspiración!";
-      } else {
-        // Mensajes random para el resto
-        final mensajes = [
-          "¡Buen trabajo! Sigue compartiendo tu conocimiento.",
-          "¡Tu aportación ayuda a toda la comunidad!",
-          "¡Así se hace! Cada ejercicio cuenta.",
-          "¡Genial! ¡Otro paso hacia el top del ranking!",
-          "¡No te detengas! 💪",
-        ];
-        return mensajes[DateTime.now().millisecondsSinceEpoch %
-            mensajes.length];
-      }
-    }
-
     final subcoleccion =
         temasSubcoleccion[_temaSeleccionado] ?? 'EjerDesconocido';
     final ejerciciosRef = firestore
@@ -153,6 +162,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
         autorNombre = userDoc.data()?['Nombre'] ?? '';
       }
 
+      // Guardar el ejercicio principal
       await ejerRef.set({
         'Titulo': titulo,
         'DesEjercicio': descripcion,
@@ -164,6 +174,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
         'versionActual': versionId,
       });
 
+      // Guardar la versión inicial
       await ejerRef.collection('Versiones').doc(versionId).set({
         'Titulo': 'Versión 1',
         'Descripcion': descripcion,
@@ -173,27 +184,50 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
         'DescPasos': descripciones,
       });
 
+      int totalSubidos = 1;
+      // 🔄 Incrementar contador y obtener nuevo total
       if (user != null) {
         final userRef = firestore.collection('usuarios').doc(user.uid);
         await firestore.runTransaction((transaction) async {
           final snapshot = await transaction.get(userRef);
           final actual = snapshot.data()?['EjerSubidos'] ?? 0;
-          transaction.update(userRef, {'EjerSubidos': actual + 1});
+          totalSubidos = actual + 1;
+          transaction.update(userRef, {'EjerSubidos': totalSubidos});
         });
       }
 
       await actualizarTodoCalculoDeUsuario(uid: user!.uid);
 
+      // --- GAMIFICACIÓN: Mensaje motivacional dinámico
+      // String obtenerMensajeGamificacion(int total) {
+      //   if (total == 1) {
+      //     return "¡Acabas de subir tu primer ejercicio! 🚀 ¡Bienvenido como autor!";
+      //   } else if (total == 5) {
+      //     return "¡Ya llevas 5 ejercicios! 🥇 ¡Sigue así, vas por buen camino!";
+      //   } else if (total == 10) {
+      //     return "¡10 ejercicios subidos! 🏆 ¡Eres un verdadero colaborador!";
+      //   } else if (total == 20) {
+      //     return "¡20 ejercicios! 🎓 ¡Tu impacto es enorme!";
+      //   } else if (total % 10 == 0) {
+      //     return "¡$total ejercicios! 🎉 ¡Eres una inspiración para la comunidad!";
+      //   } else {
+      //     // Mensaje motivacional random
+      //     final mensajes = [
+      //       "¡Buen trabajo! Sigue compartiendo tu conocimiento.",
+      //       "¡Tu aportación ayuda a toda la comunidad!",
+      //       "¡Así se hace! Cada ejercicio cuenta.",
+      //       "¡Genial! ¡Otro paso hacia el top del ranking!",
+      //       "¡No te detengas! 💪",
+      //       "¡Eres parte clave de la comunidad Study Connect!",
+      //     ];
+      //     return mensajes[DateTime.now().millisecondsSinceEpoch %
+      //         mensajes.length];
+      //   }
+      // }
+      // Mensaje de logro/medalla
+      final mensajeGamificacion = obtenerMensajeLogroEjercicio(totalSubidos);
+      // --- Notificación gamificada
       if (user != null) {
-        // 1. Lee el número de ejercicios subidos
-        final userDoc =
-            await firestore.collection('usuarios').doc(user.uid).get();
-        final totalSubidos = (userDoc.data()?['EjerSubidos'] ?? 0) + 1;
-
-        // 2. Elige el mensaje
-        final mensajeGamificacion = obtenerMensajeGamificacion(totalSubidos);
-
-        // 3. Notificación gamificada
         await NotificationService.crearNotificacion(
           uidDestino: user.uid,
           tipo: 'ejercicio',
@@ -206,7 +240,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
         );
       }
 
-      // Notificación local antes del feedback visual
+      // --- Notificación local tipo push (opcional)
       await LocalNotificationService.show(
         title: 'Ejercicio subido',
         body: '¡Tu ejercicio fue guardado exitosamente!',
@@ -214,7 +248,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
 
       await reproducirSonidoExito();
 
-      // Feedback con animación, diálogo, y snackbar
+      // --- Feedback visual (diálogo y snackbar)
       setState(() {
         _exitoAlSubir = true;
       });
@@ -228,7 +262,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
         snackbarSuccess: true,
       );
 
-      // Limpiar campos
+      // --- Limpiar campos
       setState(() {
         _temaSeleccionado = null;
         _titleController.clear();

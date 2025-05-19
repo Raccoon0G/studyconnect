@@ -126,6 +126,39 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
     await player.play(AssetSource('audio/error.mp3'));
   }
 
+  String obtenerMensajeLogroMaterial(int total) {
+    if (total == 1) {
+      return "¡Subiste tu primer material! 📚 Bienvenido a la comunidad de colaboradores.";
+    } else if (total == 5) {
+      return "¡5 materiales subidos! 🥈 Logro: Compartidor Activo. ¡Sigue inspirando!";
+    } else if (total == 10) {
+      return "¡10 materiales! 🥇 Logro: Colaborador Avanzado. ¡Tus aportes son clave para todos!";
+    } else if (total == 20) {
+      return "¡20 materiales! 🏆 Logro: Master Resource Giver. ¡Eres un pilar en la comunidad!";
+    } else if (total % 10 == 0) {
+      return "¡$total materiales! ⭐ ¡Nivel leyenda en recursos! Sigue sumando éxitos.";
+    } else if (total >= 3 && total < 5) {
+      return "¡Gran avance! Ya llevas $total materiales subidos.";
+    } else if (total > 20 && total % 5 == 0) {
+      return "¡Wow! $total materiales subidos. ¡Inspiras a todos! 👏";
+    } else {
+      final frases = [
+        "¡Cada recurso suma! Gracias por tu apoyo.",
+        "¡Aporta más, crecemos juntos!",
+        "¡Tus materiales marcan la diferencia!",
+        "¡Eres parte importante de la comunidad!",
+        "¡Sigue compartiendo! 👏",
+        "¡Buen trabajo! Cada recurso ayuda a todos.",
+        "¡Sigue así, tu aporte es valioso!",
+        "¡Tu material facilita el aprendizaje de muchos!",
+        "¡Uno más para la comunidad! 🚀",
+        "¡Aportar te acerca al top del ranking!",
+        "¡No pares de compartir!",
+      ];
+      return frases[DateTime.now().millisecondsSinceEpoch % frases.length];
+    }
+  }
+
   Future<void> _subirMaterialEducativo() async {
     if (_subiendo) return;
 
@@ -166,13 +199,11 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
       final nombreTema = temasDisponibles[_temaSeleccionado!] ?? 'Otro';
       final now = Timestamp.now();
 
-      // Referencia a la subcolección con el patrón EjerFnAlg, EjerTecInteg, etc.
       final coleccionMateriales = FirebaseFirestore.instance
           .collection('materiales')
           .doc(_temaSeleccionado!)
           .collection('Mat$_temaSeleccionado');
 
-      // Obtener el número de documentos para generar un ID incremental
       final snapshot = await coleccionMateriales.get();
       final materialId =
           '${_temaSeleccionado}_${(snapshot.docs.length + 1).toString().padLeft(2, '0')}';
@@ -236,32 +267,60 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
         'archivos': contenido,
       });
 
-      // 🔽 Incrementar MaterialesSubidos del usuario
+      // --- GAMIFICACIÓN: Contador de materiales subidos
       final userRef = FirebaseFirestore.instance
           .collection('usuarios')
           .doc(uid);
       final userSnap = await userRef.get();
       final datosUsuario = userSnap.data() ?? {};
       final materialesSubidos = (datosUsuario['MaterialesSubidos'] ?? 0) as int;
+      final totalSubidos = materialesSubidos + 1;
+      await userRef.update({'MaterialesSubidos': totalSubidos});
 
-      await userRef.update({'MaterialesSubidos': materialesSubidos + 1});
-
-      // 🔽 🔄 Aquí llamas correctamente a la función unificada
+      // 🔄 Aquí llamas correctamente a la función unificada
       if (uid != null) {
         await actualizarTodoCalculoDeUsuario(uid: uid);
       }
 
+      // --- Mensaje gamificado
+      // String obtenerMensajeGamificacion(int total) {
+      //   if (total == 1) {
+      //     return "¡Acabas de subir tu primer material! 📚 ¡Eres parte clave del proyecto!";
+      //   } else if (total == 5) {
+      //     return "¡Ya llevas 5 materiales! 🥇 ¡Sigue compartiendo recursos!";
+      //   } else if (total == 10) {
+      //     return "¡10 materiales subidos! 🏆 ¡Inspiras a tus compañeros!";
+      //   } else if (total == 20) {
+      //     return "¡20 materiales! 🎓 ¡Tu contribución hace la diferencia!";
+      //   } else if (total % 10 == 0) {
+      //     return "¡$total materiales! 🎉 ¡Nivel leyenda en la comunidad!";
+      //   } else {
+      //     final mensajes = [
+      //       "¡Buen trabajo! Cada recurso ayuda a todos.",
+      //       "¡Sigue así, tu aporte es valioso!",
+      //       "¡Tu material facilita el aprendizaje de muchos!",
+      //       "¡Uno más para la comunidad! 🚀",
+      //       "¡Aportar te acerca al top del ranking!",
+      //       "¡No pares de compartir!",
+      //     ];
+      //     return mensajes[DateTime.now().millisecondsSinceEpoch %
+      //         mensajes.length];
+      //   }
+      // }
+
+      // --- Notificación motivacional
       await NotificationService.crearNotificacion(
         uidDestino: uid!,
         tipo: 'material',
-        titulo: 'Material subido correctamente',
-        contenido: 'Agregaste nuevo material en $nombreTema',
+        titulo: '¡Material subido correctamente!',
+        contenido: obtenerMensajeLogroMaterial(totalSubidos),
         referenciaId: materialId,
         uidEmisor: uid,
         nombreEmisor: _nombreUsuario ?? 'Tú',
+        tema: _temaSeleccionado,
       );
 
-      // ALERTA LOCAL
+      // --- Notificación local
       await LocalNotificationService.show(
         title: 'Material subido',
         body: 'Tu material en $nombreTema fue guardado exitosamente',
