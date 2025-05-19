@@ -10,7 +10,20 @@ class PodiumWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final podium = List.generate(3, (i) => i < top3.length ? top3[i] : null);
 
+    // 🟦 Tamaños responsivos:
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final double maxPodiumHeight = screenHeight * 0.32;
+    final double minPodiumHeight = 120;
+
+    double avatarRadius = screenWidth < 600 ? 36 : 75; // Responsivo
+    double baseHeight = (maxPodiumHeight).clamp(minPodiumHeight, 240);
+    double second = (baseHeight * 0.81).clamp(minPodiumHeight, 220);
+    double first = (baseHeight * 1.0).clamp(minPodiumHeight, 280);
+    double third = (baseHeight * 0.68).clamp(minPodiumHeight, 170);
+
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         const Text(
           '🏆 Top 3 del Ranking',
@@ -21,41 +34,54 @@ class PodiumWidget extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 20),
-        TweenAnimationBuilder<double>(
-          duration: const Duration(milliseconds: 600),
-          tween: Tween(begin: 0, end: 1),
-          curve: Curves.easeOutBack,
-          builder: (context, value, child) {
-            return Transform.scale(
-              scale: value,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _buildPlace(
-                    context,
-                    podium[1],
-                    2,
-                    260,
-                    Colors.grey.shade400,
-                    '🥈',
-                  ),
-                  const SizedBox(width: 24),
-                  _buildPlace(context, podium[0], 1, 320, Colors.amber, '🥇'),
-                  const SizedBox(width: 24),
-                  _buildPlace(
-                    context,
-                    podium[2],
-                    3,
-                    220,
-                    Colors.brown.shade400,
-                    '🥉',
-                  ),
-                ],
-              ),
-            );
-          },
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: TweenAnimationBuilder<double>(
+            duration: const Duration(milliseconds: 600),
+            tween: Tween(begin: 0, end: 1),
+            curve: Curves.easeOutBack,
+            builder: (context, value, child) {
+              return Transform.scale(
+                scale: value,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildPlace(
+                      context,
+                      podium[1],
+                      2,
+                      second,
+                      avatarRadius,
+                      Colors.grey.shade400,
+                      '🥈',
+                    ),
+                    const SizedBox(width: 20),
+                    _buildPlace(
+                      context,
+                      podium[0],
+                      1,
+                      first,
+                      avatarRadius + 8,
+                      Colors.amber,
+                      '🥇',
+                    ),
+                    const SizedBox(width: 20),
+                    _buildPlace(
+                      context,
+                      podium[2],
+                      3,
+                      third,
+                      avatarRadius - 8,
+                      Colors.brown.shade400,
+                      '🥉',
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 12),
         const Text(
           '¡Contribuye más y escala en el ranking!',
           style: TextStyle(
@@ -73,6 +99,7 @@ class PodiumWidget extends StatelessWidget {
     Map<String, dynamic>? user,
     int place,
     double height,
+    double avatarRadius, // NUEVO parámetro
     Color color,
     String medal,
   ) {
@@ -82,6 +109,7 @@ class PodiumWidget extends StatelessWidget {
     final bool esPrimero = place == 1;
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Stack(
           clipBehavior: Clip.none,
@@ -89,7 +117,7 @@ class PodiumWidget extends StatelessWidget {
           children: [
             if (esPrimero)
               Positioned(
-                top: -20,
+                top: -18,
                 child: TweenAnimationBuilder<double>(
                   duration: const Duration(seconds: 1),
                   tween: Tween(begin: 0.9, end: 1.1),
@@ -99,7 +127,7 @@ class PodiumWidget extends StatelessWidget {
                       scale: scale,
                       child: const Icon(
                         Icons.emoji_events,
-                        size: 48,
+                        size: 42,
                         color: Colors.amberAccent,
                       ),
                     );
@@ -107,16 +135,16 @@ class PodiumWidget extends StatelessWidget {
                 ),
               ),
             Padding(
-              padding: EdgeInsets.only(top: esPrimero ? 16 : 0),
+              padding: EdgeInsets.only(top: esPrimero ? 12 : 0),
               child: CircleAvatar(
-                radius: 75,
+                radius: avatarRadius,
                 backgroundImage: foto.isNotEmpty ? NetworkImage(foto) : null,
                 backgroundColor: Colors.white,
                 child:
                     foto.isEmpty
                         ? Icon(
                           Icons.person,
-                          size: 60,
+                          size: avatarRadius * 0.8,
                           color: Colors.grey.shade700,
                         )
                         : null,
@@ -128,13 +156,13 @@ class PodiumWidget extends StatelessWidget {
         Tooltip(
           message: '$nombre – ${puntos.toStringAsFixed(2)} estrellas',
           child: SizedBox(
-            width: 140,
+            width: avatarRadius * 2,
             child: Text(
               nombre,
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
-                fontSize: 16,
+                fontSize: 15,
               ),
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
@@ -143,8 +171,7 @@ class PodiumWidget extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         SingleAnimatedStarRating(valor: puntos),
-
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         TweenAnimationBuilder<double>(
           duration: const Duration(seconds: 2),
           tween: Tween(begin: 0.95, end: 1.05),
@@ -153,7 +180,7 @@ class PodiumWidget extends StatelessWidget {
             return Transform.scale(
               scale: scale,
               child: Container(
-                width: 100,
+                width: avatarRadius * 1.3,
                 height: height,
                 decoration: BoxDecoration(
                   color: color,
@@ -170,7 +197,7 @@ class PodiumWidget extends StatelessWidget {
                 alignment: Alignment.topCenter,
                 child: Padding(
                   padding: const EdgeInsets.only(top: 8),
-                  child: Text(medal, style: const TextStyle(fontSize: 30)),
+                  child: Text(medal, style: const TextStyle(fontSize: 28)),
                 ),
               ),
             );

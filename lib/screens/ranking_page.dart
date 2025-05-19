@@ -128,37 +128,114 @@ class _RankingPageState extends State<RankingPage>
   }
 
   Widget _buildPodioSection() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF015C8B),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 10,
-            offset: const Offset(2, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          const Text(
-            '🏅 Líderes del Aprendizaje',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF015C8B),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 10,
+                  offset: const Offset(2, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize:
+                  MainAxisSize.min, // <- Importante para no expandirse de más
+              children: [
+                const Text(
+                  '🏅 Líderes del Aprendizaje',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                PodiumWidget(top3: ranking.take(3).toList()),
+              ],
             ),
           ),
-          const SizedBox(height: 10),
-          PodiumWidget(top3: ranking.take(3).toList()),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildListaSection() {
+  Widget _buildRankingListView() {
+    return ListView.builder(
+      itemCount: ranking.length,
+      itemBuilder: (context, index) {
+        final r = ranking[index];
+        final badge = ['🥇', '🥈', '🥉'];
+        final nombre = r['nombre'] ?? 'Desconocido';
+        final foto = r['foto'] ?? '';
+        final puntos = r['prom'] ?? 0.0;
+        final aportaciones = r['aportaciones'] ?? 0;
+        final isTop3 = index < 3;
+
+        return Container(
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade800.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Text(
+                '${index + 1}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 16),
+              CircleAvatar(
+                backgroundImage: foto.isNotEmpty ? NetworkImage(foto) : null,
+                radius: 20,
+                child: foto.isEmpty ? const Icon(Icons.person) : null,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$nombre ${isTop3 ? badge[index] : ''}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      'Aportaciones: $aportaciones',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                    Text(
+                      'Puntaje: ${puntos.toStringAsFixed(2)}',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                  ],
+                ),
+              ),
+              CustomStarRating(
+                valor: puntos,
+                size: 20,
+                duration: const Duration(milliseconds: 600),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildListaSection({required bool esMovil}) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -178,75 +255,14 @@ class _RankingPageState extends State<RankingPage>
           ),
           const Divider(color: Colors.white54),
           const SizedBox(height: 8),
-          Expanded(
-            child: ListView.builder(
-              itemCount: ranking.length,
-              itemBuilder: (context, index) {
-                final r = ranking[index];
-                final badge = ['🥇', '🥈', '🥉'];
-                final nombre = r['nombre'] ?? 'Desconocido';
-                final foto = r['foto'] ?? '';
-                final puntos = r['prom'] ?? 0.0;
-                final aportaciones = r['aportaciones'] ?? 0;
-                final isTop3 = index < 3;
-
-                return Container(
-                  margin: const EdgeInsets.symmetric(vertical: 6),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade800.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        '${index + 1}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      CircleAvatar(
-                        backgroundImage:
-                            foto.isNotEmpty ? NetworkImage(foto) : null,
-                        radius: 20,
-                        child: foto.isEmpty ? const Icon(Icons.person) : null,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '$nombre ${isTop3 ? badge[index] : ''}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              'Aportaciones: $aportaciones',
-                              style: const TextStyle(color: Colors.white70),
-                            ),
-                            Text(
-                              'Puntaje: ${puntos.toStringAsFixed(2)}',
-                              style: const TextStyle(color: Colors.white70),
-                            ),
-                          ],
-                        ),
-                      ),
-                      CustomStarRating(
-                        valor: puntos,
-                        size: 20,
-                        duration: const Duration(milliseconds: 600),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
+          // Aquí cambia: si es móvil, NO uses Expanded. Usa un SizedBox con altura calculada.
+          esMovil
+              ? SizedBox(
+                height:
+                    350, // O calcula el height según MediaQuery si prefieres
+                child: _buildRankingListView(),
+              )
+              : Expanded(child: _buildRankingListView()),
         ],
       ),
     );
@@ -311,9 +327,10 @@ class _RankingPageState extends State<RankingPage>
                         esMovil
                             ? Column(
                               children: [
-                                _buildPodioSection(),
+                                Flexible(child: _buildPodioSection()),
+
                                 const SizedBox(height: 20),
-                                Expanded(child: _buildListaSection()),
+                                _buildListaSection(esMovil: true), // <= aquí
                               ],
                             )
                             : Row(
@@ -321,7 +338,10 @@ class _RankingPageState extends State<RankingPage>
                               children: [
                                 Expanded(flex: 4, child: _buildPodioSection()),
                                 const SizedBox(width: 20),
-                                Expanded(flex: 6, child: _buildListaSection()),
+                                Expanded(
+                                  flex: 6,
+                                  child: _buildListaSection(esMovil: false),
+                                ), // <= aquí
                               ],
                             ),
                   );
