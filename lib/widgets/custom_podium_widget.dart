@@ -16,7 +16,7 @@ class PodiumWidget extends StatelessWidget {
     final double maxPodiumHeight = screenHeight * 0.32;
     final double minPodiumHeight = 120;
 
-    double avatarRadius = screenWidth < 600 ? 36 : 75; // Responsivo
+    double avatarRadius = screenWidth < 600 ? 42 : 75; // Responsivo
     double baseHeight = (maxPodiumHeight).clamp(minPodiumHeight, 240);
     double second = (baseHeight * 0.81).clamp(minPodiumHeight, 220);
     double first = (baseHeight * 1.0).clamp(minPodiumHeight, 280);

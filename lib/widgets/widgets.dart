@@ -8,6 +8,7 @@ export 'package:study_connect/widgets/custom_rating_widget.dart';
 export 'package:study_connect/widgets/custom_star_rating.dart';
 export 'package:study_connect/widgets/custom_single_star_rating.dart';
 export 'package:study_connect/widgets/exercise_carousel.dart';
+export 'package:study_connect/widgets/exercise_versions_page.dart';
 export 'package:study_connect/widgets/hoverable_text.dart';
 export 'package:study_connect/widgets/login_carousel.dart';
 export 'package:study_connect/widgets/notification_icon_widget.dart';

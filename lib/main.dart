@@ -6,6 +6,8 @@ import 'package:study_connect/screens/screens.dart';
 import 'services/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import 'widgets/widgets.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -44,6 +46,7 @@ class MyApp extends StatelessWidget {
         '/credits': (context) => const CreditsPage(),
         '/faq': (context) => const FAQPage(),
         '/user_exercises': (context) => const MyExercisesPage(),
+        '/user_materials': (context) => const MyMaterialsPage(),
         '/autoevaluation': (context) => AutoevaluationPage(),
         '/upload_material': (context) => UploadMaterialPage(),
       },
@@ -69,6 +72,20 @@ class MyApp extends StatelessWidget {
                 ),
           );
         }
+
+        // --------------- NUEVO BLOQUE -----------------
+        if (settings.name == '/exercise_versions') {
+          final args = settings.arguments as Map<String, dynamic>;
+          return MaterialPageRoute(
+            builder:
+                (context) => ExerciseVersionsPage(
+                  tema: args['tema'],
+                  subcoleccion: args['subcoleccion'],
+                  id: args['id'],
+                ),
+          );
+        }
+        // ----------------------------------------------
         return null;
       },
     );

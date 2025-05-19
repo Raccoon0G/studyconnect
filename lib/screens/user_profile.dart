@@ -147,6 +147,24 @@ class UserProfilePage extends StatelessWidget {
                             minimumSize: const Size(150, 45),
                           ),
                         ),
+                        ElevatedButton.icon(
+                          onPressed:
+                              () => Navigator.pushNamed(
+                                context,
+                                '/user_materials',
+                              ),
+                          icon: const Icon(Icons.library_books),
+                          label: const Text('Mis materiales'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color.fromARGB(
+                              255,
+                              50,
+                              28,
+                              84,
+                            ),
+                            minimumSize: const Size(150, 45),
+                          ),
+                        ),
                         OutlinedButton.icon(
                           onPressed: () {
                             FirebaseAuth.instance.signOut();

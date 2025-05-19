@@ -129,19 +129,20 @@ class MyExercisesPage extends StatelessWidget {
                     children: [
                       IconButton(
                         icon: const Icon(Icons.edit, color: Colors.blue),
+                        tooltip: 'Editar ejercicio',
                         onPressed: () {
                           Navigator.pushNamed(
                             context,
                             '/exercise_upload',
                             arguments: {
-                              'modo': 'editar',
                               'tema': ejer['tema'],
-                              'subcoleccion': ejer['subcoleccion'],
-                              'id': ejer['id'],
+                              'ejercicioId': ejer['id'],
+                              'modo': 'editar',
                             },
                           );
                         },
                       ),
+
                       IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
                         onPressed:
@@ -152,6 +153,50 @@ class MyExercisesPage extends StatelessWidget {
                               ejer['id'],
                             ),
                       ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.add_circle_outline,
+                          color: Colors.green,
+                        ),
+                        tooltip: 'Nueva versión',
+                        onPressed: () {
+                          Navigator.pushNamed(
+                            context,
+                            '/exercise_upload',
+                            arguments: {
+                              'tema': ejer['tema'],
+                              'ejercicioId': ejer['id'],
+                              'modo': 'nueva_version',
+                            },
+                          );
+                        },
+                      ),
+
+                      // PopupMenuButton<String>(
+                      //   icon: const Icon(
+                      //     Icons.layers,
+                      //     color: Colors.deepPurple,
+                      //   ),
+                      //   tooltip: 'Ver versiones',
+                      //   itemBuilder:
+                      //       (context) => [
+                      //         const PopupMenuItem(
+                      //           value: 'ver',
+                      //           child: Text('Ver versiones'),
+                      //         ),
+                      //       ],
+                      //   onSelected: (value) async {
+                      //     Navigator.pushNamed(
+                      //       context,
+                      //       '/exercise_versions',
+                      //       arguments: {
+                      //         'tema': ejer['tema'],
+                      //         'subcoleccion': ejer['subcoleccion'],
+                      //         'id': ejer['id'],
+                      //       },
+                      //     );
+                      //   },
+                      // ),
                     ],
                   ),
                 ),
