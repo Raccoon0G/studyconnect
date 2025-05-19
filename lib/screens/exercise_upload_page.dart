@@ -91,6 +91,31 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
       'TecInteg': 'EjerTecInteg',
     };
 
+    String obtenerMensajeGamificacion(int total) {
+      if (total == 1) {
+        return "¡Acabas de subir tu primer ejercicio! 🚀 ¡Bienvenido como autor!";
+      } else if (total == 5) {
+        return "¡Ya llevas 5 ejercicios! 🥇 ¡Sigue así, vas por buen camino!";
+      } else if (total == 10) {
+        return "¡10 ejercicios subidos! 🏆 ¡Eres un verdadero colaborador!";
+      } else if (total == 20) {
+        return "¡20 ejercicios! 🎓 ¡Tu impacto es enorme!";
+      } else if (total % 10 == 0) {
+        return "¡$total ejercicios! 🎉 ¡Eres una inspiración!";
+      } else {
+        // Mensajes random para el resto
+        final mensajes = [
+          "¡Buen trabajo! Sigue compartiendo tu conocimiento.",
+          "¡Tu aportación ayuda a toda la comunidad!",
+          "¡Así se hace! Cada ejercicio cuenta.",
+          "¡Genial! ¡Otro paso hacia el top del ranking!",
+          "¡No te detengas! 💪",
+        ];
+        return mensajes[DateTime.now().millisecondsSinceEpoch %
+            mensajes.length];
+      }
+    }
+
     final subcoleccion =
         temasSubcoleccion[_temaSeleccionado] ?? 'EjerDesconocido';
     final ejerciciosRef = firestore
@@ -158,6 +183,28 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
       }
 
       await actualizarTodoCalculoDeUsuario(uid: user!.uid);
+
+      if (user != null) {
+        // 1. Lee el número de ejercicios subidos
+        final userDoc =
+            await firestore.collection('usuarios').doc(user.uid).get();
+        final totalSubidos = (userDoc.data()?['EjerSubidos'] ?? 0) + 1;
+
+        // 2. Elige el mensaje
+        final mensajeGamificacion = obtenerMensajeGamificacion(totalSubidos);
+
+        // 3. Notificación gamificada
+        await NotificationService.crearNotificacion(
+          uidDestino: user.uid,
+          tipo: 'ejercicio',
+          titulo: '¡Ejercicio subido correctamente!',
+          contenido: mensajeGamificacion,
+          referenciaId: ejercicioId,
+          tema: _temaSeleccionado,
+          uidEmisor: user.uid,
+          nombreEmisor: autorNombre.isNotEmpty ? autorNombre : 'Tú',
+        );
+      }
 
       // Notificación local antes del feedback visual
       await LocalNotificationService.show(
