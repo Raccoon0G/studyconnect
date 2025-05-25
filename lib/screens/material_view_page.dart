@@ -1531,49 +1531,8 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF048DD2),
-        title: const Text('Study Connect'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/'),
-            child: const Tooltip(
-              message: 'Ir a Inicio',
-              child: Text('Inicio', style: TextStyle(color: Colors.white)),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/ranking'),
-            child: const Tooltip(
-              message: 'Ir a Ranking',
-              child: Text('Ranking', style: TextStyle(color: Colors.white)),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/content'),
-            child: const Tooltip(
-              message: 'Ir a Contenido',
-              child: Text('Contenido', style: TextStyle(color: Colors.white)),
-            ),
-          ),
-          const NotificationIconWidget(),
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/user_profile'),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Tooltip(
-                message: 'Ir a perfil',
-                child: Text('Perfil', style: TextStyle(color: Colors.white)),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-        ],
-      ),
+      appBar: const CustomAppBar(),
+
       body: Screenshot(
         controller: _screenshotController,
         child: Center(

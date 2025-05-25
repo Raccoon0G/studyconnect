@@ -1,4 +1,5 @@
 export 'package:study_connect/widgets/card_tema.dart';
+export 'package:study_connect/widgets/custom_app_bar.dart';
 export 'package:study_connect/widgets/custom_latex_text.dart';
 export 'package:study_connect/widgets/custom_latex_radio_option.dart';
 export 'package:study_connect/widgets/custom_latex_questioncard.dart';

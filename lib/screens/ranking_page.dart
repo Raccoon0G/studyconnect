@@ -272,49 +272,29 @@ class _RankingPageState extends State<RankingPage>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF048DD2),
-        title: const Text('Study Connect'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/'),
-            child: const Text('Inicio', style: TextStyle(color: Colors.white)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/content'),
-            child: const Text(
-              'Contenidos',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-          const NotificationIconWidget(),
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/user_profile'),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                'Perfil',
-                style: TextStyle(color: Colors.white),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(120),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CustomAppBar(title: 'Ranking'),
+            Material(
+              color: const Color(0xFF048DD2),
+              child: TabBar(
+                controller: _tabController,
+                tabs: const [
+                  Tab(text: 'Ejercicios'),
+                  Tab(text: 'Materiales'),
+                  Tab(text: 'Combinado'),
+                ],
+                labelColor: Colors.white,
+                indicatorColor: Colors.purpleAccent,
               ),
             ),
-          ),
-          const SizedBox(width: 16),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Ejercicios'),
-            Tab(text: 'Materiales'),
-            Tab(text: 'Combinado'),
           ],
-          labelColor: Colors.white,
-          indicatorColor: Colors.purpleAccent,
         ),
       ),
+
       body:
           loading
               ? const Center(child: CircularProgressIndicator())

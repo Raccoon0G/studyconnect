@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:study_connect/widgets/card_tema.dart';
 import 'package:study_connect/widgets/notification_icon_widget.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:study_connect/widgets/widgets.dart' show CustomAppBar;
 
 class ContentPage extends StatelessWidget {
   const ContentPage({super.key});
@@ -84,42 +85,8 @@ class ContentPage extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF048DD2),
-        title: const Text('Study Connect'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pushNamed(context, '/');
-            },
-            child: const Text('Inicio', style: TextStyle(color: Colors.white)),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pushNamed(context, '/ranking');
-            },
-            child: const Text('Ranking', style: TextStyle(color: Colors.white)),
-          ),
-          const NotificationIconWidget(),
-          TextButton(
-            onPressed: () {
-              Navigator.pushNamed(context, '/user_profile');
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                'Perfil',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-        ],
-      ),
+      appBar: const CustomAppBar(),
+
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(

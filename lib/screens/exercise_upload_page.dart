@@ -686,43 +686,8 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
     );
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF048DD2),
-        title: const Text('Study Connect'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/'),
-            child: const Text('Inicio', style: TextStyle(color: Colors.white)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/ranking'),
-            child: const Text('Ranking', style: TextStyle(color: Colors.white)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/content'),
-            child: const Text(
-              'Contenidos',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-          const NotificationIconWidget(),
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/user_profile'),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                'Perfil',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-        ],
-      ),
+      appBar: const CustomAppBar(),
+
       // ===== CAMBIO: El backgroundColor lo quitamos, y aquí va el gradiente:
       body: Container(
         decoration: const BoxDecoration(

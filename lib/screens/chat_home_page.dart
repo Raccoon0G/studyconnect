@@ -1430,50 +1430,8 @@ class _ChatHomePageState extends State<ChatHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF048DD2),
-        elevation: 0,
-        titleSpacing: 0,
-        title: Row(
-          children: [
-            const SizedBox(width: 8),
-            Image.asset('assets/images/logo_ipn.png', height: 32),
-            const SizedBox(width: 8),
-            const Text(
-              'Study Connect',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 20,
-                color: Colors.white,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/'),
-            child: const Text('Inicio', style: TextStyle(color: Colors.white)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/ranking'),
-            child: const Text('Ranking', style: TextStyle(color: Colors.white)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/content'),
-            child: const Text(
-              'Contenidos',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-          const NotificationIconWidget(),
-          TextButton.icon(
-            onPressed: () => Navigator.pushNamed(context, '/user_profile'),
-            icon: const Icon(Icons.person, color: Colors.white),
-            label: const Text('Perfil', style: TextStyle(color: Colors.white)),
-          ),
-          const SizedBox(width: 10),
-        ],
-      ),
+      appBar: const CustomAppBar(),
+
       body: Row(
         children: [
           if (_showList)

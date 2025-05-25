@@ -29,10 +29,23 @@ class _HomePageState extends State<HomePage> {
   bool mostrarDetallesPreguntas = false;
   List<Map<String, dynamic>>? _rankingCache;
 
+  bool _primeraCarga = true;
+
   @override
   void initState() {
     super.initState();
     _obtenerDatos();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_primeraCarga) {
+      _primeraCarga = false;
+    } else {
+      // ✅ Esto se ejecuta cuando regresamos a HomePage
+      recargarRanking(); // Limpia y vuelve a calcular el top 5
+    }
   }
 
   Future<void> _obtenerDatos() async {
@@ -75,6 +88,12 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       ejerciciosPorTema = conteo;
       totalEjercicios = total;
+    });
+  }
+
+  Future<void> recargarRanking() async {
+    setState(() {
+      _rankingCache = null;
     });
   }
 
@@ -152,124 +171,8 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       backgroundColor: fondoOscuro,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(80),
-        child: AppBar(
-          backgroundColor: azulPrimario,
-          foregroundColor: Colors.white,
+      appBar: const CustomAppBar(),
 
-          elevation: 6,
-          shadowColor: Colors.black.withAlpha(76),
-          title: Row(
-            children: [
-              const Text(
-                'Study Connect',
-                style: TextStyle(color: Colors.white, fontSize: 22),
-              ),
-              const SizedBox(width: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.asset(
-                  'assets/images/logo_ipn.png',
-                  width: 40,
-                  height: 40,
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ],
-          ),
-          actions:
-              isMobile
-                  ? [
-                    PopupMenuButton<String>(
-                      icon: const Icon(Icons.menu, color: Colors.white),
-                      onSelected: (value) {
-                        Navigator.pushNamed(context, '/$value');
-                      },
-                      itemBuilder:
-                          (context) => [
-                            const PopupMenuItem(
-                              value: '',
-                              child: ListTile(
-                                leading: Icon(Icons.home),
-                                title: Text('Inicio'),
-                              ),
-                            ),
-                            const PopupMenuItem(
-                              value: 'ranking',
-                              child: ListTile(
-                                leading: Icon(Icons.emoji_events),
-                                title: Text('Ranking'),
-                              ),
-                            ),
-                            const PopupMenuItem(
-                              value: 'content',
-                              child: ListTile(
-                                leading: Icon(Icons.book),
-                                title: Text('Contenidos'),
-                              ),
-                            ),
-                            const PopupMenuItem(
-                              value: 'user_profile',
-                              child: ListTile(
-                                leading: Icon(Icons.person_outline),
-                                title: Text('Perfil'),
-                              ),
-                            ),
-                          ],
-                    ),
-                  ]
-                  : [
-                    for (final item in [
-                      ['Inicio', '/'],
-                      ['Ranking', '/ranking'],
-                      ['Contenidos', '/content'],
-                    ])
-                      TextButton(
-                        onPressed: () => Navigator.pushNamed(context, item[1]),
-                        child: Text(
-                          item[0],
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      ),
-                    if (_auth.currentUser != null)
-                      NotificationIconWidget(), //  AQUI el widget
-                    TextButton(
-                      onPressed:
-                          () => Navigator.pushNamed(context, '/user_profile'),
-                      style: TextButton.styleFrom(
-                        side: const BorderSide(color: Colors.white),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                      ),
-                      child: Row(
-                        children: const [
-                          Text('Perfil', style: TextStyle(color: Colors.white)),
-                          SizedBox(width: 6),
-                          Icon(
-                            Icons.person_outline,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.asset(
-                        'assets/images/logo_escom.png',
-                        width: 40,
-                        height: 40,
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                  ],
-        ),
-      ),
       body: Column(
         children: [
           Expanded(
