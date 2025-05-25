@@ -1057,21 +1057,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton.icon(
-                  onPressed: _confirmarEliminarMaterial,
-                  icon: const Icon(Icons.delete, color: Colors.white),
-                  label:
-                      esMovil
-                          ? const SizedBox.shrink()
-                          : const Text("Eliminar"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.redAccent,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: esMovil ? 12 : 16,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton.icon(
                   onPressed: _agregarNuevaVersion,
                   icon: const Icon(
                     Icons.add_circle_outline,
@@ -1083,6 +1068,22 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                           : const Text("Nueva versión"),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.orangeAccent,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: esMovil ? 12 : 16,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: _confirmarEliminarMaterial,
+                  icon: const Icon(Icons.delete, color: Colors.white),
+                  label:
+                      esMovil
+                          ? const SizedBox.shrink()
+                          : const Text("Eliminar"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
                     padding: EdgeInsets.symmetric(
                       horizontal: esMovil ? 12 : 16,
                     ),

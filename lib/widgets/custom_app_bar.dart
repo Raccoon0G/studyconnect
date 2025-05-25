@@ -16,6 +16,39 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.excludeRoutes = const [],
   });
 
+  void _handleProfileTap(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      // Mostrar dialog si no ha iniciado sesión
+      showDialog(
+        context: context,
+        builder:
+            (_) => AlertDialog(
+              title: const Text('Inicio de sesión requerido'),
+              content: const Text(
+                'Para acceder a tu perfil necesitas iniciar sesión.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context); // Cierra el AlertDialog
+                    Navigator.pushNamed(context, '/login'); // Navega a login
+                  },
+                  child: const Text('Iniciar sesión'),
+                ),
+              ],
+            ),
+      );
+    } else {
+      // Si está iniciado sesión, navega al perfil
+      Navigator.pushNamed(context, '/user_profile');
+    }
+  }
+
   @override
   Size get preferredSize => Size.fromHeight(height);
 
@@ -78,8 +111,20 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
                     const NotificationIconWidget(),
                     PopupMenuButton<String>(
                       icon: const Icon(Icons.menu, color: Colors.white),
-                      onSelected:
-                          (value) => Navigator.pushNamed(context, '/$value'),
+                      onSelected: (value) {
+                        if (value == 'user_profile') {
+                          // <--- SI LA OPCIÓN ES 'user_profile'
+                          _handleProfileTap(
+                            context,
+                          ); // <--- Llama a la función reutilizable
+                        } else if (value.isEmpty) {
+                          // Para la ruta raíz '/'
+                          Navigator.pushNamed(context, '/');
+                        } else {
+                          // Para otras rutas
+                          Navigator.pushNamed(context, '/$value');
+                        }
+                      },
                       itemBuilder: (_) => _menuItems(context),
                     ),
                   ]
@@ -172,39 +217,9 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   Widget _perfilButton(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
     return TextButton(
-      onPressed: () {
-        if (user == null) {
-          // Mostrar dialog si no ha iniciado sesión
-          showDialog(
-            context: context,
-            builder:
-                (_) => AlertDialog(
-                  title: const Text('Inicio de sesión requerido'),
-                  content: const Text(
-                    'Para acceder a tu perfil necesitas iniciar sesión.',
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancelar'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        Navigator.pushNamed(context, '/login');
-                      },
-                      child: const Text('Iniciar sesión'),
-                    ),
-                  ],
-                ),
-          );
-        } else {
-          Navigator.pushNamed(context, '/user_profile');
-        }
-      },
+      onPressed:
+          () => _handleProfileTap(context), // <--- Llama a la nueva función
       style: TextButton.styleFrom(
         side: const BorderSide(color: Colors.white),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
