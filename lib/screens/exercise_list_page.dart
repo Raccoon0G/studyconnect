@@ -230,6 +230,15 @@ class ExerciseListPage extends StatelessWidget {
                                                           'El ejercicio fue eliminado correctamente.',
                                                     );
                                                   }
+
+                                                  if (result == 'eliminado') {
+                                                    await LocalNotificationService.show(
+                                                      title:
+                                                          'Ejercicio eliminado',
+                                                      body:
+                                                          'El ejercicio fue eliminado correctamente.',
+                                                    );
+                                                  }
                                                 },
                                               ),
                                             ],

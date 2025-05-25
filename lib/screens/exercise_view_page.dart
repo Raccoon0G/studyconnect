@@ -266,27 +266,38 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     final versionesRef = ejercicioDocRef.collection('Versiones');
     final versionesSnap = await versionesRef.get();
 
-    final confirmar = await showCustomDialog(
+    final confirmar = await showCustomDialog<bool>(
       context: context,
       titulo: 'Eliminar ejercicio completo',
       mensaje:
-          'Este ejercicio tiene ${versionesSnap.docs.length} versiones. ¿Deseas eliminar todo el ejercicio junto con sus versiones?',
+          'Este ejercicio tiene ${versionesSnap.docs.length} versiones.\n¿Deseas eliminar todo el ejercicio junto con sus versiones?',
       tipo: CustomDialogType.warning,
       botones: [
-        DialogButton(
-          texto: 'Cancelar',
-          onPressed: () async {
-            Navigator.of(context).pop(false);
-          },
-        ),
-        DialogButton(
-          texto: 'Eliminar todo',
-          onPressed: () async {
-            Navigator.of(context).pop(true);
-          },
-        ),
+        DialogButton(texto: 'Cancelar', value: false),
+        DialogButton(texto: 'Eliminar todo', value: true),
       ],
     );
+
+    // final confirmar = await showDialog<bool>(
+    //   context: context,
+    //   builder:
+    //       (context) => AlertDialog(
+    //         title: const Text('Eliminar ejercicio completo'),
+    //         content: Text(
+    //           '¿Deseas eliminar todo el ejercicio y sus versiones?',
+    //         ),
+    //         actions: [
+    //           TextButton(
+    //             onPressed: () => Navigator.of(context).pop(false),
+    //             child: const Text('Cancelar'),
+    //           ),
+    //           TextButton(
+    //             onPressed: () => Navigator.of(context).pop(true),
+    //             child: const Text('Eliminar todo'),
+    //           ),
+    //         ],
+    //       ),
+    // );
 
     if (confirmar == true) {
       try {
@@ -323,7 +334,15 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
           await c.reference.delete();
         }
 
+        // 🔽 Decrementar EjerSubidos
+        final autorId = ejercicioData?['AutorId'];
+        if (autorId != null && autorId.toString().isNotEmpty) {
+          final usuarioRef = firestore.collection('usuarios').doc(autorId);
+          await usuarioRef.update({'EjerSubidos': FieldValue.increment(-1)});
+        }
+
         if (mounted) {
+          print('✅ Eliminado correctamente. Cerrando vista...');
           showCustomSnackbar(
             context: context,
             message: '✅ Ejercicio y versiones eliminadas.',
@@ -362,6 +381,8 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
       'Der': 'Derivada y optimización',
       'TecInteg': 'Técnicas de integración',
     };
+    final autorId = ejercicioData?['AutorId'] ?? '';
+    final uidActual = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     return Container(
       margin: const EdgeInsets.only(right: 16),
@@ -505,8 +526,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
             child: const ExerciseCarousel(),
           ),
 
-          if (ejercicioData['AutorId'] ==
-              FirebaseAuth.instance.currentUser?.uid)
+          if (autorId == uidActual)
             Padding(
               padding: const EdgeInsets.only(top: 30.0),
               child: Row(
@@ -559,12 +579,10 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.redAccent,
                     ),
-                    onPressed:
-                        () => _confirmarEliminarEjercicio(
-                          context,
-                          tema,
-                          ejercicioId,
-                        ),
+                    onPressed: () {
+                      print('🗑 Se presionó el botón Eliminar');
+                      _confirmarEliminarEjercicio(context, tema, ejercicioId);
+                    },
                   ),
                 ],
               ),
