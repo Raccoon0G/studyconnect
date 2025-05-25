@@ -241,7 +241,16 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     }
   }
 
-  // Tu función existente (dentro de _ExerciseViewPageState)
+  String obtenerNombreTema(String key) {
+    const nombresTemas = {
+      'FnAlg': 'Funciones algebraicas y trascendentes',
+      'Lim': 'Límites de funciones y continuidad',
+      'Der': 'Derivada y optimización',
+      'TecInteg': 'Técnicas de integración',
+    };
+    return nombresTemas[key] ?? key;
+  }
+
   Future<void> _confirmarEliminarEjercicio(
     BuildContext context,
     String tema,
@@ -254,100 +263,80 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
         .collection(subcoleccion)
         .doc(ejercicioId);
 
-    // Obtenemos las versiones para verificar si hay más de una
     final versionesRef = ejercicioDocRef.collection('Versiones');
     final versionesSnap = await versionesRef.get();
 
-    // Si hay más de una versión, no permitimos la eliminación del ejercicio completo.
-    // Esto es una decisión de tu aplicación para proteger el historial.
-    if (versionesSnap.docs.length > 1) {
-      showCustomDialog(
-        context: context,
-        titulo: 'No se puede eliminar',
-        mensaje:
-            'Este ejercicio tiene más de una versión. Solo se pueden eliminar ejercicios con una única versión para proteger el historial.',
-        tipo: CustomDialogType.warning,
-      );
-      return;
-    }
-
-    // Confirmación al usuario antes de eliminar
-    final confirm = await showCustomDialog(
+    final confirmar = await showCustomDialog(
       context: context,
-      titulo: '¿Eliminar ejercicio?',
+      titulo: 'Eliminar ejercicio completo',
       mensaje:
-          'Esta acción no se puede deshacer. ¿Seguro que deseas eliminar este ejercicio? Esto eliminará la única versión existente y todos los comentarios asociados.',
+          'Este ejercicio tiene ${versionesSnap.docs.length} versiones. ¿Deseas eliminar todo el ejercicio junto con sus versiones?',
       tipo: CustomDialogType.warning,
       botones: [
         DialogButton(
           texto: 'Cancelar',
-          onPressed: () async => Navigator.of(context).pop(false),
+          onPressed: () async {
+            Navigator.of(context).pop(false);
+          },
         ),
         DialogButton(
-          texto: 'Eliminar',
-          onPressed: () async => Navigator.of(context).pop(true),
+          texto: 'Eliminar todo',
+          onPressed: () async {
+            Navigator.of(context).pop(true);
+          },
         ),
       ],
     );
 
-    // Si el usuario confirma la eliminación
-    if (confirm == true) {
+    if (confirmar == true) {
       try {
-        print('Intentando eliminar ejercicio: $ejercicioId en tema: $tema');
+        final firestore = FirebaseFirestore.instance;
 
-        // 1. Eliminar el documento de la subcolección 'Versiones' (si existe una única)
-        //    Esto es CRUCIAL, ya que Firestore no elimina subcolecciones automáticamente.
-        if (versionesSnap.docs.isNotEmpty) {
-          final singleVersionDocId = versionesSnap.docs.first.id;
-          print(
-            'Eliminando documento de la única versión: Versiones/$singleVersionDocId',
-          );
-          await versionesRef.doc(singleVersionDocId).delete();
-          print('Documento de la única versión eliminado.');
+        final ejercicioRef = firestore
+            .collection('calculo')
+            .doc(tema)
+            .collection('Ejer$tema')
+            .doc(ejercicioId);
+
+        final versionesRef = ejercicioRef.collection('Versiones');
+        final versionesSnap = await versionesRef.get();
+
+        // Eliminar cada versión
+        for (final version in versionesSnap.docs) {
+          await versionesRef.doc(version.id).delete();
+          print('Versión eliminada: ${version.id}');
         }
 
-        // 2. Eliminar el documento principal del ejercicio
-        print(
-          'Eliminando documento principal: calculo/$tema/$subcoleccion/$ejercicioId',
-        );
-        await ejercicioDocRef.delete();
-        print('Documento principal del ejercicio eliminado.');
+        // Eliminar el documento del ejercicio
+        await ejercicioRef.delete();
+        print('Ejercicio $ejercicioId eliminado.');
 
-        // 3. Eliminar comentarios asociados al ejercicio
-        print(
-          'Intentando eliminar comentarios asociados al ejercicio: $ejercicioId',
-        );
-        final commentsSnap =
-            await FirebaseFirestore.instance
+        // Eliminar comentarios relacionados
+        final comentariosSnap =
+            await firestore
                 .collection('comentarios_ejercicios')
                 .where('ejercicioId', isEqualTo: ejercicioId)
                 .where('tema', isEqualTo: tema)
                 .get();
 
-        for (final c in commentsSnap.docs) {
-          print('Eliminando comentario: ${c.id}');
+        for (final c in comentariosSnap.docs) {
           await c.reference.delete();
         }
-        print('Todos los comentarios asociados eliminados.');
 
-        // Mostrar feedback y regresar
-        if (context.mounted) {
+        if (mounted) {
           showCustomSnackbar(
             context: context,
-            message: '✅ Ejercicio eliminado exitosamente.',
+            message: '✅ Ejercicio y versiones eliminadas.',
             success: true,
           );
-          Navigator.of(context).pop(); // Regresa a la pantalla anterior
+
+          Navigator.pop(context, 'eliminado');
         }
       } catch (e) {
-        print(
-          'Error durante la eliminación del ejercicio: $e',
-        ); // MUY IMPORTANTE para depurar
         showCustomDialog(
           context: context,
           titulo: 'Error al eliminar',
-          mensaje:
-              'Ocurrió un error inesperado al intentar eliminar el ejercicio: ${e.toString()}',
+          mensaje: 'Ocurrió un error: ${e.toString()}',
           tipo: CustomDialogType.error,
         );
       }

@@ -136,8 +136,8 @@ class ExerciseListPage extends StatelessWidget {
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(20),
                                     hoverColor: Colors.black12,
-                                    onTap: () {
-                                      Navigator.pushNamed(
+                                    onTap: () async {
+                                      final result = await Navigator.pushNamed(
                                         context,
                                         '/exercise_view',
                                         arguments: {
@@ -145,6 +145,14 @@ class ExerciseListPage extends StatelessWidget {
                                           'ejercicioId': doc.id,
                                         },
                                       );
+
+                                      if (result == 'eliminado') {
+                                        await LocalNotificationService.show(
+                                          title: 'Ejercicio eliminado',
+                                          body:
+                                              'El ejercicio fue eliminado correctamente.',
+                                        );
+                                      }
                                     },
                                     child: Container(
                                       padding: const EdgeInsets.all(12),
@@ -203,15 +211,25 @@ class ExerciseListPage extends StatelessWidget {
                                               CustomActionButton(
                                                 text: 'Ver',
                                                 icon: Icons.arrow_forward_ios,
-                                                onPressed: () {
-                                                  Navigator.pushNamed(
-                                                    context,
-                                                    '/exercise_view',
-                                                    arguments: {
-                                                      'tema': temaKey,
-                                                      'ejercicioId': doc.id,
-                                                    },
-                                                  );
+                                                onPressed: () async {
+                                                  final result =
+                                                      await Navigator.pushNamed(
+                                                        context,
+                                                        '/exercise_view',
+                                                        arguments: {
+                                                          'tema': temaKey,
+                                                          'ejercicioId': doc.id,
+                                                        },
+                                                      );
+
+                                                  if (result == 'eliminado') {
+                                                    await LocalNotificationService.show(
+                                                      title:
+                                                          'Ejercicio eliminado',
+                                                      body:
+                                                          'El ejercicio fue eliminado correctamente.',
+                                                    );
+                                                  }
                                                 },
                                               ),
                                             ],
@@ -245,15 +263,24 @@ class ExerciseListPage extends StatelessWidget {
                                     final data =
                                         doc.data() as Map<String, dynamic>;
                                     return DataRow(
-                                      onSelectChanged: (_) {
-                                        Navigator.pushNamed(
-                                          context,
-                                          '/exercise_view',
-                                          arguments: {
-                                            'tema': temaKey,
-                                            'ejercicioId': doc.id,
-                                          },
-                                        );
+                                      onSelectChanged: (_) async {
+                                        final result =
+                                            await Navigator.pushNamed(
+                                              context,
+                                              '/exercise_view',
+                                              arguments: {
+                                                'tema': temaKey,
+                                                'ejercicioId': doc.id,
+                                              },
+                                            );
+
+                                        if (result == 'eliminado') {
+                                          await LocalNotificationService.show(
+                                            title: 'Ejercicio eliminado',
+                                            body:
+                                                'El ejercicio fue eliminado correctamente.',
+                                          );
+                                        }
                                       },
                                       cells: [
                                         // Ejercicio
@@ -324,15 +351,25 @@ class ExerciseListPage extends StatelessWidget {
                                               child: CustomActionButton(
                                                 text: 'Ver',
                                                 icon: Icons.arrow_forward_ios,
-                                                onPressed: () {
-                                                  Navigator.pushNamed(
-                                                    context,
-                                                    '/exercise_view',
-                                                    arguments: {
-                                                      'tema': temaKey,
-                                                      'ejercicioId': doc.id,
-                                                    },
-                                                  );
+                                                onPressed: () async {
+                                                  final result =
+                                                      await Navigator.pushNamed(
+                                                        context,
+                                                        '/exercise_view',
+                                                        arguments: {
+                                                          'tema': temaKey,
+                                                          'ejercicioId': doc.id,
+                                                        },
+                                                      );
+
+                                                  if (result == 'eliminado') {
+                                                    await LocalNotificationService.show(
+                                                      title:
+                                                          'Ejercicio eliminado',
+                                                      body:
+                                                          'El ejercicio fue eliminado correctamente.',
+                                                    );
+                                                  }
                                                 },
                                               ),
                                             ),

@@ -47,6 +47,24 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
   String? _versionActualId;
   bool _cargando = true;
 
+  Future<String> generarNuevoIdSeguro(
+    CollectionReference ejerciciosRef,
+    String tema,
+  ) async {
+    final docs = await ejerciciosRef.get();
+    final idsExistentes = docs.docs.map((d) => d.id).toSet();
+
+    int i = 1;
+    String nuevoId;
+
+    do {
+      nuevoId = '${tema}_${i.toString().padLeft(2, '0')}';
+      i++;
+    } while (idsExistentes.contains(nuevoId));
+
+    return nuevoId;
+  }
+
   Future<void> reproducirSonidoExito() async {
     final player = AudioPlayer();
     await player.play(AssetSource('audio/successed.mp3'));
@@ -216,9 +234,11 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
         );
       } else {
         // --- Crear nuevo ejercicio (original) ---
-        final snapshot = await ejerciciosRef.get();
-        final ejercicioId =
-            '${_temaSeleccionado}_${(snapshot.docs.length + 1).toString().padLeft(2, '0')}';
+        final ejercicioId = await generarNuevoIdSeguro(
+          ejerciciosRef,
+          _temaSeleccionado!,
+        );
+
         final versionId = 'Version_01';
 
         String autorNombre = '';
