@@ -147,90 +147,106 @@ class _MyExercisesPageState extends State<MyExercisesPage> {
             itemCount: ejercicios.length,
             itemBuilder: (context, index) {
               final ejer = ejercicios[index];
-              return Card(
-                margin: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
-                child: ListTile(
-                  title: Text(ejer['titulo']),
-                  subtitle: Text('Categoría: ${ejer['tema']}'),
-                  trailing: Wrap(
-                    spacing: 8,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit, color: Colors.blue),
-                        tooltip: 'Editar ejercicio',
-                        onPressed: () {
-                          Navigator.pushNamed(
-                            context,
-                            '/exercise_upload',
-                            arguments: {
-                              'tema': ejer['tema'],
-                              'ejercicioId': ejer['id'],
-                              'modo': 'editar',
-                            },
-                          );
-                        },
-                      ),
+              bool isHovered = false;
 
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed:
-                            () => _eliminarEjercicio(
-                              context,
-                              ejer['tema'],
-                              ejer['subcoleccion'],
-                              ejer['id'],
-                            ),
-                      ),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.add_circle_outline,
-                          color: Colors.green,
+              return StatefulBuilder(
+                builder: (context, setStateCard) {
+                  return MouseRegion(
+                    onEnter: (_) => setStateCard(() => isHovered = true),
+                    onExit: (_) => setStateCard(() => isHovered = false),
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.pushNamed(
+                          context,
+                          '/exercise_view',
+                          arguments: {
+                            'tema': ejer['tema'],
+                            'ejercicioId': ejer['id'],
+                          },
+                        );
+                      },
+                      child: Card(
+                        elevation: isHovered ? 8 : 2,
+                        shadowColor: Colors.black54,
+                        color: isHovered ? Colors.blue.shade50 : Colors.white,
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
                         ),
-                        tooltip: 'Nueva versión',
-                        onPressed: () {
-                          Navigator.pushNamed(
-                            context,
-                            '/exercise_upload',
-                            arguments: {
-                              'tema': ejer['tema'],
-                              'ejercicioId': ejer['id'],
-                              'modo': 'nueva_version',
+                        child: ListTile(
+                          title: Text(ejer['titulo']),
+                          subtitle: Text('Categoría: ${ejer['tema']}'),
+                          trailing: PopupMenuButton<String>(
+                            tooltip: 'Opciones',
+                            onSelected: (value) {
+                              if (value == 'editar') {
+                                Navigator.pushNamed(
+                                  context,
+                                  '/exercise_upload',
+                                  arguments: {
+                                    'tema': ejer['tema'],
+                                    'ejercicioId': ejer['id'],
+                                    'modo': 'editar',
+                                  },
+                                );
+                              } else if (value == 'nueva') {
+                                Navigator.pushNamed(
+                                  context,
+                                  '/exercise_upload',
+                                  arguments: {
+                                    'tema': ejer['tema'],
+                                    'ejercicioId': ejer['id'],
+                                    'modo': 'nueva_version',
+                                  },
+                                );
+                              } else if (value == 'eliminar') {
+                                _eliminarEjercicio(
+                                  context,
+                                  ejer['tema'],
+                                  ejer['subcoleccion'],
+                                  ejer['id'],
+                                );
+                              }
                             },
-                          );
-                        },
+                            itemBuilder:
+                                (context) => const [
+                                  PopupMenuItem(
+                                    value: 'editar',
+                                    child: ListTile(
+                                      leading: Icon(
+                                        Icons.edit,
+                                        color: Colors.blue,
+                                      ),
+                                      title: Text('Editar ejercicio'),
+                                    ),
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'nueva',
+                                    child: ListTile(
+                                      leading: Icon(
+                                        Icons.add_circle_outline,
+                                        color: Colors.green,
+                                      ),
+                                      title: Text('Nueva versión'),
+                                    ),
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'eliminar',
+                                    child: ListTile(
+                                      leading: Icon(
+                                        Icons.delete_forever,
+                                        color: Colors.red,
+                                      ),
+                                      title: Text('Eliminar'),
+                                    ),
+                                  ),
+                                ],
+                          ),
+                        ),
                       ),
-
-                      // PopupMenuButton<String>(
-                      //   icon: const Icon(
-                      //     Icons.layers,
-                      //     color: Colors.deepPurple,
-                      //   ),
-                      //   tooltip: 'Ver versiones',
-                      //   itemBuilder:
-                      //       (context) => [
-                      //         const PopupMenuItem(
-                      //           value: 'ver',
-                      //           child: Text('Ver versiones'),
-                      //         ),
-                      //       ],
-                      //   onSelected: (value) async {
-                      //     Navigator.pushNamed(
-                      //       context,
-                      //       '/exercise_versions',
-                      //       arguments: {
-                      //         'tema': ejer['tema'],
-                      //         'subcoleccion': ejer['subcoleccion'],
-                      //         'id': ejer['id'],
-                      //       },
-                      //     );
-                      //   },
-                      // ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               );
             },
           );

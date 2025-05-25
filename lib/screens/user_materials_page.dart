@@ -126,7 +126,6 @@ class _MyMaterialsPageState extends State<MyMaterialsPage> {
       backgroundColor: const Color(0xFF036799),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _futureMateriales,
-
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
@@ -149,64 +148,106 @@ class _MyMaterialsPageState extends State<MyMaterialsPage> {
             itemCount: materiales.length,
             itemBuilder: (context, index) {
               final mat = materiales[index];
-              return Card(
-                margin: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
-                child: ListTile(
-                  title: Text(mat['titulo']),
-                  subtitle: Text('Categoría: ${mat['tema']}'),
-                  trailing: Wrap(
-                    spacing: 8,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit, color: Colors.blue),
-                        tooltip: 'Editar material',
-                        onPressed: () {
-                          Navigator.pushNamed(
-                            context,
-                            '/upload_material',
-                            arguments: {
-                              'tema': mat['tema'],
-                              'materialId': mat['id'],
-                              'modo': 'editar',
-                            },
-                          );
-                        },
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed:
-                            () => _eliminarMaterial(
-                              context,
-                              mat['tema'],
-                              mat['subcoleccion'],
-                              mat['id'],
-                            ),
-                      ),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.add_circle_outline,
-                          color: Colors.green,
+              bool isHovered = false;
+
+              return StatefulBuilder(
+                builder: (context, setStateCard) {
+                  return MouseRegion(
+                    onEnter: (_) => setStateCard(() => isHovered = true),
+                    onExit: (_) => setStateCard(() => isHovered = false),
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.pushNamed(
+                          context,
+                          '/material_view',
+                          arguments: {
+                            'tema': mat['tema'],
+                            'materialId': mat['id'],
+                          },
+                        );
+                      },
+                      child: Card(
+                        elevation: isHovered ? 8 : 2,
+                        shadowColor: Colors.black54,
+                        color: isHovered ? Colors.blue.shade50 : Colors.white,
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
                         ),
-                        tooltip: 'Nueva versión',
-                        onPressed: () {
-                          Navigator.pushNamed(
-                            context,
-                            '/upload_material',
-                            arguments: {
-                              'tema': mat['tema'],
-                              'materialId': mat['id'],
-                              'modo': 'nueva_version',
+                        child: ListTile(
+                          title: Text(mat['titulo']),
+                          subtitle: Text('Categoría: ${mat['tema']}'),
+                          trailing: PopupMenuButton<String>(
+                            tooltip: 'Opciones',
+                            onSelected: (value) {
+                              if (value == 'editar') {
+                                Navigator.pushNamed(
+                                  context,
+                                  '/upload_material',
+                                  arguments: {
+                                    'tema': mat['tema'],
+                                    'materialId': mat['id'],
+                                    'editar': true, // ✅ CORRECTO
+                                  },
+                                );
+                              } else if (value == 'nueva') {
+                                Navigator.pushNamed(
+                                  context,
+                                  '/upload_material',
+                                  arguments: {
+                                    'tema': mat['tema'],
+                                    'materialId': mat['id'],
+                                    'nuevaVersion': true, // ✅ CORRECTO
+                                  },
+                                );
+                              } else if (value == 'eliminar') {
+                                _eliminarMaterial(
+                                  context,
+                                  mat['tema'],
+                                  mat['subcoleccion'],
+                                  mat['id'],
+                                );
+                              }
                             },
-                          );
-                        },
+                            itemBuilder:
+                                (context) => const [
+                                  PopupMenuItem(
+                                    value: 'editar',
+                                    child: ListTile(
+                                      leading: Icon(
+                                        Icons.edit,
+                                        color: Colors.blue,
+                                      ),
+                                      title: Text('Editar material'),
+                                    ),
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'nueva',
+                                    child: ListTile(
+                                      leading: Icon(
+                                        Icons.add_circle_outline,
+                                        color: Colors.green,
+                                      ),
+                                      title: Text('Nueva versión'),
+                                    ),
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'eliminar',
+                                    child: ListTile(
+                                      leading: Icon(
+                                        Icons.delete_forever,
+                                        color: Colors.red,
+                                      ),
+                                      title: Text('Eliminar'),
+                                    ),
+                                  ),
+                                ],
+                          ),
+                        ),
                       ),
-                      // Aquí puedes agregar un PopupMenuButton para ver versiones, igual que en ejercicios si lo necesitas
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               );
             },
           );
