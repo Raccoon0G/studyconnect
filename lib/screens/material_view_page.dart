@@ -17,6 +17,15 @@ import 'package:study_connect/widgets/widgets.dart';
 import 'package:study_connect/utils/utils.dart';
 import 'package:study_connect/config/secrets.dart';
 
+// ✅ Para la funcionalidad de compartir avanzada
+import 'package:path_provider/path_provider.dart'; // Necesario para guardar imagen en móvil
+import 'dart:io'; // Necesario para File
+import 'package:flutter/foundation.dart'
+    show kIsWeb; // Para diferenciar entre web y móvil
+
+// ✅ Para la integración con Facebook
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
+
 class MaterialViewPage extends StatefulWidget {
   final String tema;
   final String materialId;
@@ -62,6 +71,19 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     return autorId != null && currentUser != null && autorId == currentUser.uid;
   }
 
+  /// ✅ FUNCIÓN CORREGIDA
+  String obtenerNombreTema(String key) {
+    // Usamos el mapa que ya tienes definido en la columna izquierda.
+    // Lo ideal sería tener este mapa en un lugar central (utils) para no repetirlo.
+    final Map<String, String> nombresTemas = {
+      'FnAlg': 'Funciones algebraicas y trascendentes',
+      'Lim': 'Límites de funciones y continuidad',
+      'Der': 'Derivada y optimización',
+      'TecInteg': 'Técnicas de integración',
+    };
+    return nombresTemas[key] ?? key;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -87,13 +109,9 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
           await doc.reference.collection('Versiones').doc(versionId).get();
 
       setState(() {
-        materialData = {
-          ...?doc.data(),
-          'descripcion': version['Descripcion'],
-          'archivos': List<Map<String, dynamic>>.from(
-            version['archivos'] ?? [],
-          ),
-        };
+        materialData = doc.data();
+        pasos = List<String>.from(version['PasosEjer'] ?? []);
+        descripciones = List<String>.from(version['DescPasos'] ?? []);
       });
 
       final versionesSnap =
@@ -247,29 +265,24 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         docRef.collection('Versiones').orderBy('Fecha', descending: true).get(),
       ]);
 
-      final docSnap = results[0] as DocumentSnapshot;
+      final docSnap = results[0] as DocumentSnapshot<Map<String, dynamic>>;
       final comentariosSnap = results[1] as QuerySnapshot<Map<String, dynamic>>;
       final versionesSnap = results[2] as QuerySnapshot<Map<String, dynamic>>;
 
       if (!docSnap.exists) throw Exception('Material no encontrado');
 
-      // ✅ casteo seguro del mapa de datos del documento
-      final Map<String, dynamic> data =
-          (docSnap.data() as Map<String, dynamic>? ?? {});
-
       setState(() {
         // datos
-        materialData = data;
+        materialData = docSnap.data()!;
 
         // comentarios
         comentarios = comentariosSnap.docs.map((d) => d.data()).toList();
 
-        // versiones
+        // versiones ➡️ mapeamos id + fecha
         versiones =
-            versionesSnap.docs.map((d) {
-              final map = d.data();
-              return {'id': d.id, 'fecha': map['Fecha'] as Timestamp};
-            }).toList();
+            versionesSnap.docs
+                .map((d) => {'id': d.id, 'fecha': d['Fecha'] as Timestamp})
+                .toList();
 
         // valor inicial del dropdown
         versionSeleccionada =
@@ -277,6 +290,331 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
       });
     } catch (e) {
       _mostrarError('Error al cargar datos', e.toString());
+    }
+  }
+
+  /// ✅ Muestra menú modal con opciones para compartir
+  void _showMaterialSharingOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Wrap(
+            children: <Widget>[
+              const ListTile(
+                title: Text(
+                  'Compartir Material',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.facebook, color: Color(0xFF1877F2)),
+                title: const Text('Publicar en mi Página de Facebook'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _postMaterialDirectlyToFacebook();
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.image_outlined,
+                  color: Colors.blueAccent,
+                ),
+                title: const Text('Compartir con Imagen'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _shareMaterial(withImage: true);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.link_outlined, color: Colors.green),
+                title: const Text('Compartir solo Enlace'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _shareMaterial(withImage: false);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.copy_outlined, color: Colors.grey),
+                title: const Text('Copiar Enlace'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _copyMaterialLinkToClipboard();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// ✅ Función central para compartir
+  Future<void> _shareMaterial({bool withImage = false}) async {
+    if (materialData == null) {
+      showCustomSnackbar(
+        context: context,
+        message: 'Datos del material no cargados.',
+        success: false,
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final titulo = materialData!['titulo'] ?? 'Material interesante';
+      final nombreTema = obtenerNombreTema(
+        widget.tema,
+      ); // ✅ Usando la función corregida
+
+      final url =
+          'https://study-connect.app/material/${widget.tema}/${widget.materialId}';
+      final textoACompartir =
+          '📚 ¡Mira este material sobre "$nombreTema" en Study Connect!\n\n$titulo\n\nEncuéntralo aquí:\n$url';
+
+      XFile? imageFile;
+      if (withImage) {
+        final Uint8List? imageBytes = await _screenshotController.capture();
+        if (imageBytes != null) {
+          if (kIsWeb) {
+            imageFile = XFile.fromData(
+              imageBytes,
+              name: 'material.png',
+              mimeType: 'image/png',
+            );
+          } else {
+            final tempDir = await getTemporaryDirectory();
+            final file = await File(
+              '${tempDir.path}/material.png',
+            ).writeAsBytes(imageBytes);
+            imageFile = XFile(file.path);
+          }
+        }
+      }
+
+      if (!mounted) return;
+      Navigator.pop(context); // Cierra diálogo de carga
+
+      if (imageFile != null) {
+        await Share.shareXFiles(
+          [imageFile],
+          text: textoACompartir,
+          subject: 'Material de Study Connect: $titulo',
+        );
+      } else {
+        await Share.share(
+          textoACompartir,
+          subject: 'Material de Study Connect: $titulo',
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      showCustomSnackbar(
+        context: context,
+        message: 'Error al intentar compartir: $e',
+        success: false,
+      );
+    }
+  }
+
+  /// ✅ Función para copiar enlace
+  void _copyMaterialLinkToClipboard() {
+    if (materialData == null) return;
+    final url =
+        'https://study-connect.app/material/${widget.tema}/${widget.materialId}';
+    Clipboard.setData(ClipboardData(text: url)).then((_) {
+      showCustomSnackbar(
+        context: context,
+        message: '✅ Enlace del material copiado',
+        success: true,
+      );
+    });
+  }
+
+  /// ✅ Función para conectar con Facebook
+  Future<void> _connectToFacebook() async {
+    if (!mounted) return;
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser == null) {
+      showCustomSnackbar(
+        context: context,
+        message: 'Debes iniciar sesión primero.',
+        success: false,
+      );
+      return;
+    }
+
+    final LoginResult result = await FacebookAuth.instance.login(
+      permissions: [
+        'public_profile',
+        'email',
+        'pages_manage_posts',
+        'pages_show_list',
+      ],
+    );
+
+    if (result.status == LoginStatus.success) {
+      final AccessToken accessToken = result.accessToken!;
+      await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(firebaseUser.uid)
+          .update({'facebookAccessToken': accessToken.tokenString});
+      if (!mounted) return;
+      showCustomSnackbar(
+        context: context,
+        message: '¡Cuenta de Facebook conectada!',
+        success: true,
+      );
+    } else {
+      if (!mounted) return;
+      showCustomSnackbar(
+        context: context,
+        message: 'No se pudo conectar con Facebook.',
+        success: false,
+      );
+    }
+  }
+
+  /// ✅ Función para publicar directamente en Facebook
+  Future<void> _postMaterialDirectlyToFacebook() async {
+    if (!mounted) return;
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser == null) {
+      showCustomSnackbar(
+        context: context,
+        message: 'Debes iniciar sesión primero.',
+        success: false,
+      );
+      return;
+    }
+    if (materialData == null) {
+      showCustomSnackbar(
+        context: context,
+        message: 'Datos del material no cargados.',
+        success: false,
+      );
+      return;
+    }
+
+    final userDoc =
+        await FirebaseFirestore.instance
+            .collection('usuarios')
+            .doc(firebaseUser.uid)
+            .get();
+    final String? userToken = userDoc.data()?['facebookAccessToken'];
+
+    if (userToken == null) {
+      if (!mounted) return;
+      // ✅ Corregido: sin 'duration' ni 'action'
+      showCustomSnackbar(
+        context: context,
+        message:
+            'Conecta tu cuenta de Facebook en tu perfil para publicar directamente.',
+        success: false,
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      if (kIsWeb) {
+        if (!mounted) return;
+        Navigator.pop(context);
+        showCustomSnackbar(
+          context: context,
+          message: 'La publicación directa no está soportada en web por ahora.',
+          success: false,
+        );
+        return;
+      }
+
+      final Uint8List? imageBytes = await _screenshotController.capture();
+      if (imageBytes == null) {
+        if (!mounted) return;
+        Navigator.pop(context);
+        showCustomSnackbar(
+          context: context,
+          message: 'No se pudo capturar la imagen.',
+          success: false,
+        );
+        return;
+      }
+
+      final String pageId =
+          "ID_DE_LA_PAGINA_FACEBOOK_DEL_USUARIO"; // Reemplazar
+      if (pageId == "ID_DE_LA_PAGINA_FACEBOOK_DEL_USUARIO") {
+        if (!mounted) return;
+        Navigator.pop(context);
+        showCustomSnackbar(
+          context: context,
+          message: "Configuración de Page ID pendiente.",
+          success: false,
+        );
+        return;
+      }
+
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('https://graph.facebook.com/$pageId/photos'),
+      );
+      final tituloMaterial = materialData!['titulo'] ?? 'Material de Estudio';
+      final texto =
+          '¡Nuevo material en Study Connect! "$tituloMaterial" sobre ${obtenerNombreTema(widget.tema)}. #StudyConnectMaterial'; // ✅ Usando la función corregida
+
+      request.fields['caption'] = texto;
+      request.fields['access_token'] = userToken;
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'source',
+          imageBytes,
+          filename: 'material_screenshot.png',
+        ),
+      );
+
+      final response = await request.send();
+
+      if (!mounted) return;
+      Navigator.pop(context);
+
+      if (response.statusCode == 200) {
+        showCustomSnackbar(
+          context: context,
+          message: '¡Material publicado en Facebook con éxito!',
+          success: true,
+        );
+      } else {
+        final responseData = await response.stream.bytesToString();
+        print('Error al publicar: ${response.statusCode}, $responseData');
+        showCustomSnackbar(
+          context: context,
+          message: 'Error al publicar en Facebook.',
+          success: false,
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      print('Error excepcional al publicar: $e');
+      showCustomSnackbar(
+        context: context,
+        message: 'Error inesperado al publicar.',
+        success: false,
+      );
     }
   }
 
@@ -584,15 +922,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
           ),
           const SizedBox(height: 8),
           InfoWithIcon(
-            icon: Icons.label_important,
-            text: 'Subtema: ${ejercicioData['subtema']}',
-            alignment: MainAxisAlignment.center,
-            iconAlignment: Alignment.center,
-            textColor: Colors.white,
-            textSize: 17,
-          ),
-          const SizedBox(height: 8),
-          InfoWithIcon(
             icon: Icons.assignment,
             text: 'Ejercicio: $materialId',
             alignment: MainAxisAlignment.center,
@@ -700,138 +1029,40 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
           const SizedBox(height: 38),
 
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 180, minHeight: 120),
+            constraints: const BoxConstraints(maxHeight: 260, minHeight: 120),
             child: const ExerciseCarousel(),
           ),
           const SizedBox(height: 16),
           if (esAutor)
-            Padding(
-              padding: const EdgeInsets.only(top: 30.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.edit, color: Colors.white),
-                        label: const Text("Editar"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blueAccent,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                        ),
-                        onPressed: _editarMaterial,
-                      ),
-                    ),
+            Row(
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _editarMaterial,
+                  icon: Icon(Icons.edit, color: Colors.white),
+                  label: Text("Editar"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
                   ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: ElevatedButton.icon(
-                        icon: const Icon(
-                          Icons.add_circle_outline,
-                          color: Colors.white,
-                        ),
-                        label: const Text("Nueva versión"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orangeAccent,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                        ),
-                        onPressed: _agregarNuevaVersion,
-                      ),
-                    ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: _confirmarEliminarMaterial,
+                  icon: Icon(Icons.delete, color: Colors.white),
+                  label: Text("Eliminar"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
                   ),
-                  PopupMenuButton<String>(
-                    tooltip: 'Opciones de eliminación',
-                    onSelected: (value) {
-                      if (value == 'version') {
-                        _eliminarSoloVersionSeleccionada(context);
-                      } else if (value == 'material') {
-                        _confirmarEliminarMaterial(context);
-                      }
-                    },
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    color: Colors.white,
-                    itemBuilder: (_) {
-                      if (versiones.length == 1) {
-                        return [
-                          const PopupMenuItem(
-                            value: 'material',
-                            child: ListTile(
-                              leading: Icon(
-                                Icons.delete_forever,
-                                color: Colors.red,
-                              ),
-                              title: Text('Eliminar material completo'),
-                            ),
-                          ),
-                        ];
-                      } else {
-                        return [
-                          const PopupMenuItem(
-                            value: 'version',
-                            child: ListTile(
-                              leading: Icon(
-                                Icons.delete_outline,
-                                color: Colors.redAccent,
-                              ),
-                              title: Text('Eliminar versión actual'),
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'material',
-                            child: ListTile(
-                              leading: Icon(
-                                Icons.delete_forever,
-                                color: Colors.red,
-                              ),
-                              title: Text('Eliminar material completo'),
-                            ),
-                          ),
-                        ];
-                      }
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent,
-                        borderRadius: BorderRadius.circular(30),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
-                            blurRadius: 6,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 7,
-                        horizontal: 10,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.delete, color: Colors.white),
-                          SizedBox(width: 8),
-                          Text(
-                            "Eliminar",
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ],
-                      ),
-                    ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: _agregarNuevaVersion,
+                  icon: Icon(Icons.add_circle_outline, color: Colors.white),
+                  label: Text("Nueva versión"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orangeAccent,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
         ],
       ),
@@ -850,33 +1081,19 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     );
   }
 
-  void _confirmarEliminarMaterial(BuildContext context) async {
-    final ref = FirebaseFirestore.instance
-        .collection('materiales')
-        .doc(widget.tema)
-        .collection('Mat${widget.tema}')
-        .doc(widget.materialId);
-
-    final versionesSnap =
-        await ref
-            .collection('Versiones')
-            .orderBy('Fecha', descending: true)
-            .get();
-
-    final confirmar = await showCustomDialog<bool>(
+  void _confirmarEliminarMaterial() async {
+    final confirm = await showCustomDialog<bool>(
       context: context,
       titulo: '¿Eliminar material?',
       mensaje:
-          versionesSnap.docs.length == 1
-              ? 'Este material solo tiene una versión. ¿Deseas eliminarlo por completo?'
-              : '¿Estás seguro de eliminar el material completo y todas sus versiones?',
+          'Esta acción eliminará permanentemente este material y todas sus versiones. ¿Estás seguro?',
       tipo: CustomDialogType.warning,
       botones: [
         DialogButton<bool>(texto: 'Cancelar', value: false),
         DialogButton<bool>(texto: 'Eliminar', value: true),
       ],
     );
-    if (confirmar == true) {
+    if (confirm == true) {
       await _eliminarMaterial();
     }
   }
@@ -916,61 +1133,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     }
   }
 
-  Future<void> _eliminarSoloVersionSeleccionada(BuildContext context) async {
-    if (versionSeleccionada == null) return;
-
-    final confirmar = await showCustomDialog<bool>(
-      context: context,
-      titulo: 'Eliminar versión',
-      mensaje: '¿Seguro que deseas eliminar la versión "$versionSeleccionada"?',
-      tipo: CustomDialogType.warning,
-      botones: [
-        DialogButton(texto: 'Cancelar', value: false),
-        DialogButton(texto: 'Eliminar versión', value: true),
-      ],
-    );
-
-    if (confirmar == true) {
-      final ref = FirebaseFirestore.instance
-          .collection('materiales')
-          .doc(widget.tema)
-          .collection('Mat${widget.tema}')
-          .doc(widget.materialId);
-
-      // Eliminar la versión
-      await ref.collection('Versiones').doc(versionSeleccionada).delete();
-
-      // Actualizar si era la versión actual
-      final doc = await ref.get();
-      if (doc.exists && doc.data()?['versionActual'] == versionSeleccionada) {
-        final nuevasVersiones =
-            await ref
-                .collection('Versiones')
-                .orderBy('Fecha', descending: true)
-                .get();
-
-        if (nuevasVersiones.docs.isNotEmpty) {
-          final nueva = nuevasVersiones.docs.first;
-          await ref.update({
-            'versionActual': nueva.id,
-            'FechMod': nueva['Fecha'],
-          });
-          setState(() {
-            versionSeleccionada = nueva.id;
-          });
-        }
-      }
-
-      showCustomSnackbar(
-        context: context,
-        message: '✅ Versión eliminada correctamente.',
-        success: true,
-      );
-
-      await _cargarTodo();
-    }
-  }
-
   void _agregarNuevaVersion() {
     Navigator.pushNamed(
       context,
@@ -990,11 +1152,10 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     required double screenWidth,
   }) {
     final titulo = materialData['titulo'] ?? '';
-
     final descripcion = materialData['descripcion'] ?? '';
-
     final List archivos = materialData['archivos'] ?? [];
-
+    final Map<String, List<Map<String, dynamic>>> agrupados =
+        agruparArchivosPorTipo(archivos);
     final Map<String, IconData> iconosTipo = {
       'pdf': Icons.picture_as_pdf,
       'image': Icons.image,
@@ -1003,7 +1164,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
       'link': Icons.link,
       'nota': Icons.notes,
     };
-
     final Map<String, String> titulosTipo = {
       'pdf': '📄 Documentos PDF',
       'image': '🖼️ Imágenes',
@@ -1012,8 +1172,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
       'link': '🔗 Enlaces',
       'nota': '📝 Notas',
     };
-
-    final agrupados = agruparArchivosPorTipo(archivos);
 
     final contenido = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1025,7 +1183,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-
         const SizedBox(height: 10),
         Card(
           color: const Color(0xFFF6F3FA),
@@ -1036,7 +1193,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
               child: CustomLatexText(
                 contenido: titulo,
                 fontSize: screenWidth < 600 ? 18 : 22,
-
                 color: Colors.black,
                 prepararLatex: prepararLaTeX,
               ),
@@ -1047,7 +1203,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         const Divider(color: Colors.black87),
         const Text('Descripción del material:', style: TextStyle(fontSize: 18)),
         const SizedBox(height: 10),
-
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(12),
@@ -1076,46 +1231,33 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
             ),
             children:
-                lista.map<Widget>((archivo) {
-                  return _buildVistaArchivo(archivo, screenWidth);
-                }).toList(),
+                lista
+                    .map<Widget>(
+                      (archivo) => _buildVistaArchivo(archivo, screenWidth),
+                    )
+                    .toList(),
           );
         }).toList(),
         const SizedBox(height: 20),
         CustomExpansionTileComentarios(
           comentarios: comentarios,
-          onEliminarComentario: _eliminarComentario,
+          onEliminarComentario:
+              (c) => _eliminarComentario(
+                c,
+              ), // Asegúrate de que esta llamada sea correcta
         ),
         const SizedBox(height: 40),
-        // CustomFeedbackCard(
-        //   accion: 'Calificar',
-        //   numeroComentarios: comentarios.length,
-        //   onCalificar: _mostrarDialogoCalificacion,
-        //   onCompartir: _compartirCapturaConFacebookWeb,
-        // ),
+
+        // ================== ✅ ESTA ES LA PARTE CORREGIDA ==================
         CustomFeedbackCard(
           accion: 'Calificar',
           numeroComentarios: comentarios.length,
           onCalificar: _mostrarDialogoCalificacion,
           onCompartir:
-              screenWidth < 800
-                  ? () {
-                    final titulo = materialData?['titulo'] ?? 'Material';
-                    _compartirCapturaYSharePlus(
-                      titulo,
-                      widget.tema,
-                      widget.materialId,
-                    );
-                  }
-                  : () {
-                    final titulo = materialData?['titulo'] ?? 'Material';
-                    _compartirCapturaYFacebook(
-                      titulo,
-                      widget.tema,
-                      widget.materialId,
-                    );
-                  },
+              _showMaterialSharingOptions, // Se llama a la función principal del BottomSheet
         ),
+
+        // ===================================================================
       ],
     );
 
@@ -1268,7 +1410,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                             if (controller.text.trim().isEmpty ||
                                 getRating() == 0) {
                               await showCustomDialog(
-                                context: dialogContext, // ✅ se mantiene bien
+                                context: dialogContext, // contexto del diálogo
                                 titulo: 'Campos incompletos',
                                 mensaje:
                                     'Por favor escribe un comentario y selecciona una calificación.',
@@ -1277,20 +1419,18 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                                   DialogButton(
                                     texto: 'Aceptar',
                                     onPressed: () async {
-                                      Navigator.of(
-                                        dialogContext,
-                                      ).pop(); // ✅ CORRECTO
+                                      Navigator.of(context).pop();
                                     },
                                   ),
                                   DialogButton(
                                     texto: 'Intentar de nuevo',
                                     onPressed: () async {
-                                      Navigator.of(dialogContext).pop();
+                                      Navigator.of(context).pop();
+                                      _mostrarDialogoCalificacion();
                                     },
                                   ),
                                 ],
                               );
-
                               return; // 2) aquí terminamos el onPressed sin seguir adelante
                             }
 
@@ -1303,16 +1443,14 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                             );
                             setEnviando(false);
 
-                            Future.delayed(
-                              const Duration(milliseconds: 100),
-                              () {
-                                Navigator.of(dialogContext).pop();
-                                showCustomSnackbar(
-                                  context: context,
-                                  message: '✅ Comentario enviado exitosamente.',
-                                  success: true,
-                                );
-                              },
+                            // 4) Cerramos el diálogo de calificación:
+                            Navigator.of(dialogContext).pop();
+
+                            // 5) Y finalmente mostramos el snackbar de éxito:
+                            showCustomSnackbar(
+                              context: context,
+                              message: '✅ Comentario enviado exitosamente.',
+                              success: true,
                             );
                           },
                   icon:
@@ -1441,75 +1579,75 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     );
   }
 
-  Future<void> _compartirCapturaYFacebook(
-    String titulo,
-    String tema,
-    String ejercicioId,
-  ) async {
-    final Uint8List? image = await _screenshotController.capture();
-    if (image != null) {
-      // Descargar la imagen localmente
-      final blob = html.Blob([image]);
-      final urlBlob = html.Url.createObjectUrlFromBlob(blob);
+  // Future<void> _compartirCapturaYFacebook(
+  //   String titulo,
+  //   String tema,
+  //   String ejercicioId,
+  // ) async {
+  //   final Uint8List? image = await _screenshotController.capture();
+  //   if (image != null) {
+  //     // Descargar la imagen localmente
+  //     final blob = html.Blob([image]);
+  //     final urlBlob = html.Url.createObjectUrlFromBlob(blob);
 
-      final link =
-          html.AnchorElement(href: urlBlob)
-            ..setAttribute('download', 'captura_material.png')
-            ..click();
+  //     final link =
+  //         html.AnchorElement(href: urlBlob)
+  //           ..setAttribute('download', 'captura_material.png')
+  //           ..click();
 
-      html.Url.revokeObjectUrl(urlBlob);
+  //     html.Url.revokeObjectUrl(urlBlob);
 
-      // Después, compartir en Facebook
-      final urlEjercicio = Uri.encodeComponent(
-        'https://tuapp.com/$tema/$ejercicioId',
-      ); // CAMBIA aquí tu dominio real
-      final quote = Uri.encodeComponent('¡Revisa este material: $titulo!');
-      final facebookUrl =
-          'https://www.facebook.com/sharer/sharer.php?u=$urlEjercicio&quote=$quote';
+  //     // Después, compartir en Facebook
+  //     final urlEjercicio = Uri.encodeComponent(
+  //       'https://tuapp.com/$tema/$ejercicioId',
+  //     ); // CAMBIA aquí tu dominio real
+  //     final quote = Uri.encodeComponent('¡Revisa este material: $titulo!');
+  //     final facebookUrl =
+  //         'https://www.facebook.com/sharer/sharer.php?u=$urlEjercicio&quote=$quote';
 
-      html.window.open(facebookUrl, '_blank');
-    }
-  }
+  //     html.window.open(facebookUrl, '_blank');
+  //   }
+  // }
 
-  Future<void> _compartirCapturaYSharePlus(
-    String titulo,
-    String tema,
-    String ejercicioId,
-  ) async {
-    final Uint8List? image = await _screenshotController.capture();
-    if (image != null) {
-      final blob = html.Blob([image]);
-      final urlBlob = html.Url.createObjectUrlFromBlob(blob);
+  // Future<void> _compartirCapturaYSharePlus(
+  //   String titulo,
+  //   String tema,
+  //   String ejercicioId,
+  // ) async {
+  //   final Uint8List? image = await _screenshotController.capture();
+  //   if (image != null) {
+  //     final blob = html.Blob([image]);
+  //     final urlBlob = html.Url.createObjectUrlFromBlob(blob);
 
-      // Descargar la imagen
-      final link =
-          html.AnchorElement(href: urlBlob)
-            ..setAttribute('download', 'captura_material.png')
-            ..click();
+  //     // Descargar la imagen
+  //     final link =
+  //         html.AnchorElement(href: urlBlob)
+  //           ..setAttribute('download', 'captura_material.png')
+  //           ..click();
 
-      html.Url.revokeObjectUrl(urlBlob);
-    }
+  //     html.Url.revokeObjectUrl(urlBlob);
+  //   }
 
-    final urlEjercicio =
-        'https://tuapp.com/$tema/$ejercicioId'; // CAMBIA por tu dominio real
-    await Share.share('📘 $titulo\n$urlEjercicio');
-  }
+  //   final urlEjercicio =
+  //       'https://tuapp.com/$tema/$ejercicioId'; // CAMBIA por tu dominio real
+  //   await Share.share('📘 $titulo\n$urlEjercicio');
+  // }
 
-  void compartirEnFacebook(String titulo, String tema, String ejercicioId) {
-    final url = Uri.encodeComponent(
-      'https://tuapp.com/$tema/$ejercicioId',
-    ); // <-- CAMBIA por tu dominio real
-    final quote = Uri.encodeComponent('¡Revisa este material: $titulo!');
-    final facebookUrl =
-        'https://www.facebook.com/sharer/sharer.php?u=$url&quote=$quote';
-    html.window.open(facebookUrl, '_blank');
-  }
+  // void compartirEnFacebook(String titulo, String tema, String ejercicioId) {
+  //   final url = Uri.encodeComponent(
+  //     'https://tuapp.com/$tema/$ejercicioId',
+  //   ); // <-- CAMBIA por tu dominio real
+  //   final quote = Uri.encodeComponent('¡Revisa este material: $titulo!');
+  //   final facebookUrl =
+  //       'https://www.facebook.com/sharer/sharer.php?u=$url&quote=$quote';
+  //   html.window.open(facebookUrl, '_blank');
+  // }
 
-  void compartirGenerico(String titulo, String tema, String ejercicioId) {
-    final url =
-        'https://tuapp.com/$tema/$ejercicioId'; // <-- CAMBIA por tu dominio real
-    Share.share('$titulo\n$url');
-  }
+  // void compartirGenerico(String titulo, String tema, String ejercicioId) {
+  //   final url =
+  //       'https://tuapp.com/$tema/$ejercicioId'; // <-- CAMBIA por tu dominio real
+  //   Share.share('$titulo\n$url');
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -1531,8 +1669,49 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
-      appBar: const CustomAppBar(showBack: true),
-
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF048DD2),
+        title: const Text('Study Connect'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pushNamed(context, '/'),
+            child: const Tooltip(
+              message: 'Ir a Inicio',
+              child: Text('Inicio', style: TextStyle(color: Colors.white)),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pushNamed(context, '/ranking'),
+            child: const Tooltip(
+              message: 'Ir a Ranking',
+              child: Text('Ranking', style: TextStyle(color: Colors.white)),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pushNamed(context, '/content'),
+            child: const Tooltip(
+              message: 'Ir a Contenido',
+              child: Text('Contenido', style: TextStyle(color: Colors.white)),
+            ),
+          ),
+          const NotificationIconWidget(),
+          TextButton(
+            onPressed: () => Navigator.pushNamed(context, '/user_profile'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Tooltip(
+                message: 'Ir a perfil',
+                child: Text('Perfil', style: TextStyle(color: Colors.white)),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+        ],
+      ),
       body: Screenshot(
         controller: _screenshotController,
         child: Center(
