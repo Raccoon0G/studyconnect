@@ -554,6 +554,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     required String? versionSeleccionada,
     required List<Map<String, dynamic>> comentarios,
     required void Function(String) onVersionChanged,
+    required bool esMovil,
   }) {
     final autor = ejercicioData['Autor'] ?? 'Anónimo';
     final fecha = (ejercicioData['FechMod'] as Timestamp?)?.toDate();
@@ -709,181 +710,210 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
             constraints: const BoxConstraints(maxHeight: 220, minHeight: 120),
             child: const ExerciseCarousel(),
           ),
-
+          //TODO Arreglar botones
           if (autorId == uidActual)
             Padding(
               padding: const EdgeInsets.only(top: 30.0),
               child: Row(
+                // Usamos Row y centramos los botones
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: ElevatedButton.icon(
-                        icon: Icon(Icons.edit, color: Colors.white),
-                        label: Text("Editar"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blueAccent,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
+                  // --- Botón Editar ---
+                  Flexible(
+                    // Flexible para que los botones se adapten al espacio
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.edit, color: Colors.white),
+                      label:
+                          esMovil
+                              ? const SizedBox.shrink()
+                              : const Text("Editar"), // Oculta texto en móvil
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueAccent,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: esMovil ? 12 : 16,
+                        ), // Padding adaptativo
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
                         ),
-                        onPressed: () {
-                          if (versionSeleccionada == null) {
-                            showCustomDialog(
-                              context: context,
-                              titulo: 'Versión no cargada',
-                              mensaje:
-                                  'Espera a que se carguen los datos antes de editar.',
-                              tipo: CustomDialogType.warning,
-                            );
-                            return;
-                          }
-                          Navigator.pushNamed(
-                            context,
-                            '/exercise_upload',
-                            arguments: {
-                              'tema': tema,
-                              'ejercicioId': ejercicioId,
-                              'modo': 'editar',
-                              'versionId': versionSeleccionada,
-                            },
-                          );
-                        },
                       ),
+                      onPressed: () {
+                        // 'this.context' se refiere al context de _ExerciseViewPageState
+                        if (this.versionSeleccionada == null) {
+                          showCustomDialog(
+                            context:
+                                this.context, // Usa el context de la clase _ExerciseViewPageState
+                            titulo: 'Versión no cargada',
+                            mensaje:
+                                'Espera a que se carguen los datos antes de editar.',
+                            tipo: CustomDialogType.warning,
+                          );
+                          return;
+                        }
+                        Navigator.pushNamed(
+                          this.context,
+                          '/exercise_upload',
+                          arguments: {
+                            'tema': tema, // 'tema' es parámetro del método
+                            'ejercicioId':
+                                ejercicioId, // 'ejercicioId' es parámetro
+                            'modo': 'editar',
+                            'versionId': this.versionSeleccionada,
+                          },
+                        );
+                      },
                     ),
                   ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: ElevatedButton.icon(
-                        icon: Icon(
-                          Icons.add_circle_outline,
+
+                  SizedBox(
+                    width: esMovil ? 8 : 12,
+                  ), // Espaciador más pequeño en móvil
+                  // --- Botón Nueva Versión ---
+                  Flexible(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(
+                        Icons.add_circle_outline,
+                        color: Colors.white,
+                      ),
+                      label:
+                          esMovil
+                              ? const SizedBox.shrink()
+                              : const Text(
+                                "Nueva V.",
+                              ), // Texto abreviado si es necesario
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orangeAccent,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: esMovil ? 12 : 16,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                      onPressed: () {
+                        Navigator.pushNamed(
+                          this.context,
+                          '/exercise_upload',
+                          arguments: {
+                            'tema': tema,
+                            'ejercicioId': ejercicioId,
+                            'modo': 'nueva_version',
+                          },
+                        );
+                      },
+                    ),
+                  ),
+
+                  SizedBox(width: esMovil ? 8 : 12),
+
+                  // --- Botón Eliminar (con PopupMenu) ---
+                  Flexible(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.delete, color: Colors.white),
+                      label:
+                          esMovil
+                              ? const SizedBox.shrink()
+                              : const Text("Eliminar"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: esMovil ? 12 : 16,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                      onPressed: () {
+                        final RenderBox button =
+                            this.context.findRenderObject() as RenderBox;
+                        final Offset offset = button.localToGlobal(Offset.zero);
+                        // Ajusta la posición del menú si es necesario, especialmente en móvil
+                        final RelativeRect position = RelativeRect.fromLTRB(
+                          esMovil
+                              ? offset.dx - 80
+                              : offset.dx, // Desplaza a la izquierda en móvil
+                          offset.dy + button.size.height,
+                          esMovil
+                              ? offset.dx + button.size.width - 80
+                              : offset.dx + button.size.width,
+                          offset.dy + button.size.height * 2,
+                        );
+
+                        showMenu<String>(
+                          context: this.context,
+                          position: position,
                           color: Colors.white,
-                        ),
-                        label: Text("Nueva versión"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orangeAccent,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                        ),
-                        onPressed: () {
-                          Navigator.pushNamed(
-                            context,
-                            '/exercise_upload',
-                            arguments: {
-                              'tema': tema,
-                              'ejercicioId': ejercicioId,
-                              'modo': 'nueva_version',
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: PopupMenuButton<String>(
-                        tooltip: 'Opciones de eliminación',
-                        onSelected: (value) {
+                          items:
+                              versiones.length <= 1
+                                  ? [
+                                    const PopupMenuItem<String>(
+                                      value: 'ejercicio',
+                                      child: ListTile(
+                                        leading: Icon(
+                                          Icons.delete_forever,
+                                          color: Colors.red,
+                                        ),
+                                        title: Text(
+                                          'Eliminar ejercicio completo',
+                                        ),
+                                      ),
+                                    ),
+                                  ]
+                                  : [
+                                    const PopupMenuItem<String>(
+                                      value: 'version',
+                                      child: ListTile(
+                                        leading: Icon(
+                                          Icons.delete_outline,
+                                          color: Colors.redAccent,
+                                        ),
+                                        title: Text('Eliminar versión actual'),
+                                      ),
+                                    ),
+                                    const PopupMenuItem<String>(
+                                      value: 'ejercicio',
+                                      child: ListTile(
+                                        leading: Icon(
+                                          Icons.delete_forever,
+                                          color: Colors.red,
+                                        ),
+                                        title: Text(
+                                          'Eliminar ejercicio completo',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                        ).then((value) {
+                          if (value == null) return;
                           if (value == 'version') {
                             _eliminarSoloVersionSeleccionada(
-                              context,
-                              widget.tema,
-                              widget.ejercicioId,
+                              this.context,
+                              tema,
+                              ejercicioId,
                             );
                           } else if (value == 'ejercicio') {
                             _confirmarEliminarEjercicio(
-                              context,
-                              widget.tema,
-                              widget.ejercicioId,
+                              this.context,
+                              tema,
+                              ejercicioId,
                             );
                           }
-                        },
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        color: Colors.white,
-                        itemBuilder: (_) {
-                          if (versiones.length == 1) {
-                            // Solo mostrar opción de eliminar ejercicio completo
-                            return [
-                              const PopupMenuItem(
-                                value: 'ejercicio',
-                                child: ListTile(
-                                  leading: Icon(
-                                    Icons.delete_forever,
-                                    color: Colors.red,
-                                  ),
-                                  title: Text('Eliminar ejercicio completo'),
-                                ),
-                              ),
-                            ];
-                          } else {
-                            return [
-                              const PopupMenuItem(
-                                value: 'version',
-                                child: ListTile(
-                                  leading: Icon(
-                                    Icons.delete_outline,
-                                    color: Colors.redAccent,
-                                  ),
-                                  title: Text('Eliminar versión actual'),
-                                ),
-                              ),
-                              const PopupMenuItem(
-                                value: 'ejercicio',
-                                child: ListTile(
-                                  leading: Icon(
-                                    Icons.delete_forever,
-                                    color: Colors.red,
-                                  ),
-                                  title: Text('Eliminar ejercicio completo'),
-                                ),
-                              ),
-                            ];
-                          }
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.redAccent,
-                            borderRadius: BorderRadius.circular(30),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
-                                blurRadius: 6,
-                                offset: const Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 7,
-                            horizontal: 10,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
-                              Icon(Icons.delete, color: Colors.white),
-                              SizedBox(width: 8),
-                              Text(
-                                "Eliminar",
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                        });
+                      },
                     ),
                   ),
                 ],
               ),
             ),
+          // ====================================================================
         ],
       ),
     );
@@ -1665,6 +1695,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                               });
                               _cargarVersionSeleccionada(newVersion);
                             },
+                            esMovil: esMovilMuyPequeno || esMovilGrande,
                           ),
                         ),
                         SliverPadding(padding: const EdgeInsets.only(top: 20)),
@@ -1702,6 +1733,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                               });
                               _cargarVersionSeleccionada(newVersion);
                             },
+                            esMovil: esMovilMuyPequeno || esMovilGrande,
                           ),
                         ),
                         const SizedBox(width: 20),

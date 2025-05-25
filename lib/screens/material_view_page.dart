@@ -878,6 +878,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     required String? versionSeleccionada,
     required List<Map<String, dynamic>> comentarios,
     required void Function(String) onVersionChanged,
+    required bool esMovil,
   }) {
     final autor = ejercicioData['autorNombre'] ?? 'Anónimo';
 
@@ -1033,33 +1034,58 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
             child: const ExerciseCarousel(),
           ),
           const SizedBox(height: 16),
+
+          // dentro de _columnaIzquierda, usando el booleano 'esMovil' de la Solución 2
           if (esAutor)
             Row(
+              // O Wrap, como en la Solución 1
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 ElevatedButton.icon(
                   onPressed: _editarMaterial,
-                  icon: Icon(Icons.edit, color: Colors.white),
-                  label: Text("Editar"),
+                  icon: const Icon(Icons.edit, color: Colors.white),
+                  // Si es móvil, no muestra texto. Si es grande, sí.
+                  label:
+                      esMovil ? const SizedBox.shrink() : const Text("Editar"),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blueAccent,
+                    // Agregamos padding para que el botón no sea tan pequeño sin texto
+                    padding: EdgeInsets.symmetric(
+                      horizontal: esMovil ? 12 : 16,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton.icon(
                   onPressed: _confirmarEliminarMaterial,
-                  icon: Icon(Icons.delete, color: Colors.white),
-                  label: Text("Eliminar"),
+                  icon: const Icon(Icons.delete, color: Colors.white),
+                  label:
+                      esMovil
+                          ? const SizedBox.shrink()
+                          : const Text("Eliminar"),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.redAccent,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: esMovil ? 12 : 16,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton.icon(
                   onPressed: _agregarNuevaVersion,
-                  icon: Icon(Icons.add_circle_outline, color: Colors.white),
-                  label: Text("Nueva versión"),
+                  icon: const Icon(
+                    Icons.add_circle_outline,
+                    color: Colors.white,
+                  ),
+                  label:
+                      esMovil
+                          ? const SizedBox.shrink()
+                          : const Text("Nueva versión"),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.orangeAccent,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: esMovil ? 12 : 16,
+                    ),
                   ),
                 ),
               ],
@@ -1669,49 +1695,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF048DD2),
-        title: const Text('Study Connect'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/'),
-            child: const Tooltip(
-              message: 'Ir a Inicio',
-              child: Text('Inicio', style: TextStyle(color: Colors.white)),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/ranking'),
-            child: const Tooltip(
-              message: 'Ir a Ranking',
-              child: Text('Ranking', style: TextStyle(color: Colors.white)),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/content'),
-            child: const Tooltip(
-              message: 'Ir a Contenido',
-              child: Text('Contenido', style: TextStyle(color: Colors.white)),
-            ),
-          ),
-          const NotificationIconWidget(),
-          TextButton(
-            onPressed: () => Navigator.pushNamed(context, '/user_profile'),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Tooltip(
-                message: 'Ir a perfil',
-                child: Text('Perfil', style: TextStyle(color: Colors.white)),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-        ],
-      ),
+      appBar: const CustomAppBar(showBack: true),
       body: Screenshot(
         controller: _screenshotController,
         child: Center(
@@ -1739,6 +1723,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                               });
                               _cargarVersionSeleccionada(newVersion);
                             },
+                            esMovil: esMovilMuyPequeno || esMovilGrande,
                           ),
                         ),
                         SliverPadding(padding: const EdgeInsets.only(top: 20)),
@@ -1774,6 +1759,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                               });
                               _cargarVersionSeleccionada(newVersion);
                             },
+                            esMovil: esMovilMuyPequeno || esMovilGrande,
                           ),
                         ),
                         const SizedBox(width: 20),
