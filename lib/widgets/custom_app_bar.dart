@@ -29,53 +29,86 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     final screenWidth = MediaQuery.of(context).size.width;
     final bool isMobile = screenWidth < 800;
 
-    return AppBar(
-      automaticallyImplyLeading: false,
-      backgroundColor: const Color(0xFF048DD2),
-      elevation: 6,
-      title: Row(
-        children: [
-          if (showBack)
-            IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () => Navigator.pop(context),
-            ),
-          Text(
-            title ?? 'Study Connect',
-            style: const TextStyle(color: Colors.white, fontSize: 22),
+    return PreferredSize(
+      preferredSize: Size.fromHeight(height),
+      child: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF045C9E), // Azul más vivo
+              Color(0xFF001F3F), // Navy más oscuro
+            ],
           ),
-          const SizedBox(width: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image.asset(
-              'assets/images/logo_ipn.png',
-              width: 40,
-              height: 40,
-              fit: BoxFit.contain,
-            ),
-          ),
-        ],
-      ),
-      actions:
-          isMobile
-              ? [
-                const NotificationIconWidget(),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.menu, color: Colors.white),
-                  onSelected:
-                      (value) => Navigator.pushNamed(context, '/$value'),
-                  itemBuilder: (_) => _menuItems(context),
+        ),
+        child: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+          title: Row(
+            children: [
+              if (showBack)
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
                 ),
-              ]
-              : [
-                _textButton(context, 'Inicio', '/'),
-                _textButton(context, 'Ranking', '/ranking'),
-                _textButton(context, 'Contenidos', '/content'),
-                if (FirebaseAuth.instance.currentUser != null)
-                  const NotificationIconWidget(),
-                _perfilButton(context),
-                const SizedBox(width: 12),
+              const Text(
+                'Study Connect',
+                style: TextStyle(color: Colors.white, fontSize: 22),
+              ),
+              if (!isMobile) ...[
+                const SizedBox(width: 16),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: Image.asset(
+                    'assets/images/IPN-Logo.png',
+                    width: 72,
+                    height: 72,
+                    fit: BoxFit.contain,
+                  ),
+                ),
               ],
+            ],
+          ),
+
+          actions:
+              isMobile
+                  ? [
+                    const NotificationIconWidget(),
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.menu, color: Colors.white),
+                      onSelected:
+                          (value) => Navigator.pushNamed(context, '/$value'),
+                      itemBuilder: (_) => _menuItems(context),
+                    ),
+                  ]
+                  : [
+                    _textButton(context, 'Inicio', '/'),
+                    _textButton(context, 'Ranking', '/ranking'),
+                    _textButton(context, 'Contenidos', '/content'),
+                    if (FirebaseAuth.instance.currentUser != null)
+                      const NotificationIconWidget(),
+                    _perfilButton(context),
+                    const SizedBox(width: 8),
+                    if (!isMobile) ...[
+                      const SizedBox(width: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: Image.asset(
+                          'assets/images/escudoESCOM.png',
+                          width: 72,
+                          height: 72,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+
+                    const SizedBox(width: 12),
+                  ],
+        ),
+      ),
     );
   }
 
