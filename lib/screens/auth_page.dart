@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:study_connect/widgets/hoverable_text.dart';
 import 'package:study_connect/widgets/login_carousel.dart';
+import 'package:study_connect/widgets/widgets.dart' show CustomAppBar;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -234,6 +235,7 @@ class _LoginPageState extends State<LoginPage>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
+      appBar: const CustomAppBar(showBack: true),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final bool esPantallaGrande = constraints.maxWidth >= 900;

@@ -1421,7 +1421,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
-      appBar: const CustomAppBar(),
+      appBar: const CustomAppBar(showBack: true),
 
       body: Screenshot(
         controller: _screenshotController,

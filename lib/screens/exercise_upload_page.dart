@@ -686,7 +686,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
     );
 
     return Scaffold(
-      appBar: const CustomAppBar(),
+      appBar: const CustomAppBar(showBack: true),
 
       // ===== CAMBIO: El backgroundColor lo quitamos, y aquí va el gradiente:
       body: Container(

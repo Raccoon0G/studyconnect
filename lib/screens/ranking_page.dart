@@ -277,7 +277,7 @@ class _RankingPageState extends State<RankingPage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CustomAppBar(title: 'Ranking'),
+            const CustomAppBar(title: 'Ranking', showBack: true),
             Material(
               color: const Color(0xFF048DD2),
               child: TabBar(

@@ -7,6 +7,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:study_connect/widgets/widgets.dart' show CustomAppBar;
 
 class EditProfilePage extends StatefulWidget {
   const EditProfilePage({super.key});
@@ -409,10 +410,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF048DD2),
-        title: const Text('Editar Perfil'),
-      ),
+      appBar: const CustomAppBar(showBack: true),
       body:
           isLoading
               ? const Center(child: CircularProgressIndicator())

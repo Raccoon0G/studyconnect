@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:study_connect/widgets/register_carousel.dart';
 import 'package:study_connect/widgets/hoverable_text.dart';
+import 'package:study_connect/widgets/widgets.dart' show CustomAppBar;
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -138,6 +139,7 @@ class _RegisterPageState extends State<RegisterPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
+      appBar: const CustomAppBar(showBack: true),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final bool esPantallaGrande = constraints.maxWidth >= 900;

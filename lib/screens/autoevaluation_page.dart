@@ -632,7 +632,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
     return Stack(
       children: [
         Scaffold(
-          appBar: const CustomAppBar(),
+          appBar: const CustomAppBar(showBack: true),
 
           body: LayoutBuilder(
             builder: (context, constraints) {

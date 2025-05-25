@@ -48,7 +48,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
           automaticallyImplyLeading: false,
           title: Row(
             children: [
-              if (showBack)
+              if (ModalRoute.of(context)?.settings.name != '/' && showBack)
                 IconButton(
                   icon: const Icon(Icons.arrow_back, color: Colors.white),
                   onPressed: () => Navigator.pop(context),
@@ -172,8 +172,39 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   Widget _perfilButton(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
     return TextButton(
-      onPressed: () => Navigator.pushNamed(context, '/user_profile'),
+      onPressed: () {
+        if (user == null) {
+          // Mostrar dialog si no ha iniciado sesión
+          showDialog(
+            context: context,
+            builder:
+                (_) => AlertDialog(
+                  title: const Text('Inicio de sesión requerido'),
+                  content: const Text(
+                    'Para acceder a tu perfil necesitas iniciar sesión.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancelar'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamed(context, '/login');
+                      },
+                      child: const Text('Iniciar sesión'),
+                    ),
+                  ],
+                ),
+          );
+        } else {
+          Navigator.pushNamed(context, '/user_profile');
+        }
+      },
       style: TextButton.styleFrom(
         side: const BorderSide(color: Colors.white),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),

@@ -828,7 +828,7 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
-      appBar: const CustomAppBar(),
+      appBar: const CustomAppBar(showBack: true),
 
       body: Padding(
         padding: const EdgeInsets.all(20),

@@ -34,7 +34,7 @@ class ExerciseListPage extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
-      appBar: const CustomAppBar(),
+      appBar: const CustomAppBar(showBack: true),
       body: StreamBuilder<QuerySnapshot>(
         stream: ejerciciosRef.snapshots(),
         builder: (context, snapshot) {
