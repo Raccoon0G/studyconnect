@@ -24,6 +24,12 @@ String prepararLaTeXSeguro(String texto) {
           .replaceAll(RegExp(r'\$\$'), '') // elimina $$ ... $$
           .trim();
 
+  // ————— NUEVO: "des-escapamos" cualquier \#, \$, \%, \& previo —————
+  raw = raw.replaceAllMapped(
+    RegExp(r'\\([#\$%&])'),
+    (m) => m.group(1)!, // convierte "\&" → "&", "\$" → "$", etc.
+  );
+
   if (raw.isEmpty) {
     return r'\text{– contenido vacío –}';
   }

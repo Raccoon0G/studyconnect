@@ -177,6 +177,11 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
           snackbarMessage: 'Ejercicio editado',
           snackbarSuccess: true,
         );
+        Navigator.pushReplacementNamed(
+          context,
+          '/exercise_view',
+          arguments: {'tema': _temaSeleccionado!, 'ejercicioId': _ejercicioId!},
+        );
       } else if (_modo == 'nueva_version' && _ejercicioId != null) {
         // --- Crear nueva versión y actualizar campo versionActual ---
         final ejerRef = ejerciciosRef.doc(_ejercicioId);
@@ -194,12 +199,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
           'DescPasos': descripciones,
         });
 
-        await ejerRef.update({
-          'Titulo': titulo,
-          'DesEjercicio': descripcion,
-          'FechMod': now,
-          'versionActual': nuevaVersionId,
-        });
+        await ejerRef.update({'FechMod': now, 'versionActual': nuevaVersionId});
 
         await showFeedbackDialogAndSnackbar(
           context: context,
@@ -208,6 +208,11 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
           tipo: CustomDialogType.success,
           snackbarMessage: 'Nueva versión guardada',
           snackbarSuccess: true,
+        );
+        Navigator.pushReplacementNamed(
+          context,
+          '/exercise_view',
+          arguments: {'tema': _temaSeleccionado!, 'ejercicioId': _ejercicioId!},
         );
       } else {
         // --- Crear nuevo ejercicio (original) ---
