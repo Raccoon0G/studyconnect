@@ -1258,6 +1258,43 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                                   ),
                                 ),
                                 const SizedBox(height: 16),
+                                if (_modo == 'editar' &&
+                                    _versionActualId != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.amber.shade100,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        'Editando la versión: $_versionActualId',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                if (_modo == 'nueva_version' &&
+                                    _ejercicioId != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.lightBlue.shade100,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        'Agregando nueva versión para: $_ejercicioId',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
                                 const Text(
                                   'Título',
                                   style: TextStyle(color: Colors.white),

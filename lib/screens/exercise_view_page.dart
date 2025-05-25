@@ -704,10 +704,10 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
               style: const TextStyle(color: Colors.white60),
             ),
           ),
-          const SizedBox(height: 38),
+          const SizedBox(height: 18),
 
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 220, minHeight: 120),
+            constraints: const BoxConstraints(maxHeight: 230, minHeight: 120),
             child: const ExerciseCarousel(),
           ),
           //TODO Arreglar botones
