@@ -651,590 +651,650 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
 
           body: LayoutBuilder(
             builder: (context, constraints) {
+              const double kMaxContentWidth = 1100.0;
+
               return Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (preguntasPorTema.isEmpty) ...[
-                      Text(
-                        "Temas disponibles",
-                        style: GoogleFonts.roboto(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<int>(
-                        value: cantidadPreguntas,
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() {
-                              cantidadPreguntas = value;
-                            });
-                          }
-                        },
-                        items:
-                            [5, 10, 15, 20, 25, 30]
-                                .map(
-                                  (n) => DropdownMenuItem(
-                                    value: n,
-                                    child: Text('$n preguntas'),
-                                  ),
-                                )
-                                .toList(),
-                        decoration: const InputDecoration(
-                          labelText: "Cantidad de preguntas",
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Center(
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 4,
-                          children:
-                              temasDisponibles.map((tema) {
-                                final seleccionado = temasSeleccionados
-                                    .contains(tema);
-                                return FilterChip(
-                                  label: Text(
-                                    "$tema (${totalPreguntasPorTema[tema] ?? 0})",
-                                  ),
-                                  selected: seleccionado,
-                                  onSelected: (value) {
-                                    setState(() {
-                                      if (value) {
-                                        temasSeleccionados.add(tema);
-                                      } else {
-                                        temasSeleccionados.remove(tema);
-                                      }
-                                    });
-                                  },
-                                );
-                              }).toList(),
-                        ),
-                      ),
-
-                      const SizedBox(height: 12),
-                      Center(
-                        child: ElevatedButton.icon(
-                          onPressed:
-                              temasSeleccionados.isNotEmpty
-                                  ? () => obtenerPreguntas(temasSeleccionados)
-                                  : null,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text("Generar evaluación"),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (temasSeleccionados.isNotEmpty) _botonGenerarConIA(),
-
-                      const SizedBox(height: 12),
-                      Center(
-                        child: ElevatedButton.icon(
-                          icon: const Icon(Icons.history),
-                          label: const Text("Ver resultados pasados"),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.grey[800],
-                            foregroundColor: Colors.white,
+                // 1. Centra el contenido en la pantalla
+                child: Center(
+                  // 2. Limita el ancho máximo del contenido
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxWidth: kMaxContentWidth,
+                    ),
+                    // 3. Tu columna original va aquí dentro
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (preguntasPorTema.isEmpty) ...[
+                          Text(
+                            "Temas disponibles",
+                            style: GoogleFonts.roboto(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                          onPressed: () async {
-                            final historial =
-                                await obtenerEvaluacionesPasadas();
-
-                            if (historial.isEmpty) {
-                              _mostrarError(
-                                "No tienes evaluaciones anteriores.",
-                              );
-                              return;
-                            }
-                            await showDialog(
-                              context: context,
-                              builder:
-                                  (_) => AlertDialog(
-                                    backgroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    title: const Text(
-                                      "🕓 Tus evaluaciones pasadas",
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<int>(
+                            value: cantidadPreguntas,
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() {
+                                  cantidadPreguntas = value;
+                                });
+                              }
+                            },
+                            items:
+                                [5, 10, 15, 20, 25, 30]
+                                    .map(
+                                      (n) => DropdownMenuItem(
+                                        value: n,
+                                        child: Text('$n preguntas'),
                                       ),
-                                    ),
-                                    content: SizedBox(
-                                      width: double.maxFinite,
-                                      child: ListView.separated(
-                                        shrinkWrap: true,
-                                        itemCount: historial.length,
-                                        separatorBuilder:
-                                            (_, __) => const Divider(),
+                                    )
+                                    .toList(),
+                            decoration: const InputDecoration(
+                              labelText: "Cantidad de preguntas",
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Center(
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              children:
+                                  temasDisponibles.map((tema) {
+                                    final seleccionado = temasSeleccionados
+                                        .contains(tema);
+                                    return FilterChip(
+                                      label: Text(
+                                        "$tema (${totalPreguntasPorTema[tema] ?? 0})",
+                                      ),
+                                      selected: seleccionado,
+                                      onSelected: (value) {
+                                        setState(() {
+                                          if (value) {
+                                            temasSeleccionados.add(tema);
+                                          } else {
+                                            temasSeleccionados.remove(tema);
+                                          }
+                                        });
+                                      },
+                                    );
+                                  }).toList(),
+                            ),
+                          ),
 
-                                        itemBuilder: (context, index) {
-                                          final eval = historial[index];
-                                          return ListTile(
-                                            onTap: () async {
-                                              final List<String> ids =
-                                                  List<String>.from(
-                                                    eval['preguntas_ids'] ?? [],
+                          const SizedBox(height: 12),
+                          Center(
+                            child: ElevatedButton.icon(
+                              onPressed:
+                                  temasSeleccionados.isNotEmpty
+                                      ? () =>
+                                          obtenerPreguntas(temasSeleccionados)
+                                      : null,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text("Generar evaluación"),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          if (temasSeleccionados.isNotEmpty)
+                            _botonGenerarConIA(),
+
+                          const SizedBox(height: 12),
+                          Center(
+                            child: ElevatedButton.icon(
+                              icon: const Icon(Icons.history),
+                              label: const Text("Ver resultados pasados"),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.grey[800],
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () async {
+                                final historial =
+                                    await obtenerEvaluacionesPasadas();
+
+                                if (historial.isEmpty) {
+                                  _mostrarError(
+                                    "No tienes evaluaciones anteriores.",
+                                  );
+                                  return;
+                                }
+                                await showDialog(
+                                  context: context,
+                                  builder:
+                                      (_) => AlertDialog(
+                                        backgroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
+                                        ),
+                                        title: const Text(
+                                          "🕓 Tus evaluaciones pasadas",
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        content: SizedBox(
+                                          width: double.maxFinite,
+                                          child: ListView.separated(
+                                            shrinkWrap: true,
+                                            itemCount: historial.length,
+                                            separatorBuilder:
+                                                (_, __) => const Divider(),
+
+                                            itemBuilder: (context, index) {
+                                              final eval = historial[index];
+                                              return ListTile(
+                                                onTap: () async {
+                                                  final List<String> ids =
+                                                      List<String>.from(
+                                                        eval['preguntas_ids'] ??
+                                                            [],
+                                                      );
+                                                  final Map<String, dynamic>
+                                                  respuestas = Map<
+                                                    String,
+                                                    dynamic
+                                                  >.from(
+                                                    eval['respuestas_usuario'] ??
+                                                        {},
                                                   );
-                                              final Map<String, dynamic>
-                                              respuestas = Map<
-                                                String,
-                                                dynamic
-                                              >.from(
-                                                eval['respuestas_usuario'] ??
-                                                    {},
-                                              );
-                                              final String tema =
-                                                  eval['tema'] ??
-                                                  'Tema desconocido';
+                                                  final String tema =
+                                                      eval['tema'] ??
+                                                      'Tema desconocido';
 
-                                              final snapshot =
-                                                  await FirebaseFirestore
-                                                      .instance
-                                                      .collection(
-                                                        'preguntas_por_tema',
-                                                      )
-                                                      .where(
-                                                        FieldPath.documentId,
-                                                        whereIn: ids,
-                                                      )
-                                                      .get();
+                                                  final snapshot =
+                                                      await FirebaseFirestore
+                                                          .instance
+                                                          .collection(
+                                                            'preguntas_por_tema',
+                                                          )
+                                                          .where(
+                                                            FieldPath
+                                                                .documentId,
+                                                            whereIn: ids,
+                                                          )
+                                                          .get();
 
-                                              final preguntasOrdenadas =
-                                                  ids
-                                                      .map((id) {
-                                                        try {
-                                                          final doc = snapshot
-                                                              .docs
-                                                              .firstWhere(
-                                                                (d) =>
-                                                                    d.id == id,
+                                                  final preguntasOrdenadas =
+                                                      ids
+                                                          .map((id) {
+                                                            try {
+                                                              final doc = snapshot
+                                                                  .docs
+                                                                  .firstWhere(
+                                                                    (d) =>
+                                                                        d.id ==
+                                                                        id,
+                                                                  );
+                                                              final data =
+                                                                  doc.data();
+
+                                                              final opciones =
+                                                                  _convertirOpciones(
+                                                                    data['opciones'],
+                                                                  );
+                                                              final respuestaUsuario =
+                                                                  respuestas[ids
+                                                                      .indexOf(
+                                                                        id,
+                                                                      )
+                                                                      .toString()] ??
+                                                                  '';
+
+                                                              return {
+                                                                'pregunta':
+                                                                    data['pregunta'],
+                                                                'opciones':
+                                                                    opciones,
+                                                                'respuesta_correcta':
+                                                                    data['respuesta_correcta'] ??
+                                                                    data['respuestaCorrecta'],
+                                                                'id': doc.id,
+                                                                'respuesta_usuario':
+                                                                    respuestaUsuario,
+                                                              };
+                                                            } catch (e) {
+                                                              print(
+                                                                "❌ Pregunta no encontrada: $id",
                                                               );
-                                                          final data =
-                                                              doc.data();
+                                                              return null;
+                                                            }
+                                                          })
+                                                          .where(
+                                                            (p) => p != null,
+                                                          )
+                                                          .toList();
 
-                                                          final opciones =
-                                                              _convertirOpciones(
-                                                                data['opciones'],
-                                                              );
-                                                          final respuestaUsuario =
-                                                              respuestas[ids
-                                                                  .indexOf(id)
-                                                                  .toString()] ??
-                                                              '';
-
-                                                          return {
-                                                            'pregunta':
-                                                                data['pregunta'],
-                                                            'opciones':
-                                                                opciones,
-                                                            'respuesta_correcta':
-                                                                data['respuesta_correcta'] ??
-                                                                data['respuestaCorrecta'],
-                                                            'id': doc.id,
-                                                            'respuesta_usuario':
-                                                                respuestaUsuario,
-                                                          };
-                                                        } catch (e) {
-                                                          print(
-                                                            "❌ Pregunta no encontrada: $id",
-                                                          );
-                                                          return null;
-                                                        }
-                                                      })
-                                                      .where((p) => p != null)
-                                                      .toList();
-
-                                              await showDialog(
-                                                context: context,
-                                                builder:
-                                                    (_) => AlertDialog(
-                                                      backgroundColor:
-                                                          Colors.white,
-                                                      shape: RoundedRectangleBorder(
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              12,
-                                                            ),
-                                                      ),
-                                                      title: Text(
-                                                        "📘 Preguntas - $tema",
-                                                      ),
-                                                      content: SizedBox(
-                                                        width: double.maxFinite,
-                                                        child: ListView.separated(
-                                                          shrinkWrap: true,
-                                                          itemCount:
-                                                              preguntasOrdenadas
-                                                                  .length,
-                                                          separatorBuilder:
-                                                              (_, __) =>
-                                                                  const Divider(),
-                                                          itemBuilder: (
-                                                            context,
-                                                            index,
-                                                          ) {
-                                                            final p =
-                                                                preguntasOrdenadas[index]!;
-                                                            final opciones =
-                                                                Map<
-                                                                  String,
-                                                                  String
-                                                                >.from(
-                                                                  p['opciones'],
-                                                                );
-                                                            final correcta =
-                                                                p['respuesta_correcta'];
-                                                            final usuario =
-                                                                p['respuesta_usuario'];
-                                                            final esCorrecta =
-                                                                usuario ==
-                                                                correcta;
-
-                                                            return Container(
-                                                              decoration: BoxDecoration(
-                                                                color:
-                                                                    esCorrecta
-                                                                        ? Colors
-                                                                            .green
-                                                                            .shade50
-                                                                        : Colors
-                                                                            .red
-                                                                            .shade50,
-                                                                borderRadius:
-                                                                    BorderRadius.circular(
-                                                                      12,
-                                                                    ),
-                                                              ),
-                                                              padding:
-                                                                  const EdgeInsets.all(
-                                                                    12,
-                                                                  ),
-                                                              child: Column(
-                                                                crossAxisAlignment:
-                                                                    CrossAxisAlignment
-                                                                        .start,
-                                                                children: [
-                                                                  Text(
-                                                                    "Pregunta ${index + 1}",
-                                                                    style: const TextStyle(
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .bold,
-                                                                    ),
-                                                                  ),
-                                                                  const SizedBox(
-                                                                    height: 6,
-                                                                  ),
-                                                                  CustomLatexText(
-                                                                    contenido:
-                                                                        "🧠 ${p['pregunta']}",
-                                                                    fontSize:
-                                                                        18,
-                                                                    scrollHorizontal:
-                                                                        false,
-                                                                    prepararLatex:
-                                                                        prepararLaTeX,
-                                                                  ),
-                                                                  const SizedBox(
-                                                                    height: 10,
-                                                                  ),
-                                                                  CustomLatexText(
-                                                                    contenido:
-                                                                        "✅ Respuesta correcta: $correcta) ${opciones[correcta] ?? ''}",
-                                                                    fontSize:
-                                                                        16,
-                                                                    color:
-                                                                        Colors
-                                                                            .green
-                                                                            .shade800,
-                                                                    scrollHorizontal:
-                                                                        false,
-                                                                    prepararLatex:
-                                                                        prepararLaTeX,
-                                                                  ),
-                                                                  CustomLatexText(
-                                                                    contenido:
-                                                                        "📝 Tu respuesta: $usuario) ${opciones[usuario] ?? 'Sin responder'}",
-                                                                    fontSize:
-                                                                        16,
-                                                                    color:
-                                                                        esCorrecta
-                                                                            ? Colors.green.shade800
-                                                                            : Colors.red.shade800,
-                                                                    scrollHorizontal:
-                                                                        false,
-                                                                    prepararLatex:
-                                                                        prepararLaTeX,
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                            );
-                                                          },
-                                                        ),
-                                                      ),
-                                                      actions: [
-                                                        TextButton(
-                                                          onPressed:
-                                                              () =>
-                                                                  Navigator.pop(
-                                                                    context,
-                                                                  ),
-                                                          child: const Text(
-                                                            "Cerrar",
+                                                  await showDialog(
+                                                    context: context,
+                                                    builder:
+                                                        (_) => AlertDialog(
+                                                          backgroundColor:
+                                                              Colors.white,
+                                                          shape: RoundedRectangleBorder(
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  12,
+                                                                ),
                                                           ),
+                                                          title: Text(
+                                                            "📘 Preguntas - $tema",
+                                                          ),
+                                                          content: SizedBox(
+                                                            width:
+                                                                double
+                                                                    .maxFinite,
+                                                            child: ListView.separated(
+                                                              shrinkWrap: true,
+                                                              itemCount:
+                                                                  preguntasOrdenadas
+                                                                      .length,
+                                                              separatorBuilder:
+                                                                  (_, __) =>
+                                                                      const Divider(),
+                                                              itemBuilder: (
+                                                                context,
+                                                                index,
+                                                              ) {
+                                                                final p =
+                                                                    preguntasOrdenadas[index]!;
+                                                                final opciones =
+                                                                    Map<
+                                                                      String,
+                                                                      String
+                                                                    >.from(
+                                                                      p['opciones'],
+                                                                    );
+                                                                final correcta =
+                                                                    p['respuesta_correcta'];
+                                                                final usuario =
+                                                                    p['respuesta_usuario'];
+                                                                final esCorrecta =
+                                                                    usuario ==
+                                                                    correcta;
+
+                                                                return Card(
+                                                                  // Usar un Card puede mejorar la presentación
+                                                                  margin:
+                                                                      const EdgeInsets.symmetric(
+                                                                        vertical:
+                                                                            8.0,
+                                                                      ),
+                                                                  elevation: 1,
+                                                                  color:
+                                                                      esCorrecta
+                                                                          ? Colors
+                                                                              .green
+                                                                              .shade50
+                                                                          : (usuario == null ||
+                                                                                  usuario.isEmpty
+                                                                              ? Colors.grey.shade100
+                                                                              : Colors.red.shade50),
+                                                                  child: Padding(
+                                                                    padding:
+                                                                        const EdgeInsets.all(
+                                                                          12.0,
+                                                                        ),
+                                                                    child: Column(
+                                                                      crossAxisAlignment:
+                                                                          CrossAxisAlignment
+                                                                              .start,
+                                                                      children: [
+                                                                        Text(
+                                                                          "Pregunta ${index + 1}",
+                                                                          style: const TextStyle(
+                                                                            fontWeight:
+                                                                                FontWeight.bold,
+                                                                            fontSize:
+                                                                                16,
+                                                                          ),
+                                                                        ),
+                                                                        const SizedBox(
+                                                                          height:
+                                                                              8,
+                                                                        ),
+
+                                                                        // PREGUNTA
+                                                                        SingleChildScrollView(
+                                                                          // <--- SOLUCIÓN
+                                                                          scrollDirection:
+                                                                              Axis.horizontal,
+                                                                          child: CustomLatexText(
+                                                                            contenido:
+                                                                                "🧠 ${p['pregunta']}",
+                                                                            fontSize:
+                                                                                17,
+                                                                            // scrollHorizontal: true, // Tu widget ya lo tiene por defecto, pero esto es explícito
+                                                                            prepararLatex:
+                                                                                prepararLaTeX, // o la que uses
+                                                                          ),
+                                                                        ),
+                                                                        const SizedBox(
+                                                                          height:
+                                                                              10,
+                                                                        ),
+
+                                                                        // RESPUESTA CORRECTA
+                                                                        SingleChildScrollView(
+                                                                          // <--- SOLUCIÓN
+                                                                          scrollDirection:
+                                                                              Axis.horizontal,
+                                                                          child: CustomLatexText(
+                                                                            contenido:
+                                                                                "✅ Respuesta correcta: $correcta) ${opciones[correcta] ?? ''}",
+                                                                            fontSize:
+                                                                                15,
+                                                                            color:
+                                                                                Colors.green.shade800,
+                                                                            prepararLatex:
+                                                                                prepararLaTeX,
+                                                                          ),
+                                                                        ),
+                                                                        const SizedBox(
+                                                                          height:
+                                                                              4,
+                                                                        ),
+
+                                                                        // TU RESPUESTA
+                                                                        SingleChildScrollView(
+                                                                          // <--- SOLUCIÓN
+                                                                          scrollDirection:
+                                                                              Axis.horizontal,
+                                                                          child: CustomLatexText(
+                                                                            contenido:
+                                                                                "📝 Tu respuesta: $usuario) ${opciones[usuario] ?? 'Sin responder'}",
+                                                                            fontSize:
+                                                                                15,
+                                                                            color:
+                                                                                esCorrecta
+                                                                                    ? Colors.green.shade800
+                                                                                    : (usuario ==
+                                                                                                null ||
+                                                                                            usuario.isEmpty
+                                                                                        ? Colors.black54
+                                                                                        : Colors.red.shade800),
+                                                                            prepararLatex:
+                                                                                prepararLaTeX,
+                                                                          ),
+                                                                        ),
+                                                                      ],
+                                                                    ),
+                                                                  ),
+                                                                );
+                                                              },
+                                                            ),
+                                                          ),
+                                                          actions: [
+                                                            TextButton(
+                                                              onPressed:
+                                                                  () =>
+                                                                      Navigator.pop(
+                                                                        context,
+                                                                      ),
+                                                              child: const Text(
+                                                                "Cerrar",
+                                                              ),
+                                                            ),
+                                                          ],
                                                         ),
-                                                      ],
-                                                    ),
-                                              );
-                                            },
-                                            leading: CircleAvatar(
-                                              backgroundColor:
-                                                  Colors.blue.shade100,
-                                              child: const Icon(
-                                                Icons.school,
-                                                color: Colors.blue,
-                                              ),
-                                            ),
-                                            title: Text(
-                                              eval['tema'] ??
-                                                  "Tema desconocido",
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 16,
-                                              ),
-                                            ),
-                                            subtitle: Text(
-                                              "📅 ${eval['fecha']}",
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                color: Colors.grey,
-                                              ),
-                                            ),
-                                            trailing: Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.end,
-                                              children: [
-                                                Text(
-                                                  "⭐ ${eval['calificacion']}/10",
-                                                  style: TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    color:
-                                                        (double.tryParse(
-                                                                      eval['calificacion'],
-                                                                    ) ??
-                                                                    0) <
-                                                                6
-                                                            ? Colors.red
-                                                            : Colors.green[700],
+                                                  );
+                                                },
+                                                leading: CircleAvatar(
+                                                  backgroundColor:
+                                                      Colors.blue.shade100,
+                                                  child: const Icon(
+                                                    Icons.school,
+                                                    color: Colors.blue,
                                                   ),
                                                 ),
-                                                Text(
-                                                  "${eval['preguntas']} preguntas",
+                                                title: Text(
+                                                  eval['tema'] ??
+                                                      "Tema desconocido",
                                                   style: const TextStyle(
-                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 16,
+                                                  ),
+                                                ),
+                                                subtitle: Text(
+                                                  "📅 ${eval['fecha']}",
+                                                  style: const TextStyle(
+                                                    fontSize: 14,
                                                     color: Colors.grey,
                                                   ),
                                                 ),
-                                              ],
-                                            ),
-                                          );
-                                        },
+                                                trailing: Column(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.end,
+                                                  children: [
+                                                    Text(
+                                                      "⭐ ${eval['calificacion']}/10",
+                                                      style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color:
+                                                            (double.tryParse(
+                                                                          eval['calificacion'],
+                                                                        ) ??
+                                                                        0) <
+                                                                    6
+                                                                ? Colors.red
+                                                                : Colors
+                                                                    .green[700],
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      "${eval['preguntas']} preguntas",
+                                                      style: const TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors.grey,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed:
+                                                () => Navigator.pop(context),
+                                            child: const Text("Cerrar"),
+                                          ),
+                                        ],
                                       ),
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context),
-                                        child: const Text("Cerrar"),
-                                      ),
-                                    ],
-                                  ),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                    if (mostrarBotonGenerarNuevas) ...[
-                      const SizedBox(height: 16),
-                      _avisoGenerarNuevas(),
-                    ],
-                    const SizedBox(height: 8),
-                    // ElevatedButton.icon(
-                    //   style: ElevatedButton.styleFrom(
-                    //     backgroundColor: Colors.amber,
-                    //     foregroundColor: Colors.black,
-                    //   ),
-                    //   icon: const Icon(Icons.bolt),
-                    //   label: const Text(
-                    //     "Prueba: generar preguntas con IA (Make)",
-                    //   ),
-                    //   onPressed: () async {
-                    //     if (temasSeleccionados.length != 1) {
-                    //       _mostrarError(
-                    //         "Selecciona solo un tema para usar IA.",
-                    //       );
-                    //       return;
-                    //     }
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                        if (mostrarBotonGenerarNuevas) ...[
+                          const SizedBox(height: 16),
+                          _avisoGenerarNuevas(),
+                        ],
+                        const SizedBox(height: 8),
+                        // ElevatedButton.icon(
+                        //   style: ElevatedButton.styleFrom(
+                        //     backgroundColor: Colors.amber,
+                        //     foregroundColor: Colors.black,
+                        //   ),
+                        //   icon: const Icon(Icons.bolt),
+                        //   label: const Text(
+                        //     "Prueba: generar preguntas con IA (Make)",
+                        //   ),
+                        //   onPressed: () async {
+                        //     if (temasSeleccionados.length != 1) {
+                        //       _mostrarError(
+                        //         "Selecciona solo un tema para usar IA.",
+                        //       );
+                        //       return;
+                        //     }
 
-                    //     final tema = temasSeleccionados.first;
+                        //     final tema = temasSeleccionados.first;
 
-                    //     setState(() {
-                    //       cargando = true;
-                    //       yaCalificado = false;
-                    //       respuestasUsuario.clear();
-                    //       puntaje = 0;
-                    //       yaSeNotificoIA = false;
-                    //       envioExitoso = false;
-                    //     });
+                        //     setState(() {
+                        //       cargando = true;
+                        //       yaCalificado = false;
+                        //       respuestasUsuario.clear();
+                        //       puntaje = 0;
+                        //       yaSeNotificoIA = false;
+                        //       envioExitoso = false;
+                        //     });
 
-                    //     // 🔔 Notificar a Make
-                    //     final notificado = await evaluacionService
-                    //         .notificarGeneracionPreguntas(tema);
+                        //     // 🔔 Notificar a Make
+                        //     final notificado = await evaluacionService
+                        //         .notificarGeneracionPreguntas(tema);
 
-                    //     setState(() {
-                    //       cargando = false;
-                    //       yaSeNotificoIA = notificado;
-                    //     });
+                        //     setState(() {
+                        //       cargando = false;
+                        //       yaSeNotificoIA = notificado;
+                        //     });
 
-                    //     if (notificado) {
-                    //       await showCustomDialog(
-                    //         context: context,
-                    //         titulo: "Preguntas generadas con IA",
-                    //         mensaje:
-                    //             "Las preguntas fueron generadas correctamente por Make.\n Por",
-                    //         tipo: CustomDialogType.success,
-                    //       );
-                    //     } else {
-                    //       _mostrarError("No se pudo notificar a Make.");
-                    //     }
-                    //   },
-                    // ),
-                    const SizedBox(height: 20),
+                        //     if (notificado) {
+                        //       await showCustomDialog(
+                        //         context: context,
+                        //         titulo: "Preguntas generadas con IA",
+                        //         mensaje:
+                        //             "Las preguntas fueron generadas correctamente por Make.\n Por",
+                        //         tipo: CustomDialogType.success,
+                        //       );
+                        //     } else {
+                        //       _mostrarError("No se pudo notificar a Make.");
+                        //     }
+                        //   },
+                        // ),
+                        const SizedBox(height: 20),
 
-                    if (cargando)
-                      const Center(child: CircularProgressIndicator())
-                    else if (preguntasPorTema.isEmpty)
-                      Center(
-                        child: const Text(
-                          "Selecciona temas y presiona 'Generar evaluación'",
-                        ),
-                      )
-                    else
-                      Expanded(
-                        child: Column(
-                          children: [
-                            // --- INICIO: SECCIÓN MODIFICADA ---
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
+                        if (cargando)
+                          const Center(child: CircularProgressIndicator())
+                        else if (preguntasPorTema.isEmpty)
+                          Center(
+                            child: const Text(
+                              "Selecciona temas y presiona 'Generar evaluación'",
+                            ),
+                          )
+                        else
+                          Expanded(
+                            child: Column(
                               children: [
-                                // El Dropdown ocupa el espacio disponible
+                                // --- INICIO: SECCIÓN MODIFICADA ---
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    // El Dropdown ocupa el espacio disponible
+                                    Expanded(
+                                      child: DropdownButtonFormField<String>(
+                                        value: temaSeleccionado,
+                                        items:
+                                            preguntasPorTema.keys
+                                                .map(
+                                                  (tema) => DropdownMenuItem(
+                                                    value: tema,
+                                                    child: Text(tema),
+                                                  ),
+                                                )
+                                                .toList(),
+                                        onChanged: (nuevoTema) {
+                                          setState(() {
+                                            temaSeleccionado = nuevoTema;
+                                            respuestasUsuario.clear();
+                                            yaCalificado = false;
+                                            puntaje = 0;
+                                          });
+                                        },
+                                        decoration: const InputDecoration(
+                                          labelText: "Viendo tema",
+                                          border: OutlineInputBorder(),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    // Tu nuevo botón para volver
+                                    Tooltip(
+                                      message: "Volver a la selección de temas",
+                                      child: IconButton(
+                                        icon: const Icon(
+                                          Icons.edit_note_outlined,
+                                        ),
+                                        onPressed:
+                                            _volverASeleccion, // <-- Llama a la función que creamos
+                                        style: IconButton.styleFrom(
+                                          foregroundColor:
+                                              Theme.of(context).primaryColor,
+                                          backgroundColor: Theme.of(
+                                            context,
+                                          ).primaryColor.withOpacity(0.1),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                // --- FIN: SECCIÓN MODIFICADA ---
+                                const SizedBox(height: 12),
                                 Expanded(
-                                  child: DropdownButtonFormField<String>(
-                                    value: temaSeleccionado,
-                                    items:
-                                        preguntasPorTema.keys
-                                            .map(
-                                              (tema) => DropdownMenuItem(
-                                                value: tema,
-                                                child: Text(tema),
-                                              ),
-                                            )
-                                            .toList(),
-                                    onChanged: (nuevoTema) {
-                                      setState(() {
-                                        temaSeleccionado = nuevoTema;
-                                        respuestasUsuario.clear();
-                                        yaCalificado = false;
-                                        puntaje = 0;
-                                      });
+                                  child: ListView.builder(
+                                    itemCount: preguntas.length,
+                                    itemBuilder: (context, index) {
+                                      final pregunta = preguntas[index];
+                                      return CustomLatexQuestionCard(
+                                        numero: index + 1,
+                                        pregunta: pregunta["pregunta"],
+                                        opciones: _convertirOpciones(
+                                          pregunta["opciones"],
+                                        ),
+                                        seleccionada: respuestasUsuario[index],
+                                        onChanged: (value) {
+                                          setState(() {
+                                            respuestasUsuario[index] = value;
+                                          });
+                                        },
+                                        mostrarCorrecta: yaCalificado,
+                                        respuestaCorrecta:
+                                            pregunta["respuesta_correcta"] ??
+                                            pregunta["respuestaCorrecta"],
+                                        respuestaUsuario:
+                                            respuestasUsuario[index],
+                                      );
                                     },
-                                    decoration: const InputDecoration(
-                                      labelText: "Viendo tema",
-                                      border: OutlineInputBorder(),
-                                    ),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                // Tu nuevo botón para volver
-                                Tooltip(
-                                  message: "Volver a la selección de temas",
-                                  child: IconButton(
-                                    icon: const Icon(Icons.edit_note_outlined),
-                                    onPressed:
-                                        _volverASeleccion, // <-- Llama a la función que creamos
-                                    style: IconButton.styleFrom(
-                                      foregroundColor:
-                                          Theme.of(context).primaryColor,
-                                      backgroundColor: Theme.of(
-                                        context,
-                                      ).primaryColor.withOpacity(0.1),
-                                    ),
+                                const SizedBox(height: 8),
+                                ElevatedButton(
+                                  onPressed:
+                                      yaCalificado
+                                          ? () {
+                                            setState(() {
+                                              respuestasUsuario.clear();
+                                              yaCalificado = false;
+                                              puntaje = 0;
+                                            });
+                                          }
+                                          : _calificar,
+                                  child: Text(
+                                    yaCalificado
+                                        ? "Reiniciar evaluación"
+                                        : "Calificar",
                                   ),
                                 ),
+
+                                if (yaCalificado)
+                                  CustomScoreCard(
+                                    puntaje: puntaje,
+                                    total: preguntas.length,
+                                  ),
                               ],
                             ),
-
-                            // --- FIN: SECCIÓN MODIFICADA ---
-                            const SizedBox(height: 12),
-                            Expanded(
-                              child: ListView.builder(
-                                itemCount: preguntas.length,
-                                itemBuilder: (context, index) {
-                                  final pregunta = preguntas[index];
-                                  return CustomLatexQuestionCard(
-                                    numero: index + 1,
-                                    pregunta: pregunta["pregunta"],
-                                    opciones: _convertirOpciones(
-                                      pregunta["opciones"],
-                                    ),
-                                    seleccionada: respuestasUsuario[index],
-                                    onChanged: (value) {
-                                      setState(() {
-                                        respuestasUsuario[index] = value;
-                                      });
-                                    },
-                                    mostrarCorrecta: yaCalificado,
-                                    respuestaCorrecta:
-                                        pregunta["respuesta_correcta"] ??
-                                        pregunta["respuestaCorrecta"],
-                                    respuestaUsuario: respuestasUsuario[index],
-                                  );
-                                },
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            ElevatedButton(
-                              onPressed:
-                                  yaCalificado
-                                      ? () {
-                                        setState(() {
-                                          respuestasUsuario.clear();
-                                          yaCalificado = false;
-                                          puntaje = 0;
-                                        });
-                                      }
-                                      : _calificar,
-                              child: Text(
-                                yaCalificado
-                                    ? "Reiniciar evaluación"
-                                    : "Calificar",
-                              ),
-                            ),
-
-                            if (yaCalificado)
-                              CustomScoreCard(
-                                puntaje: puntaje,
-                                total: preguntas.length,
-                              ),
-                          ],
-                        ),
-                      ),
-                  ],
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               );
             },

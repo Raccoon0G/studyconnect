@@ -77,7 +77,7 @@ class _CustomLatexQuestionCardState extends State<CustomLatexQuestionCard>
             contenido: "Pregunta ${widget.numero}: ${widget.pregunta}",
             fontSize: 18,
             color: Colors.black87,
-            scrollHorizontal: false,
+            scrollHorizontal: true,
             prepararLatex: prepararLaTeX,
           ),
           const SizedBox(height: 12),
