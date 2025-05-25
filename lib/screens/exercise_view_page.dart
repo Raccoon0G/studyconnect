@@ -14,6 +14,14 @@ import 'package:study_connect/widgets/widgets.dart';
 import 'package:study_connect/utils/utils.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'package:path_provider/path_provider.dart'; // Necesario para guardar imagen en móvil
+import 'dart:io'; // Necesario para File
+import 'package:flutter/foundation.dart'
+    show kIsWeb; // Para diferenciar entre web y móvil
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
 class ExerciseViewPage extends StatefulWidget {
   final String tema;
   final String ejercicioId;
@@ -42,6 +50,131 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
   void initState() {
     super.initState();
     _cargarTodo();
+  }
+
+  /// FUNCIÓN PARA CONECTAR LA CUENTA DE FACEBOOK (para el perfil del usuario)
+  Future<void> _connectToFacebook() async {
+    // Pide permisos. Para publicar en una página, necesitarás 'pages_manage_posts' y 'pages_show_list'.
+    final LoginResult result = await FacebookAuth.instance.login(
+      permissions: [
+        'public_profile',
+        'email',
+        'pages_manage_posts',
+        'pages_show_list',
+      ],
+    );
+
+    if (result.status == LoginStatus.success) {
+      final AccessToken accessToken = result.accessToken!;
+      print('✅ Conexión exitosa. Token: ${accessToken.tokenString}');
+
+      // ❗️ AQUÍ DEBES GUARDAR EL accessToken.tokenString EN FIRESTORE
+      // en el documento del usuario actual.
+      // await FirebaseFirestore.instance.collection('usuarios').doc(currentUser.uid).update({
+      //   'facebookAccessToken': accessToken.tokenString,
+      // });
+
+      showCustomSnackbar(
+        context: context,
+        message: '¡Cuenta de Facebook conectada!',
+        success: true,
+      );
+    } else {
+      print('Error de conexión: ${result.status}');
+      print('Mensaje: ${result.message}');
+      showCustomSnackbar(
+        context: context,
+        message: 'No se pudo conectar con Facebook.',
+        success: false,
+      );
+    }
+  }
+
+  /// FUNCIÓN PARA PUBLICAR EL EJERCICIO EN FACEBOOK (se llama desde el BottomSheet)
+  Future<void> _postDirectlyToFacebook() async {
+    // 1. Obtener el token guardado del usuario desde Firestore
+    // final userDoc = await FirebaseFirestore.instance.collection('usuarios').doc(currentUser.uid).get();
+    // final String? userToken = userDoc.data()?['facebookAccessToken'];
+
+    // --- Usaremos un token de ejemplo para la demostración ---
+    final String? userToken = "TU_TOKEN_DE_ACCESO_GUARDADO_AQUI";
+
+    if (userToken == null) {
+      showCustomSnackbar(
+        context: context,
+        message: 'Primero conecta tu cuenta de Facebook en tu perfil.',
+        success: false,
+      );
+      return;
+    }
+
+    // Muestra un diálogo de carga
+    showDialog(
+      context: context,
+      builder: (_) => Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      // 2. Tomar el Screenshot
+      final Uint8List? imageBytes = await _screenshotController.capture();
+      if (imageBytes == null) {
+        Navigator.pop(context); // Cierra el diálogo de carga
+        showCustomSnackbar(
+          context: context,
+          message: 'No se pudo capturar la imagen.',
+          success: false,
+        );
+        return;
+      }
+
+      // 3. Preparar la llamada a la Graph API de Facebook para subir una foto a una PÁGINA
+      // (Publicar en un perfil personal es mucho más restrictivo)
+      // NOTA: Necesitas el ID de la página donde quieres publicar.
+      final String pageId = "ID_DE_LA_PAGINA_DEL_USUARIO";
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('https://graph.facebook.com/$pageId/photos'),
+      );
+
+      final texto =
+          '¡Resolví este ejercicio de ${obtenerNombreTema(widget.tema)} con Study Connect! ${ejercicioData?['Titulo']} #StudyConnect';
+
+      request.fields['caption'] = texto;
+      request.fields['access_token'] = userToken;
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'source',
+          imageBytes,
+          filename: 'ejercicio.png',
+        ),
+      );
+
+      // 4. Enviar la publicación
+      final response = await request.send();
+
+      Navigator.pop(context); // Cierra el diálogo de carga
+
+      if (response.statusCode == 200) {
+        print('✅ Publicación exitosa!');
+        showCustomSnackbar(
+          context: context,
+          message: '¡Publicado en Facebook con éxito!',
+          success: true,
+        );
+      } else {
+        final responseData = await response.stream.bytesToString();
+        print('Error al publicar: ${response.statusCode}');
+        print('Detalles: ${responseData}');
+        showCustomSnackbar(
+          context: context,
+          message: 'Error al publicar en Facebook.',
+          success: false,
+        );
+      }
+    } catch (e) {
+      Navigator.pop(context); // Cierra el diálogo de carga
+      print('Error excepcional: $e');
+    }
   }
 
   Future<void> _cargarDatosDesdeFirestore() async {
@@ -754,6 +887,75 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     );
   }
 
+  void _showSharingOptions() {
+    showModalBottomSheet(
+      context: context,
+      // Bordes redondeados para un look moderno
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Wrap(
+            // Usamos Wrap para que se ajuste bien
+            children: <Widget>[
+              // Título del menú
+              const ListTile(
+                title: Text(
+                  'Compartir ejercicio',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+              ),
+
+              // En tu BottomSheet, añade una nueva opción
+              ListTile(
+                leading: const Icon(Icons.facebook, color: Color(0xFF1877F2)),
+                title: const Text('Publicar en mi Página de Facebook'),
+                onTap: () {
+                  Navigator.pop(context); // Cierra el menú
+                  _postDirectlyToFacebook(); // Llama a la nueva función
+                },
+              ),
+              // Opción 1: Compartir con Imagen
+              ListTile(
+                leading: const Icon(
+                  Icons.image_outlined,
+                  color: Colors.blueAccent,
+                ),
+                title: const Text('Compartir con Imagen'),
+                onTap: () {
+                  Navigator.pop(context); // Cierra el menú
+                  _shareExercise(
+                    withImage: true,
+                  ); // Llama a la función que ya creamos
+                },
+              ),
+              // Opción 2: Compartir solo el enlace
+              ListTile(
+                leading: const Icon(Icons.link_outlined, color: Colors.green),
+                title: const Text('Compartir solo Enlace'),
+                onTap: () {
+                  Navigator.pop(context); // Cierra el menú
+                  _shareExercise(withImage: false); // Llama a la función
+                },
+              ),
+              // Opción 3: Copiar el enlace
+              ListTile(
+                leading: const Icon(Icons.copy_outlined, color: Colors.grey),
+                title: const Text('Copiar Enlace'),
+                onTap: () {
+                  Navigator.pop(context); // Cierra el menú
+                  _copyLinkToClipboard(); // Llama a la función para copiar
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _columnaDerecha({
     required Map<String, dynamic> ejercicioData,
     required List<String> pasos,
@@ -952,28 +1154,12 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
         //   onCalificar: _mostrarDialogoCalificacion,
         //   onCompartir: _compartirCapturaConFacebookWeb,
         // ),
+        // ... dentro de _columnaDerecha
         CustomFeedbackCard(
           accion: 'Calificar',
           numeroComentarios: comentarios.length,
           onCalificar: _mostrarDialogoCalificacion,
-          onCompartir:
-              screenWidth < 800
-                  ? () {
-                    final titulo = ejercicioData?['Titulo'] ?? 'Ejercicio';
-                    _compartirCapturaYSharePlus(
-                      titulo,
-                      widget.tema,
-                      widget.ejercicioId,
-                    );
-                  }
-                  : () {
-                    final titulo = ejercicioData?['Titulo'] ?? 'Ejercicio';
-                    _compartirCapturaYFacebook(
-                      titulo,
-                      widget.tema,
-                      widget.ejercicioId,
-                    );
-                  },
+          onCompartir: _showSharingOptions, // <-- ✅ ¡ASÍ DE SIMPLE!
         ),
       ],
     );
@@ -1339,74 +1525,102 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     );
   }
 
-  Future<void> _compartirCapturaYFacebook(
-    String titulo,
-    String tema,
-    String ejercicioId,
-  ) async {
-    final Uint8List? image = await _screenshotController.capture();
-    if (image != null) {
-      // Descargar la imagen localmente
-      final blob = html.Blob([image]);
-      final urlBlob = html.Url.createObjectUrlFromBlob(blob);
+  Future<void> _shareExercise({bool withImage = false}) async {
+    if (ejercicioData == null) return; // No hacer nada si no hay datos
 
-      final link =
-          html.AnchorElement(href: urlBlob)
-            ..setAttribute('download', 'captura_ejercicio.png')
-            ..click();
+    // --- Muestra un diálogo de carga para mejorar la UX ---
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return const Center(child: CircularProgressIndicator());
+      },
+    );
 
-      html.Url.revokeObjectUrl(urlBlob);
+    try {
+      final titulo = ejercicioData!['Titulo'] ?? 'Ejercicio increíble';
+      final nombreTema = obtenerNombreTema(widget.tema);
 
-      // Después, compartir en Facebook
-      final urlEjercicio = Uri.encodeComponent(
-        'https://tuapp.com/$tema/$ejercicioId',
-      ); // CAMBIA aquí tu dominio real
-      final quote = Uri.encodeComponent('¡Revisa este ejercicio: $titulo!');
-      final facebookUrl =
-          'https://www.facebook.com/sharer/sharer.php?u=$urlEjercicio&quote=$quote';
+      // ❗️ IMPORTANTE: Reemplaza 'tuapp.com' con tu dominio real.
+      // Esta URL es la que se abrirá si alguien hace clic en el enlace compartido.
+      final url =
+          'https://study-connect.app/exercise/${widget.tema}/${widget.ejercicioId}';
 
-      html.window.open(facebookUrl, '_blank');
+      final textoACompartir =
+          '📘 ¡Mira este ejercicio sobre "$nombreTema" en Study Connect!\n\n$titulo\n\nEncuéntralo aquí:\n$url';
+
+      XFile? imageFile;
+
+      if (withImage) {
+        // --- Captura el screenshot ---
+        final Uint8List? imageBytes = await _screenshotController.capture();
+
+        if (imageBytes != null) {
+          if (kIsWeb) {
+            // En la web, usamos los bytes directamente.
+            imageFile = XFile.fromData(
+              imageBytes,
+              name: 'ejercicio.png',
+              mimeType: 'image/png',
+            );
+          } else {
+            // En móvil, guardamos la imagen en un directorio temporal.
+            final tempDir = await getTemporaryDirectory();
+            final file = await File(
+              '${tempDir.path}/ejercicio.png',
+            ).writeAsBytes(imageBytes);
+            imageFile = XFile(file.path);
+          }
+        }
+      }
+
+      // --- Cierra el diálogo de carga ---
+      if (mounted) Navigator.pop(context);
+
+      // --- Usa Share.shareXFiles para compartir texto e imagen ---
+      if (imageFile != null) {
+        await Share.shareXFiles(
+          [imageFile],
+          text: textoACompartir,
+          subject: 'Ejercicio de Study Connect: $titulo',
+        );
+      } else {
+        // Si no hay imagen (o no se seleccionó la opción), comparte solo el texto.
+        await Share.share(
+          textoACompartir,
+          subject: 'Ejercicio de Study Connect: $titulo',
+        );
+      }
+    } catch (e) {
+      // --- Cierra el diálogo de carga en caso de error ---
+      if (mounted) Navigator.pop(context);
+
+      // Muestra un snackbar de error
+      if (mounted) {
+        showCustomSnackbar(
+          context: context,
+          message: 'Error al intentar compartir: $e',
+          success: false,
+        );
+      }
     }
   }
 
-  Future<void> _compartirCapturaYSharePlus(
-    String titulo,
-    String tema,
-    String ejercicioId,
-  ) async {
-    final Uint8List? image = await _screenshotController.capture();
-    if (image != null) {
-      final blob = html.Blob([image]);
-      final urlBlob = html.Url.createObjectUrlFromBlob(blob);
+  /// ✅ NUEVA FUNCIÓN PARA COPIAR ENLACE
+  void _copyLinkToClipboard() {
+    if (ejercicioData == null) return;
 
-      // Descargar la imagen
-      final link =
-          html.AnchorElement(href: urlBlob)
-            ..setAttribute('download', 'captura_ejercicio.png')
-            ..click();
-
-      html.Url.revokeObjectUrl(urlBlob);
-    }
-
-    final urlEjercicio =
-        'https://tuapp.com/$tema/$ejercicioId'; // CAMBIA por tu dominio real
-    await Share.share('📘 $titulo\n$urlEjercicio');
-  }
-
-  void compartirEnFacebook(String titulo, String tema, String ejercicioId) {
-    final url = Uri.encodeComponent(
-      'https://tuapp.com/$tema/$ejercicioId',
-    ); // <-- CAMBIA por tu dominio real
-    final quote = Uri.encodeComponent('¡Revisa este ejercicio: $titulo!');
-    final facebookUrl =
-        'https://www.facebook.com/sharer/sharer.php?u=$url&quote=$quote';
-    html.window.open(facebookUrl, '_blank');
-  }
-
-  void compartirGenerico(String titulo, String tema, String ejercicioId) {
+    // ❗️ IMPORTANTE: Reemplaza 'tuapp.com' con tu dominio real.
     final url =
-        'https://tuapp.com/$tema/$ejercicioId'; // <-- CAMBIA por tu dominio real
-    Share.share('$titulo\n$url');
+        'https://study-connect.app/exercise/${widget.tema}/${widget.ejercicioId}';
+
+    Clipboard.setData(ClipboardData(text: url)).then((_) {
+      showCustomSnackbar(
+        context: context,
+        message: '✅ Enlace copiado al portapapeles',
+        success: true,
+      );
+    });
   }
 
   @override
