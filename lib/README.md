@@ -197,12 +197,6 @@ Una vez hecho lo anterior, desde inicializar `git` hasta hacer el `git push orig
 
 ## Recursos o fuentes que utilice 
 
-### Fuentes utilizadas para el contenido del index.html
-
-- `[Heavy metal](https://es.wikipedia.org/wiki/Heavy_metal)`
-- `[Babymetal](https://es.wikipedia.org/wiki/Babymetal)`
-- `[Página oficial de Baby Metal](https://babymetal.com/mob/index.php?site=TO&ima=2050)`
-- `[BABYMETAL: el fenómeno “kawaii metal” que divide al mundo del metal](https://heavymextal.com/babymetal-el-fenomeno-kawaii-metal-que-divide-al-mundo-del-metal/)`
 
 ### Fuentes de Referencia para las etiquetas HTML
 
