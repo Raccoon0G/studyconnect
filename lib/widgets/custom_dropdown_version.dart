@@ -21,7 +21,7 @@ class CustomDropdownVersiones extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFF6F3FA),
+        color: Colors.white.withOpacity(0.95), // mejora fondo
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -32,6 +32,7 @@ class CustomDropdownVersiones extends StatelessWidget {
         ],
         border: Border.all(color: Colors.grey.shade300),
       ),
+
       child: DropdownButtonFormField<String>(
         value: versionSeleccionada,
         isExpanded: true,

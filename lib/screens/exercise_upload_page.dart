@@ -624,8 +624,9 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
     _descriptionController.text = data['DesEjercicio'] ?? '';
 
     // Obtener la versión actual
-    final versionId = data['versionActual'] ?? 'Version_01';
+    final versionId = _versionActualId ?? data['versionActual'] ?? 'Version_01';
     _versionActualId = versionId;
+
     final versionDoc =
         await ejerRef.collection('Versiones').doc(versionId).get();
 
@@ -663,6 +664,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
       _modo = args['modo'] as String?;
       _ejercicioId = args['ejercicioId'] as String?;
       _temaSeleccionado = args['tema'] as String?;
+      _versionActualId = args['versionId'] as String?;
 
       if (_modo == 'editar' || _modo == 'nueva_version') {
         await _cargarDatosEjercicio();
@@ -789,7 +791,46 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                                     ),
                                   ),
                                 ),
+
+                                if (_modo == 'editar' &&
+                                    _versionActualId != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.amber.shade100,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        'Editando la versión: $_versionActualId',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                if (_modo == 'nueva_version' &&
+                                    _ejercicioId != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.lightBlue.shade100,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        'Agregando nueva versión para: $_ejercicioId',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
                                 const SizedBox(height: 16),
+
                                 const Text(
                                   'Título',
                                   style: TextStyle(color: Colors.white),
@@ -906,7 +947,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                                     borderRadius: BorderRadius.circular(12),
                                     child: SizedBox(
                                       width: double.infinity,
-                                      height: 300,
+                                      height: 265,
                                       child: AspectRatio(
                                         aspectRatio: 4 / 3,
                                         child: Container(

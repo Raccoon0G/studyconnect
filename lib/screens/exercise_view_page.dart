@@ -256,109 +256,158 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     String tema,
     String ejercicioId,
   ) async {
-    final subcoleccion = 'Ejer$tema';
-    final ejercicioDocRef = FirebaseFirestore.instance
+    final ejercicioRef = FirebaseFirestore.instance
         .collection('calculo')
         .doc(tema)
-        .collection(subcoleccion)
+        .collection('Ejer$tema')
         .doc(ejercicioId);
 
-    final versionesRef = ejercicioDocRef.collection('Versiones');
-    final versionesSnap = await versionesRef.get();
+    final versionesRef = ejercicioRef.collection('Versiones');
+    final versionesSnap =
+        await versionesRef.orderBy('Fecha', descending: true).get();
 
-    final confirmar = await showCustomDialog<bool>(
-      context: context,
-      titulo: 'Eliminar ejercicio completo',
-      mensaje:
-          'Este ejercicio tiene ${versionesSnap.docs.length} versiones.\n¿Deseas eliminar todo el ejercicio junto con sus versiones?',
-      tipo: CustomDialogType.warning,
-      botones: [
-        DialogButton(texto: 'Cancelar', value: false),
-        DialogButton(texto: 'Eliminar todo', value: true),
-      ],
-    );
+    if (versionesSnap.docs.length == 1) {
+      // SOLO UNA VERSIÓN: eliminar ejercicio completo
+      final confirmar = await showCustomDialog<bool>(
+        context: context,
+        titulo: 'Eliminar ejercicio completo',
+        mensaje:
+            'Este ejercicio tiene una única versión. ¿Deseas eliminarlo por completo?',
+        tipo: CustomDialogType.warning,
+        botones: [
+          DialogButton(texto: 'Cancelar', value: false),
+          DialogButton(texto: 'Eliminar', value: true),
+        ],
+      );
 
-    // final confirmar = await showDialog<bool>(
-    //   context: context,
-    //   builder:
-    //       (context) => AlertDialog(
-    //         title: const Text('Eliminar ejercicio completo'),
-    //         content: Text(
-    //           '¿Deseas eliminar todo el ejercicio y sus versiones?',
-    //         ),
-    //         actions: [
-    //           TextButton(
-    //             onPressed: () => Navigator.of(context).pop(false),
-    //             child: const Text('Cancelar'),
-    //           ),
-    //           TextButton(
-    //             onPressed: () => Navigator.of(context).pop(true),
-    //             child: const Text('Eliminar todo'),
-    //           ),
-    //         ],
-    //       ),
-    // );
-
-    if (confirmar == true) {
-      try {
-        final firestore = FirebaseFirestore.instance;
-
-        final ejercicioRef = firestore
-            .collection('calculo')
-            .doc(tema)
-            .collection('Ejer$tema')
-            .doc(ejercicioId);
-
-        final versionesRef = ejercicioRef.collection('Versiones');
-        final versionesSnap = await versionesRef.get();
-
-        // Eliminar cada versión
-        for (final version in versionesSnap.docs) {
-          await versionesRef.doc(version.id).delete();
-          print('Versión eliminada: ${version.id}');
-        }
-
-        // Eliminar el documento del ejercicio
+      if (confirmar == true) {
+        await versionesRef.doc(versionSeleccionada).delete();
         await ejercicioRef.delete();
-        print('Ejercicio $ejercicioId eliminado.');
 
-        // Eliminar comentarios relacionados
         final comentariosSnap =
-            await firestore
+            await FirebaseFirestore.instance
                 .collection('comentarios_ejercicios')
                 .where('ejercicioId', isEqualTo: ejercicioId)
                 .where('tema', isEqualTo: tema)
                 .get();
-
         for (final c in comentariosSnap.docs) {
           await c.reference.delete();
         }
 
-        // 🔽 Decrementar EjerSubidos
         final autorId = ejercicioData?['AutorId'];
         if (autorId != null && autorId.toString().isNotEmpty) {
-          final usuarioRef = firestore.collection('usuarios').doc(autorId);
+          final usuarioRef = FirebaseFirestore.instance
+              .collection('usuarios')
+              .doc(autorId);
           await usuarioRef.update({'EjerSubidos': FieldValue.increment(-1)});
         }
 
+        if (mounted) Navigator.pop(context, 'eliminado');
+      }
+    } else {
+      // MÁS DE UNA VERSIÓN: eliminar solo la seleccionada
+      final confirmar = await showCustomDialog<bool>(
+        context: context,
+        titulo: 'Eliminar versión del ejercicio',
+        mensaje:
+            '¿Deseas eliminar la versión seleccionada ($versionSeleccionada) del ejercicio?',
+        tipo: CustomDialogType.warning,
+        botones: [
+          DialogButton(texto: 'Cancelar', value: false),
+          DialogButton(texto: 'Eliminar versión', value: true),
+        ],
+      );
+
+      if (confirmar == true && versionSeleccionada != null) {
+        await versionesRef.doc(versionSeleccionada).delete();
+
+        // Si eliminaste la versión actual, asignar la siguiente más reciente
+        if (ejercicioData?['versionActual'] == versionSeleccionada) {
+          final nuevaVersion =
+              versionesSnap.docs
+                  .where((v) => v.id != versionSeleccionada)
+                  .first;
+          await ejercicioRef.update({
+            'versionActual': nuevaVersion.id,
+            'FechMod': nuevaVersion['Fecha'],
+          });
+          versionSeleccionada = nuevaVersion.id;
+        }
+
         if (mounted) {
-          print('✅ Eliminado correctamente. Cerrando vista...');
           showCustomSnackbar(
             context: context,
-            message: '✅ Ejercicio y versiones eliminadas.',
+            message: '✅ Versión eliminada correctamente.',
             success: true,
           );
-
-          Navigator.pop(context, 'eliminado');
+          await _cargarTodo();
         }
-      } catch (e) {
-        showCustomDialog(
-          context: context,
-          titulo: 'Error al eliminar',
-          mensaje: 'Ocurrió un error: ${e.toString()}',
-          tipo: CustomDialogType.error,
-        );
       }
+    }
+  }
+
+  Future<void> _eliminarSoloVersionSeleccionada(
+    BuildContext context,
+    String tema,
+    String ejercicioId,
+  ) async {
+    if (versionSeleccionada == null) return;
+    print('🧾 Versión a eliminar: $versionSeleccionada');
+
+    final confirmar = await showCustomDialog<bool>(
+      context: context,
+      titulo: 'Eliminar versión',
+      mensaje:
+          '¿Seguro que deseas eliminar la versión "${versionSeleccionada ?? '(sin seleccionar)'}"?',
+
+      tipo: CustomDialogType.warning,
+      botones: [
+        DialogButton(texto: 'Cancelar', value: false),
+        DialogButton(texto: 'Eliminar versión', value: true),
+      ],
+    );
+
+    if (confirmar == true) {
+      final ejercicioRef = FirebaseFirestore.instance
+          .collection('calculo')
+          .doc(tema)
+          .collection('Ejer$tema')
+          .doc(ejercicioId);
+
+      // Eliminar la versión seleccionada
+      await ejercicioRef
+          .collection('Versiones')
+          .doc(versionSeleccionada)
+          .delete();
+
+      // Actualizar versionActual si la que se eliminó es la actual
+      final doc = await ejercicioRef.get();
+      if (doc.exists && doc.data()?['versionActual'] == versionSeleccionada) {
+        final nuevasVersiones =
+            await ejercicioRef
+                .collection('Versiones')
+                .orderBy('Fecha', descending: true)
+                .get();
+
+        if (nuevasVersiones.docs.isNotEmpty) {
+          final nueva = nuevasVersiones.docs.first;
+          await ejercicioRef.update({
+            'versionActual': nueva.id,
+            'FechMod': nueva['Fecha'],
+          });
+          setState(() {
+            versionSeleccionada = nueva.id;
+          });
+        }
+      }
+
+      showCustomSnackbar(
+        context: context,
+        message: '✅ Versión eliminada correctamente.',
+        success: true,
+      );
+
+      await _cargarTodo();
     }
   }
 
@@ -532,57 +581,170 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  ElevatedButton.icon(
-                    icon: Icon(Icons.edit, color: Colors.white),
-                    label: Text("Editar"),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueAccent,
-                    ),
-                    onPressed: () async {
-                      // Navegar a ExerciseUploadPage en modo edición
-                      Navigator.pushNamed(
-                        context,
-                        '/exercise_upload',
-                        arguments: {
-                          'tema': tema,
-                          'ejercicioId': ejercicioId,
-                          'modo': 'editar',
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: ElevatedButton.icon(
+                        icon: Icon(Icons.edit, color: Colors.white),
+                        label: Text("Editar"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blueAccent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        ),
+                        onPressed: () {
+                          if (versionSeleccionada == null) {
+                            showCustomDialog(
+                              context: context,
+                              titulo: 'Versión no cargada',
+                              mensaje:
+                                  'Espera a que se carguen los datos antes de editar.',
+                              tipo: CustomDialogType.warning,
+                            );
+                            return;
+                          }
+                          Navigator.pushNamed(
+                            context,
+                            '/exercise_upload',
+                            arguments: {
+                              'tema': tema,
+                              'ejercicioId': ejercicioId,
+                              'modo': 'editar',
+                              'versionId': versionSeleccionada,
+                            },
+                          );
                         },
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    icon: Icon(Icons.add_circle_outline, color: Colors.white),
-                    label: Text("Nueva versión"),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orangeAccent,
+                      ),
                     ),
-
-                    onPressed: () async {
-                      // Navegar a ExerciseUploadPage en modo nueva versión
-                      Navigator.pushNamed(
-                        context,
-                        '/exercise_upload',
-                        arguments: {
-                          'tema': tema,
-                          'ejercicioId': ejercicioId,
-                          'modo': 'nueva_version',
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: ElevatedButton.icon(
+                        icon: Icon(
+                          Icons.add_circle_outline,
+                          color: Colors.white,
+                        ),
+                        label: Text("Nueva versión"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orangeAccent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        ),
+                        onPressed: () {
+                          Navigator.pushNamed(
+                            context,
+                            '/exercise_upload',
+                            arguments: {
+                              'tema': tema,
+                              'ejercicioId': ejercicioId,
+                              'modo': 'nueva_version',
+                            },
+                          );
                         },
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    icon: Icon(Icons.delete, color: Colors.white),
-                    label: Text("Eliminar"),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent,
+                      ),
                     ),
-                    onPressed: () {
-                      print('🗑 Se presionó el botón Eliminar');
-                      _confirmarEliminarEjercicio(context, tema, ejercicioId);
-                    },
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: PopupMenuButton<String>(
+                        tooltip: 'Opciones de eliminación',
+                        onSelected: (value) {
+                          if (value == 'version') {
+                            _eliminarSoloVersionSeleccionada(
+                              context,
+                              widget.tema,
+                              widget.ejercicioId,
+                            );
+                          } else if (value == 'ejercicio') {
+                            _confirmarEliminarEjercicio(
+                              context,
+                              widget.tema,
+                              widget.ejercicioId,
+                            );
+                          }
+                        },
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        color: Colors.white,
+                        itemBuilder: (_) {
+                          if (versiones.length == 1) {
+                            // Solo mostrar opción de eliminar ejercicio completo
+                            return [
+                              const PopupMenuItem(
+                                value: 'ejercicio',
+                                child: ListTile(
+                                  leading: Icon(
+                                    Icons.delete_forever,
+                                    color: Colors.red,
+                                  ),
+                                  title: Text('Eliminar ejercicio completo'),
+                                ),
+                              ),
+                            ];
+                          } else {
+                            return [
+                              const PopupMenuItem(
+                                value: 'version',
+                                child: ListTile(
+                                  leading: Icon(
+                                    Icons.delete_outline,
+                                    color: Colors.redAccent,
+                                  ),
+                                  title: Text('Eliminar versión actual'),
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'ejercicio',
+                                child: ListTile(
+                                  leading: Icon(
+                                    Icons.delete_forever,
+                                    color: Colors.red,
+                                  ),
+                                  title: Text('Eliminar ejercicio completo'),
+                                ),
+                              ),
+                            ];
+                          }
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent,
+                            borderRadius: BorderRadius.circular(30),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.2),
+                                blurRadius: 6,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 7,
+                            horizontal: 10,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: const [
+                              Icon(Icons.delete, color: Colors.white),
+                              SizedBox(width: 8),
+                              Text(
+                                "Eliminar",
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),

@@ -575,6 +575,15 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
           ),
           const SizedBox(height: 8),
           InfoWithIcon(
+            icon: Icons.label_important,
+            text: 'Subtema: ${ejercicioData['subtema']}',
+            alignment: MainAxisAlignment.center,
+            iconAlignment: Alignment.center,
+            textColor: Colors.white,
+            textSize: 17,
+          ),
+          const SizedBox(height: 8),
+          InfoWithIcon(
             icon: Icons.assignment,
             text: 'Ejercicio: $materialId',
             alignment: MainAxisAlignment.center,
@@ -682,40 +691,138 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
           const SizedBox(height: 38),
 
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 260, minHeight: 120),
+            constraints: const BoxConstraints(maxHeight: 180, minHeight: 120),
             child: const ExerciseCarousel(),
           ),
           const SizedBox(height: 16),
           if (esAutor)
-            Row(
-              children: [
-                ElevatedButton.icon(
-                  onPressed: _editarMaterial,
-                  icon: Icon(Icons.edit, color: Colors.white),
-                  label: Text("Editar"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
+            Padding(
+              padding: const EdgeInsets.only(top: 30.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.edit, color: Colors.white),
+                        label: const Text("Editar"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blueAccent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        ),
+                        onPressed: _editarMaterial,
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton.icon(
-                  onPressed: _confirmarEliminarMaterial,
-                  icon: Icon(Icons.delete, color: Colors.white),
-                  label: Text("Eliminar"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.redAccent,
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: ElevatedButton.icon(
+                        icon: const Icon(
+                          Icons.add_circle_outline,
+                          color: Colors.white,
+                        ),
+                        label: const Text("Nueva versión"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orangeAccent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        ),
+                        onPressed: _agregarNuevaVersion,
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton.icon(
-                  onPressed: _agregarNuevaVersion,
-                  icon: Icon(Icons.add_circle_outline, color: Colors.white),
-                  label: Text("Nueva versión"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orangeAccent,
+                  PopupMenuButton<String>(
+                    tooltip: 'Opciones de eliminación',
+                    onSelected: (value) {
+                      if (value == 'version') {
+                        _eliminarSoloVersionSeleccionada(context);
+                      } else if (value == 'material') {
+                        _confirmarEliminarMaterial(context);
+                      }
+                    },
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    color: Colors.white,
+                    itemBuilder: (_) {
+                      if (versiones.length == 1) {
+                        return [
+                          const PopupMenuItem(
+                            value: 'material',
+                            child: ListTile(
+                              leading: Icon(
+                                Icons.delete_forever,
+                                color: Colors.red,
+                              ),
+                              title: Text('Eliminar material completo'),
+                            ),
+                          ),
+                        ];
+                      } else {
+                        return [
+                          const PopupMenuItem(
+                            value: 'version',
+                            child: ListTile(
+                              leading: Icon(
+                                Icons.delete_outline,
+                                color: Colors.redAccent,
+                              ),
+                              title: Text('Eliminar versión actual'),
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'material',
+                            child: ListTile(
+                              leading: Icon(
+                                Icons.delete_forever,
+                                color: Colors.red,
+                              ),
+                              title: Text('Eliminar material completo'),
+                            ),
+                          ),
+                        ];
+                      }
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        borderRadius: BorderRadius.circular(30),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 6,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 7,
+                        horizontal: 10,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.delete, color: Colors.white),
+                          SizedBox(width: 8),
+                          Text(
+                            "Eliminar",
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
         ],
       ),
@@ -734,19 +841,33 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     );
   }
 
-  void _confirmarEliminarMaterial() async {
-    final confirm = await showCustomDialog<bool>(
+  void _confirmarEliminarMaterial(BuildContext context) async {
+    final ref = FirebaseFirestore.instance
+        .collection('materiales')
+        .doc(widget.tema)
+        .collection('Mat${widget.tema}')
+        .doc(widget.materialId);
+
+    final versionesSnap =
+        await ref
+            .collection('Versiones')
+            .orderBy('Fecha', descending: true)
+            .get();
+
+    final confirmar = await showCustomDialog<bool>(
       context: context,
       titulo: '¿Eliminar material?',
       mensaje:
-          'Esta acción eliminará permanentemente este material y todas sus versiones. ¿Estás seguro?',
+          versionesSnap.docs.length == 1
+              ? 'Este material solo tiene una versión. ¿Deseas eliminarlo por completo?'
+              : '¿Estás seguro de eliminar el material completo y todas sus versiones?',
       tipo: CustomDialogType.warning,
       botones: [
         DialogButton<bool>(texto: 'Cancelar', value: false),
         DialogButton<bool>(texto: 'Eliminar', value: true),
       ],
     );
-    if (confirm == true) {
+    if (confirmar == true) {
       await _eliminarMaterial();
     }
   }
@@ -786,6 +907,61 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     }
   }
 
+  Future<void> _eliminarSoloVersionSeleccionada(BuildContext context) async {
+    if (versionSeleccionada == null) return;
+
+    final confirmar = await showCustomDialog<bool>(
+      context: context,
+      titulo: 'Eliminar versión',
+      mensaje: '¿Seguro que deseas eliminar la versión "$versionSeleccionada"?',
+      tipo: CustomDialogType.warning,
+      botones: [
+        DialogButton(texto: 'Cancelar', value: false),
+        DialogButton(texto: 'Eliminar versión', value: true),
+      ],
+    );
+
+    if (confirmar == true) {
+      final ref = FirebaseFirestore.instance
+          .collection('materiales')
+          .doc(widget.tema)
+          .collection('Mat${widget.tema}')
+          .doc(widget.materialId);
+
+      // Eliminar la versión
+      await ref.collection('Versiones').doc(versionSeleccionada).delete();
+
+      // Actualizar si era la versión actual
+      final doc = await ref.get();
+      if (doc.exists && doc.data()?['versionActual'] == versionSeleccionada) {
+        final nuevasVersiones =
+            await ref
+                .collection('Versiones')
+                .orderBy('Fecha', descending: true)
+                .get();
+
+        if (nuevasVersiones.docs.isNotEmpty) {
+          final nueva = nuevasVersiones.docs.first;
+          await ref.update({
+            'versionActual': nueva.id,
+            'FechMod': nueva['Fecha'],
+          });
+          setState(() {
+            versionSeleccionada = nueva.id;
+          });
+        }
+      }
+
+      showCustomSnackbar(
+        context: context,
+        message: '✅ Versión eliminada correctamente.',
+        success: true,
+      );
+
+      await _cargarTodo();
+    }
+  }
+
   void _agregarNuevaVersion() {
     Navigator.pushNamed(
       context,
@@ -805,6 +981,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     required double screenWidth,
   }) {
     final titulo = materialData['titulo'] ?? '';
+
     final descripcion = materialData['descripcion'] ?? '';
 
     final List archivos = materialData['archivos'] ?? [];
