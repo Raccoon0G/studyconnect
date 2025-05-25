@@ -554,7 +554,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         );
         return;
       }
-
+      //TODO Checar implementacion con api
       final String pageId =
           "ID_DE_LA_PAGINA_FACEBOOK_DEL_USUARIO"; // Reemplazar
       if (pageId == "ID_DE_LA_PAGINA_FACEBOOK_DEL_USUARIO") {

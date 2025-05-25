@@ -130,6 +130,8 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
       // 3. Preparar la llamada a la Graph API de Facebook para subir una foto a una PÁGINA
       // (Publicar en un perfil personal es mucho más restrictivo)
       // NOTA: Necesitas el ID de la página donde quieres publicar.
+
+      //TODO Checar implementacion con api
       final String pageId = "ID_DE_LA_PAGINA_DEL_USUARIO";
       var request = http.MultipartRequest(
         'POST',
