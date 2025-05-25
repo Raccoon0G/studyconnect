@@ -35,7 +35,6 @@ class ExerciseListPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
       appBar: const CustomAppBar(),
-
       body: StreamBuilder<QuerySnapshot>(
         stream: ejerciciosRef.snapshots(),
         builder: (context, snapshot) {
@@ -50,8 +49,6 @@ class ExerciseListPage extends StatelessWidget {
               final double screenWidth = constraints.maxWidth;
               final bool isMobile = screenWidth < 1200;
               final double fontSize = screenWidth > 800 ? 20 : 16;
-
-              /// Calcula el ancho total de la tabla
               final double totalWidth = constraints.maxWidth;
 
               return Container(
@@ -90,130 +87,135 @@ class ExerciseListPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 24),
                     isMobile
-                        ? Column(
-                          children:
-                              ejercicios.map((doc) {
-                                final data = doc.data() as Map<String, dynamic>;
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                  ),
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(20),
-                                    hoverColor: Colors.black12,
-                                    onTap: () async {
-                                      final result = await Navigator.pushNamed(
-                                        context,
-                                        '/exercise_view',
-                                        arguments: {
-                                          'tema': temaKey,
-                                          'ejercicioId': doc.id,
-                                        },
-                                      );
-
-                                      if (result == 'eliminado') {
-                                        await LocalNotificationService.show(
-                                          title: 'Ejercicio eliminado',
-                                          body:
-                                              'El ejercicio fue eliminado correctamente.',
-                                        );
-                                      }
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.all(12),
-                                      width: double.infinity,
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(20),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black12,
-                                            blurRadius: 8,
-                                            offset: Offset(0, 4),
-                                          ),
-                                        ],
+                        ? Expanded(
+                          child: SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            child: Column(
+                              children:
+                                  ejercicios.map((doc) {
+                                    final data =
+                                        doc.data() as Map<String, dynamic>;
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
                                       ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          CustomLatexText(
-                                            contenido: data['Titulo'] ?? '',
-                                            fontSize: fontSize,
-                                            prepararLatex: prepararLaTeX,
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            data['DesEjercicio'] ?? '',
-                                            maxLines: 3,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              fontSize: fontSize - 2,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            "Autor: ${data['Autor'] ?? 'Anónimo'}",
-                                            style: TextStyle(
-                                              fontSize: fontSize - 3,
-                                              color: Colors.black54,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              CustomStarRating(
-                                                valor:
-                                                    (data['CalPromedio'] is num)
-                                                        ? (data['CalPromedio']
-                                                                as num)
-                                                            .toDouble()
-                                                        : 0.0,
-                                                size: 22,
-                                              ),
-                                              CustomActionButton(
-                                                text: 'Ver',
-                                                icon: Icons.arrow_forward_ios,
-                                                onPressed: () async {
-                                                  final result =
-                                                      await Navigator.pushNamed(
-                                                        context,
-                                                        '/exercise_view',
-                                                        arguments: {
-                                                          'tema': temaKey,
-                                                          'ejercicioId': doc.id,
-                                                        },
-                                                      );
-
-                                                  if (result == 'eliminado') {
-                                                    await LocalNotificationService.show(
-                                                      title:
-                                                          'Ejercicio eliminado',
-                                                      body:
-                                                          'El ejercicio fue eliminado correctamente.',
-                                                    );
-                                                  }
-
-                                                  if (result == 'eliminado') {
-                                                    await LocalNotificationService.show(
-                                                      title:
-                                                          'Ejercicio eliminado',
-                                                      body:
-                                                          'El ejercicio fue eliminado correctamente.',
-                                                    );
-                                                  }
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(20),
+                                        hoverColor: Colors.black12,
+                                        onTap: () async {
+                                          final result =
+                                              await Navigator.pushNamed(
+                                                context,
+                                                '/exercise_view',
+                                                arguments: {
+                                                  'tema': temaKey,
+                                                  'ejercicioId': doc.id,
                                                 },
+                                              );
+
+                                          if (result == 'eliminado') {
+                                            await LocalNotificationService.show(
+                                              title: 'Ejercicio eliminado',
+                                              body:
+                                                  'El ejercicio fue eliminado correctamente.',
+                                            );
+                                          }
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(12),
+                                          width: double.infinity,
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black12,
+                                                blurRadius: 8,
+                                                offset: const Offset(0, 4),
                                               ),
                                             ],
                                           ),
-                                        ],
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              CustomLatexText(
+                                                contenido: data['Titulo'] ?? '',
+                                                fontSize: fontSize,
+                                                prepararLatex: prepararLaTeX,
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                data['DesEjercicio'] ?? '',
+                                                maxLines: 3,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: fontSize - 2,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                "Autor: ${data['Autor'] ?? 'Anónimo'}",
+                                                style: TextStyle(
+                                                  fontSize: fontSize - 3,
+                                                  color: Colors.black54,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment
+                                                        .spaceBetween,
+                                                children: [
+                                                  CustomStarRating(
+                                                    valor:
+                                                        (data['CalPromedio']
+                                                                is num)
+                                                            ? (data['CalPromedio']
+                                                                    as num)
+                                                                .toDouble()
+                                                            : 0.0,
+                                                    size: 22,
+                                                  ),
+                                                  CustomActionButton(
+                                                    text: 'Ver',
+                                                    icon:
+                                                        Icons.arrow_forward_ios,
+                                                    onPressed: () async {
+                                                      final result =
+                                                          await Navigator.pushNamed(
+                                                            context,
+                                                            '/exercise_view',
+                                                            arguments: {
+                                                              'tema': temaKey,
+                                                              'ejercicioId':
+                                                                  doc.id,
+                                                            },
+                                                          );
+
+                                                      if (result ==
+                                                          'eliminado') {
+                                                        await LocalNotificationService.show(
+                                                          title:
+                                                              'Ejercicio eliminado',
+                                                          body:
+                                                              'El ejercicio fue eliminado correctamente.',
+                                                        );
+                                                      }
+                                                    },
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
+                                    );
+                                  }).toList(),
+                            ),
+                          ),
                         )
                         : SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
@@ -257,7 +259,6 @@ class ExerciseListPage extends StatelessWidget {
                                         }
                                       },
                                       cells: [
-                                        // Ejercicio
                                         DataCell(
                                           SizedBox(
                                             width: totalWidth * 0.18,
@@ -268,8 +269,6 @@ class ExerciseListPage extends StatelessWidget {
                                             ),
                                           ),
                                         ),
-
-                                        // Descripción
                                         DataCell(
                                           SizedBox(
                                             width: totalWidth * 0.32,
@@ -300,7 +299,6 @@ class ExerciseListPage extends StatelessWidget {
                                             duration: const Duration(
                                               milliseconds: 800,
                                             ),
-
                                             valor:
                                                 (data['CalPromedio'] is num)
                                                     ? (data['CalPromedio']
@@ -313,11 +311,8 @@ class ExerciseListPage extends StatelessWidget {
                                           ),
                                         ),
                                         DataCell(
-                                          // 1) usamos FRactionallySizedBox para darle al botón
-                                          //    un ancho relativo al ancho de la tabla
                                           FractionallySizedBox(
-                                            widthFactor:
-                                                0.10, // 10% de totalWidth
+                                            widthFactor: 0.10,
                                             alignment: Alignment.centerLeft,
                                             child: FittedBox(
                                               fit: BoxFit.scaleDown,

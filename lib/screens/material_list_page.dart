@@ -36,7 +36,6 @@ class MaterialListPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
       appBar: const CustomAppBar(),
-
       body: StreamBuilder<QuerySnapshot>(
         stream: materialesQuery.snapshots(),
         builder: (context, snapshot) {
@@ -89,104 +88,114 @@ class MaterialListPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 24),
                     isMobile
-                        ? Column(
-                          children:
-                              materiales.map((doc) {
-                                final data = doc.data() as Map<String, dynamic>;
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                  ),
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(20),
-                                    hoverColor: Colors.black12,
-                                    onTap: () {
-                                      Navigator.pushNamed(
-                                        context,
-                                        '/material_view',
-                                        arguments: {
-                                          'tema': temaKey,
-                                          'materialId': doc.id,
-                                        },
-                                      );
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.all(12),
-                                      width: double.infinity,
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(20),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black12,
-                                            blurRadius: 8,
-                                            offset: Offset(0, 4),
-                                          ),
-                                        ],
+                        ? Expanded(
+                          child: SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            child: Column(
+                              children:
+                                  materiales.map((doc) {
+                                    final data =
+                                        doc.data() as Map<String, dynamic>;
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
                                       ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          CustomLatexText(
-                                            contenido: data['titulo'] ?? '',
-                                            fontSize: fontSize,
-                                            prepararLatex: prepararLaTeX,
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            data['descripcion'] ?? '',
-                                            maxLines: 3,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              fontSize: fontSize - 2,
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(20),
+                                        hoverColor: Colors.black12,
+                                        onTap: () {
+                                          Navigator.pushNamed(
+                                            context,
+                                            '/material_view',
+                                            arguments: {
+                                              'tema': temaKey,
+                                              'materialId': doc.id,
+                                            },
+                                          );
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(12),
+                                          width: double.infinity,
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(
+                                              20,
                                             ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            "Autor: ${data['autorNombre'] ?? 'Anónimo'}",
-                                            style: TextStyle(
-                                              fontSize: fontSize - 3,
-                                              color: Colors.black54,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              CustomStarRating(
-                                                valor:
-                                                    (data['calificacionPromedio']
-                                                            is num)
-                                                        ? (data['calificacionPromedio']
-                                                                as num)
-                                                            .toDouble()
-                                                        : 0.0,
-                                                size: 22,
-                                              ),
-                                              CustomActionButton(
-                                                text: 'Ver',
-                                                icon: Icons.arrow_forward_ios,
-                                                onPressed: () {
-                                                  Navigator.pushNamed(
-                                                    context,
-                                                    '/material_view',
-                                                    arguments: {
-                                                      'tema': temaKey,
-                                                      'materialId': doc.id,
-                                                    },
-                                                  );
-                                                },
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black12,
+                                                blurRadius: 8,
+                                                offset: const Offset(0, 4),
                                               ),
                                             ],
                                           ),
-                                        ],
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              CustomLatexText(
+                                                contenido: data['titulo'] ?? '',
+                                                fontSize: fontSize,
+                                                prepararLatex: prepararLaTeX,
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                data['descripcion'] ?? '',
+                                                maxLines: 3,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: fontSize - 2,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                "Autor: ${data['autorNombre'] ?? 'Anónimo'}",
+                                                style: TextStyle(
+                                                  fontSize: fontSize - 3,
+                                                  color: Colors.black54,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment
+                                                        .spaceBetween,
+                                                children: [
+                                                  CustomStarRating(
+                                                    valor:
+                                                        (data['calificacionPromedio']
+                                                                is num)
+                                                            ? (data['calificacionPromedio']
+                                                                    as num)
+                                                                .toDouble()
+                                                            : 0.0,
+                                                    size: 22,
+                                                  ),
+                                                  CustomActionButton(
+                                                    text: 'Ver',
+                                                    icon:
+                                                        Icons.arrow_forward_ios,
+                                                    onPressed: () {
+                                                      Navigator.pushNamed(
+                                                        context,
+                                                        '/material_view',
+                                                        arguments: {
+                                                          'tema': temaKey,
+                                                          'materialId': doc.id,
+                                                        },
+                                                      );
+                                                    },
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
+                                    );
+                                  }).toList(),
+                            ),
+                          ),
                         )
                         : SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
