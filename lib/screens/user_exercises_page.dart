@@ -2,9 +2,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-class MyExercisesPage extends StatelessWidget {
+class MyExercisesPage extends StatefulWidget {
   const MyExercisesPage({super.key});
 
+  @override
+  State<MyExercisesPage> createState() => _MyExercisesPageState();
+}
+
+class _MyExercisesPageState extends State<MyExercisesPage> {
   Future<List<Map<String, dynamic>>> _fetchMyExercises() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return [];
@@ -48,6 +53,9 @@ class MyExercisesPage extends StatelessWidget {
     String subcoleccion,
     String docId,
   ) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
     final versionesRef = FirebaseFirestore.instance
         .collection('calculo')
         .doc(tema)
@@ -69,12 +77,23 @@ class MyExercisesPage extends StatelessWidget {
       return;
     }
 
-    await FirebaseFirestore.instance
+    final docRef = FirebaseFirestore.instance
         .collection('calculo')
         .doc(tema)
         .collection(subcoleccion)
-        .doc(docId)
-        .delete();
+        .doc(docId);
+
+    await docRef.delete();
+
+    // 🔄 Decrementar contador de ejercicios subidos
+    final userRef = FirebaseFirestore.instance.collection('usuarios').doc(uid);
+    await FirebaseFirestore.instance.runTransaction((transaction) async {
+      final snapshot = await transaction.get(userRef);
+      final actual = snapshot.data()?['EjerSubidos'] ?? 0;
+      transaction.update(userRef, {
+        'EjerSubidos': (actual - 1).clamp(0, actual),
+      });
+    });
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -82,6 +101,18 @@ class MyExercisesPage extends StatelessWidget {
         backgroundColor: Colors.green,
       ),
     );
+
+    setState(() {
+      _futureEjercicios = _fetchMyExercises();
+    });
+  }
+
+  late Future<List<Map<String, dynamic>>> _futureEjercicios;
+
+  @override
+  void initState() {
+    super.initState();
+    _futureEjercicios = _fetchMyExercises();
   }
 
   @override
@@ -93,7 +124,7 @@ class MyExercisesPage extends StatelessWidget {
       ),
       backgroundColor: const Color(0xFF036799),
       body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _fetchMyExercises(),
+        future: _futureEjercicios,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(

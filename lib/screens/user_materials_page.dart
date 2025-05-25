@@ -2,9 +2,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-class MyMaterialsPage extends StatelessWidget {
+class MyMaterialsPage extends StatefulWidget {
   const MyMaterialsPage({super.key});
 
+  @override
+  State<MyMaterialsPage> createState() => _MyMaterialsPageState();
+}
+
+class _MyMaterialsPageState extends State<MyMaterialsPage> {
   Future<List<Map<String, dynamic>>> _fetchMyMaterials() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return [];
@@ -49,6 +54,9 @@ class MyMaterialsPage extends StatelessWidget {
     String subcoleccion,
     String docId,
   ) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
     final versionesRef = FirebaseFirestore.instance
         .collection('materiales')
         .doc(tema)
@@ -77,12 +85,35 @@ class MyMaterialsPage extends StatelessWidget {
         .doc(docId)
         .delete();
 
+    // 🔄 Decrementar MaterialesSubidos del usuario
+    final userRef = FirebaseFirestore.instance.collection('usuarios').doc(uid);
+    await FirebaseFirestore.instance.runTransaction((transaction) async {
+      final snapshot = await transaction.get(userRef);
+      final actual = snapshot.data()?['MaterialesSubidos'] ?? 0;
+      transaction.update(userRef, {
+        'MaterialesSubidos': (actual - 1).clamp(0, actual),
+      });
+    });
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Material eliminado exitosamente.'),
         backgroundColor: Colors.green,
       ),
     );
+
+    // 🔄 Recargar lista
+    setState(() {
+      _futureMateriales = _fetchMyMaterials();
+    });
+  }
+
+  late Future<List<Map<String, dynamic>>> _futureMateriales;
+
+  @override
+  void initState() {
+    super.initState();
+    _futureMateriales = _fetchMyMaterials();
   }
 
   @override
@@ -94,7 +125,8 @@ class MyMaterialsPage extends StatelessWidget {
       ),
       backgroundColor: const Color(0xFF036799),
       body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _fetchMyMaterials(),
+        future: _futureMateriales,
+
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
