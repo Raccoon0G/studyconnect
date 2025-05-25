@@ -87,9 +87,13 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
           await doc.reference.collection('Versiones').doc(versionId).get();
 
       setState(() {
-        materialData = doc.data();
-        pasos = List<String>.from(version['PasosEjer'] ?? []);
-        descripciones = List<String>.from(version['DescPasos'] ?? []);
+        materialData = {
+          ...?doc.data(),
+          'descripcion': version['Descripcion'],
+          'archivos': List<Map<String, dynamic>>.from(
+            version['archivos'] ?? [],
+          ),
+        };
       });
 
       final versionesSnap =
@@ -243,24 +247,29 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         docRef.collection('Versiones').orderBy('Fecha', descending: true).get(),
       ]);
 
-      final docSnap = results[0] as DocumentSnapshot<Map<String, dynamic>>;
+      final docSnap = results[0] as DocumentSnapshot;
       final comentariosSnap = results[1] as QuerySnapshot<Map<String, dynamic>>;
       final versionesSnap = results[2] as QuerySnapshot<Map<String, dynamic>>;
 
       if (!docSnap.exists) throw Exception('Material no encontrado');
 
+      // ✅ casteo seguro del mapa de datos del documento
+      final Map<String, dynamic> data =
+          (docSnap.data() as Map<String, dynamic>? ?? {});
+
       setState(() {
         // datos
-        materialData = docSnap.data()!;
+        materialData = data;
 
         // comentarios
         comentarios = comentariosSnap.docs.map((d) => d.data()).toList();
 
-        // versiones ➡️ mapeamos id + fecha
+        // versiones
         versiones =
-            versionesSnap.docs
-                .map((d) => {'id': d.id, 'fecha': d['Fecha'] as Timestamp})
-                .toList();
+            versionesSnap.docs.map((d) {
+              final map = d.data();
+              return {'id': d.id, 'fecha': map['Fecha'] as Timestamp};
+            }).toList();
 
         // valor inicial del dropdown
         versionSeleccionada =
@@ -1259,7 +1268,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                             if (controller.text.trim().isEmpty ||
                                 getRating() == 0) {
                               await showCustomDialog(
-                                context: dialogContext, // contexto del diálogo
+                                context: dialogContext, // ✅ se mantiene bien
                                 titulo: 'Campos incompletos',
                                 mensaje:
                                     'Por favor escribe un comentario y selecciona una calificación.',
@@ -1268,18 +1277,20 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                                   DialogButton(
                                     texto: 'Aceptar',
                                     onPressed: () async {
-                                      Navigator.of(context).pop();
+                                      Navigator.of(
+                                        dialogContext,
+                                      ).pop(); // ✅ CORRECTO
                                     },
                                   ),
                                   DialogButton(
                                     texto: 'Intentar de nuevo',
                                     onPressed: () async {
-                                      Navigator.of(context).pop();
-                                      _mostrarDialogoCalificacion();
+                                      Navigator.of(dialogContext).pop();
                                     },
                                   ),
                                 ],
                               );
+
                               return; // 2) aquí terminamos el onPressed sin seguir adelante
                             }
 
@@ -1292,14 +1303,16 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                             );
                             setEnviando(false);
 
-                            // 4) Cerramos el diálogo de calificación:
-                            Navigator.of(dialogContext).pop();
-
-                            // 5) Y finalmente mostramos el snackbar de éxito:
-                            showCustomSnackbar(
-                              context: context,
-                              message: '✅ Comentario enviado exitosamente.',
-                              success: true,
+                            Future.delayed(
+                              const Duration(milliseconds: 100),
+                              () {
+                                Navigator.of(dialogContext).pop();
+                                showCustomSnackbar(
+                                  context: context,
+                                  message: '✅ Comentario enviado exitosamente.',
+                                  success: true,
+                                );
+                              },
                             );
                           },
                   icon:
