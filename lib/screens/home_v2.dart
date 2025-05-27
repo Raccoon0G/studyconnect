@@ -578,19 +578,28 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         const SizedBox(height: 6),
-        Text(
-          nombre,
-          style: GoogleFonts.poppins(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-            shadows: [
-              Shadow(
-                blurRadius: 2,
-                color: Colors.black26,
-                offset: Offset(1, 1),
+        Tooltip(
+          message: nombre, // Esto mostrará el nombre completo al pasar el mouse
+          child: SizedBox(
+            width: 80, // Limita el ancho del texto para que no se desborde
+            child: Text(
+              nombre.length > 14 ? '${nombre.substring(0, 12)}…' : nombre,
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis, // Cortar con puntos suspensivos
+              maxLines: 1, // Asegura que sea una sola línea
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                shadows: [
+                  Shadow(
+                    blurRadius: 2,
+                    color: Colors.black26,
+                    offset: Offset(1, 1),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
 
