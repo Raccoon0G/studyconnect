@@ -1646,7 +1646,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
       // Después, compartir en Facebook
       final urlEjercicio = Uri.encodeComponent(
-        'https://tuapp.com/$tema/$ejercicioId',
+        'https://study-connect.app/material/$tema/$ejercicioId',
       ); // CAMBIA aquí tu dominio real
       final quote = Uri.encodeComponent('¡Revisa este material: $titulo!');
       final facebookUrl =

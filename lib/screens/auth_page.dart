@@ -103,7 +103,7 @@ class _LoginPageState extends State<LoginPage>
           .doc(user.uid)
           .update({'ultimaConexion': FieldValue.serverTimestamp()});
 
-      // n la lógica de perfilCompleto y la redirección…
+      // Ahora puedes seguir con la lógica de perfilCompleto y la redirección…
 
       final doc =
           await FirebaseFirestore.instance
