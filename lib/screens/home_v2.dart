@@ -229,18 +229,19 @@ class _HomePageState extends State<HomePage> {
   Widget _buildLeftColumn() {
     return Column(
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Image.asset(
-            'assets/images/profe.jpg',
-            width: double.infinity,
-            height: 560,
-            fit: BoxFit.cover,
-          ),
-        ),
+        // ClipRRect(
+        //   borderRadius: BorderRadius.circular(16),
+        //   child: Image.asset(
+        //     'assets/images/profe.jpg',
+        //     width: double.infinity,
+        //     height: 560,
+        //     fit: BoxFit.cover,
+        //   ),
+        // ),
+        HomeCarousel(),
 
         //NoticiasCarouselApi(),
-        const SizedBox(height: 10),
+        const SizedBox(height: 20),
         _buildContenidosCard(),
       ],
     );
