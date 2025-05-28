@@ -16,30 +16,34 @@ class _HomeCarouselState extends State<HomeCarousel> {
 
   final List<_CarouselItem> _items = const [
     _CarouselItem(
-      image: 'assets/images/slide1.png',
-      title: 'Aprende colaborando',
+      image: 'assets/images/slide_calculo.png',
+      title: 'Dominio de Cálculo',
       description:
-          'Comparte y resuelve ejercicios junto con otros estudiantes.',
+          'Aprende y domina los conceptos clave de cálculo diferencial e integral con ejercicios guiados y materiales actualizados.',
     ),
     _CarouselItem(
-      image: 'assets/images/slide2.png',
-      title: 'Explora contenido visual',
-      description: 'Consulta soluciones paso a paso renderizadas con LaTeX.',
+      image: 'assets/images/slide_colaborativo.png',
+      title: 'Colaboración en tiempo real',
+      description:
+          'Interactúa con otros estudiantes y tutores, comparte dudas y resuelve problemas en grupo desde cualquier lugar.',
     ),
     _CarouselItem(
-      image: 'assets/images/slide3.png',
-      title: 'Gana reconocimiento',
-      description: 'Sube tus ejercicios y obtén puntos en el ranking.',
+      image: 'assets/images/slide_gamificacion.png',
+      title: 'Motívate y gana recompensas',
+      description:
+          'Suma puntos, sube de nivel y recibe reconocimientos por tu participación en el sistema y en el ranking general.',
     ),
     _CarouselItem(
-      image: 'assets/images/slide4.png',
-      title: 'Mejora tu rendimiento',
-      description: 'Practica y supera tus propios registros académicos.',
+      image: 'assets/images/slide_compartir.png',
+      title: 'Comparte en Facebook',
+      description:
+          'Publica tus ejercicios y logros fácilmente en Facebook para motivar a más estudiantes a aprender contigo.',
     ),
     _CarouselItem(
-      image: 'assets/images/slide5.png',
-      title: 'Conecta con estudiantes',
-      description: 'Forma parte de la comunidad y comparte conocimientos.',
+      image: 'assets/images/slide_escom.png',
+      title: 'Desarrollado en ESCOM-IPN',
+      description:
+          'Un proyecto innovador creado por estudiantes para estudiantes, integrando tecnología y educación de calidad.',
     ),
   ];
 
