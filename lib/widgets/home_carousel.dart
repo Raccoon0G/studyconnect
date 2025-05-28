@@ -19,31 +19,31 @@ class _HomeCarouselState extends State<HomeCarousel> {
       image: 'assets/images/slide_calculo.png',
       title: 'Dominio de Cálculo',
       description:
-          'Aprende y domina los conceptos clave de cálculo diferencial e integral con ejercicios guiados y materiales actualizados.',
+          'Participa, aprende y sube en el ranking resolviendo ejercicios de cálculo. ¡Convierte el aprendizaje en un juego y supera tus propios límites!',
     ),
     _CarouselItem(
       image: 'assets/images/slide_colaborativo.png',
       title: 'Colaboración en tiempo real',
       description:
-          'Interactúa con otros estudiantes y tutores, comparte dudas y resuelve problemas en grupo desde cualquier lugar.',
+          'Interactúa con otros estudiantes y tutores, comparte dudas y resuelve problemas en grupo desde cualquier lugar',
     ),
     _CarouselItem(
       image: 'assets/images/slide_gamificacion.png',
       title: 'Motívate y gana recompensas',
       description:
-          'Suma puntos, sube de nivel y recibe reconocimientos por tu participación en el sistema y en el ranking general.',
+          'Suma puntos, sube de nivel y recibe reconocimientos por tu participación en el sistema y en el ranking general',
     ),
     _CarouselItem(
       image: 'assets/images/slide_compartir.png',
       title: 'Comparte en Facebook',
       description:
-          'Publica tus ejercicios y logros fácilmente en Facebook para motivar a más estudiantes a aprender contigo.',
+          'Publica tus ejercicios y logros fácilmente en Facebook para motivar a más estudiantes a aprender contigo',
     ),
     _CarouselItem(
       image: 'assets/images/slide_escom.png',
       title: 'Desarrollado en ESCOM-IPN',
       description:
-          'Un proyecto innovador creado por estudiantes para estudiantes, integrando tecnología y educación de calidad.',
+          'Un proyecto innovador creado por estudiantes para estudiantes, integrando tecnología y educación de calidad',
     ),
   ];
 
