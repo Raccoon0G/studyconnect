@@ -70,9 +70,9 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
 
       // ❗️ AQUÍ DEBES GUARDAR EL accessToken.tokenString EN FIRESTORE
       // en el documento del usuario actual.
-      // await FirebaseFirestore.instance.collection('usuarios').doc(currentUser.uid).update({
-      //   'facebookAccessToken': accessToken.tokenString,
-      // });
+      //await FirebaseFirestore.instance.collection('usuarios').doc(currentUser.uid).update({
+      // 'facebookAccessToken': accessToken.tokenString,
+      //});
 
       showCustomSnackbar(
         context: context,
@@ -567,7 +567,9 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
       'TecInteg': 'Técnicas de integración',
     };
     final autorId = ejercicioData?['AutorId'] ?? '';
-    final uidActual = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final uidActual = currentUser?.uid;
+    final estaLogueado = currentUser != null;
 
     return Container(
       margin: const EdgeInsets.only(right: 16),
@@ -711,7 +713,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
             child: const ExerciseCarousel(),
           ),
           //TODO Arreglar botones
-          if (autorId == uidActual)
+          if (estaLogueado && autorId == uidActual)
             Padding(
               padding: const EdgeInsets.only(top: 30.0),
               child: Row(
@@ -913,7 +915,6 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                 ],
               ),
             ),
-          // ====================================================================
         ],
       ),
     );
@@ -949,7 +950,22 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                   _postDirectlyToFacebook(); // Llama a la nueva función
                 },
               ),
-              // Opción 1: Compartir con Imagen
+
+              ListTile(
+                leading: const Icon(Icons.facebook, color: Color(0xFF1877F2)),
+                title: const Text('Publicar en Facebook'),
+                onTap: () {
+                  Navigator.pop(context); // Cierra el menú
+                  if (ejercicioData != null) {
+                    _compartirCapturaYFacebook(
+                      ejercicioData!['Titulo'] ?? 'Ejercicio',
+                      widget.tema,
+                      widget.ejercicioId,
+                    );
+                  } // Llama a la nueva función
+                },
+              ),
+              // Opción 2: Compartir con Imagen
               ListTile(
                 leading: const Icon(
                   Icons.image_outlined,
@@ -963,7 +979,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                   ); // Llama a la función que ya creamos
                 },
               ),
-              // Opción 2: Compartir solo el enlace
+              // Opción 3: Compartir solo el enlace
               ListTile(
                 leading: const Icon(Icons.link_outlined, color: Colors.green),
                 title: const Text('Compartir solo Enlace'),
@@ -972,7 +988,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                   _shareExercise(withImage: false); // Llama a la función
                 },
               ),
-              // Opción 3: Copiar el enlace
+              // Opción 4: Copiar el enlace
               ListTile(
                 leading: const Icon(Icons.copy_outlined, color: Colors.grey),
                 title: const Text('Copiar Enlace'),
@@ -1180,18 +1196,12 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
         ),
 
         const SizedBox(height: 40),
-        // CustomFeedbackCard(
-        //   accion: 'Calificar',
-        //   numeroComentarios: comentarios.length,
-        //   onCalificar: _mostrarDialogoCalificacion,
-        //   onCompartir: _compartirCapturaConFacebookWeb,
-        // ),
-        // ... dentro de _columnaDerecha
+
         CustomFeedbackCard(
           accion: 'Calificar',
           numeroComentarios: comentarios.length,
           onCalificar: _mostrarDialogoCalificacion,
-          onCompartir: _showSharingOptions, // <-- ✅ ¡ASÍ DE SIMPLE!
+          onCompartir: _showSharingOptions,
         ),
       ],
     );
@@ -1555,6 +1565,36 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
       message: '✅ Comentario enviado exitosamente.',
       success: true,
     );
+  }
+
+  Future<void> _compartirCapturaYFacebook(
+    String titulo,
+    String tema,
+    String ejercicioId,
+  ) async {
+    final Uint8List? image = await _screenshotController.capture();
+    if (image != null) {
+      // Descargar la imagen localmente
+      final blob = html.Blob([image]);
+      final urlBlob = html.Url.createObjectUrlFromBlob(blob);
+
+      final link =
+          html.AnchorElement(href: urlBlob)
+            ..setAttribute('download', 'captura_ejercicio.png')
+            ..click();
+
+      html.Url.revokeObjectUrl(urlBlob);
+
+      // Después, compartir en Facebook
+      final urlEjercicio = Uri.encodeComponent(
+        'https://tuapp.com/$tema/$ejercicioId',
+      ); // CAMBIA aquí tu dominio real
+      final quote = Uri.encodeComponent('¡Revisa este Ejercicio: $titulo!');
+      final facebookUrl =
+          'https://www.facebook.com/sharer/sharer.php?u=$urlEjercicio&quote=$quote';
+
+      html.window.open(facebookUrl, '_blank');
+    }
   }
 
   Future<void> _shareExercise({bool withImage = false}) async {

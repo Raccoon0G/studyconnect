@@ -17,13 +17,13 @@ import 'package:study_connect/widgets/widgets.dart';
 import 'package:study_connect/utils/utils.dart';
 import 'package:study_connect/config/secrets.dart';
 
-// ✅ Para la funcionalidad de compartir avanzada
+//  Para la funcionalidad de compartir avanzada
 import 'package:path_provider/path_provider.dart'; // Necesario para guardar imagen en móvil
 import 'dart:io'; // Necesario para File
 import 'package:flutter/foundation.dart'
     show kIsWeb; // Para diferenciar entre web y móvil
 
-// ✅ Para la integración con Facebook
+//  Para la integración con Facebook
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 
 class MaterialViewPage extends StatefulWidget {
@@ -64,16 +64,15 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     return agrupados;
   }
 
-  bool get esAutor {
-    if (materialData == null) return false;
-    final autorId = materialData!['autorId'];
-    final currentUser = FirebaseAuth.instance.currentUser;
-    return autorId != null && currentUser != null && autorId == currentUser.uid;
-  }
+  // bool get esAutor {
+  //   if (materialData == null) return false;
+  //   final autorId = materialData!['autorId'];
+  //   final currentUser = FirebaseAuth.instance.currentUser;
+  //   return autorId != null && currentUser != null && autorId == currentUser.uid;
+  // }
 
-  /// ✅ FUNCIÓN CORREGIDA
   String obtenerNombreTema(String key) {
-    // Usamos el mapa que ya tienes definido en la columna izquierda.
+    // Usamos el mapa definido en la columna izquierda.
     // Lo ideal sería tener este mapa en un lugar central (utils) para no repetirlo.
     final Map<String, String> nombresTemas = {
       'FnAlg': 'Funciones algebraicas y trascendentes',
@@ -278,7 +277,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         // comentarios
         comentarios = comentariosSnap.docs.map((d) => d.data()).toList();
 
-        // versiones ➡️ mapeamos id + fecha
+        // versiones  mapeamos id + fecha
         versiones =
             versionesSnap.docs
                 .map((d) => {'id': d.id, 'fecha': d['Fecha'] as Timestamp})
@@ -293,7 +292,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     }
   }
 
-  /// ✅ Muestra menú modal con opciones para compartir
+  ///  Muestra menú modal con opciones para compartir
   void _showMaterialSharingOptions() {
     showModalBottomSheet(
       context: context,
@@ -319,6 +318,21 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                   _postMaterialDirectlyToFacebook();
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.facebook, color: Color(0xFF1877F2)),
+                title: const Text('Publicar en Facebook'),
+                onTap: () {
+                  Navigator.pop(context);
+                  if (materialData != null) {
+                    _compartirCapturaYFacebook(
+                      materialData!['titulo'] ?? 'Material',
+                      widget.tema,
+                      widget.materialId,
+                    );
+                  }
+                },
+              ),
+
               ListTile(
                 leading: const Icon(
                   Icons.image_outlined,
@@ -353,7 +367,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     );
   }
 
-  /// ✅ Función central para compartir
+  ///  Función central para compartir
   Future<void> _shareMaterial({bool withImage = false}) async {
     if (materialData == null) {
       showCustomSnackbar(
@@ -427,7 +441,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     }
   }
 
-  /// ✅ Función para copiar enlace
+  ///  Función para copiar enlace
   void _copyMaterialLinkToClipboard() {
     if (materialData == null) return;
     final url =
@@ -441,7 +455,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     });
   }
 
-  /// ✅ Función para conectar con Facebook
+  ///  Función para conectar con Facebook
   Future<void> _connectToFacebook() async {
     if (!mounted) return;
     final firebaseUser = FirebaseAuth.instance.currentUser;
@@ -485,7 +499,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     }
   }
 
-  /// ✅ Función para publicar directamente en Facebook
+  ///  Función para publicar directamente en Facebook
   Future<void> _postMaterialDirectlyToFacebook() async {
     if (!mounted) return;
     final firebaseUser = FirebaseAuth.instance.currentUser;
@@ -515,7 +529,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
     if (userToken == null) {
       if (!mounted) return;
-      // ✅ Corregido: sin 'duration' ni 'action'
+      //  Corregido: sin 'duration' ni 'action'
       showCustomSnackbar(
         context: context,
         message:
@@ -891,6 +905,12 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
       'Der': 'Derivada y optimización',
       'TecInteg': 'Técnicas de integración',
     };
+
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final esAutor =
+        currentUser != null &&
+        ejercicioData['autorId'] != null &&
+        ejercicioData['autorId'] == currentUser.uid;
 
     return Container(
       margin: const EdgeInsets.only(right: 16),
@@ -1606,35 +1626,35 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     );
   }
 
-  // Future<void> _compartirCapturaYFacebook(
-  //   String titulo,
-  //   String tema,
-  //   String ejercicioId,
-  // ) async {
-  //   final Uint8List? image = await _screenshotController.capture();
-  //   if (image != null) {
-  //     // Descargar la imagen localmente
-  //     final blob = html.Blob([image]);
-  //     final urlBlob = html.Url.createObjectUrlFromBlob(blob);
+  Future<void> _compartirCapturaYFacebook(
+    String titulo,
+    String tema,
+    String ejercicioId,
+  ) async {
+    final Uint8List? image = await _screenshotController.capture();
+    if (image != null) {
+      // Descargar la imagen localmente
+      final blob = html.Blob([image]);
+      final urlBlob = html.Url.createObjectUrlFromBlob(blob);
 
-  //     final link =
-  //         html.AnchorElement(href: urlBlob)
-  //           ..setAttribute('download', 'captura_material.png')
-  //           ..click();
+      final link =
+          html.AnchorElement(href: urlBlob)
+            ..setAttribute('download', 'captura_material.png')
+            ..click();
 
-  //     html.Url.revokeObjectUrl(urlBlob);
+      html.Url.revokeObjectUrl(urlBlob);
 
-  //     // Después, compartir en Facebook
-  //     final urlEjercicio = Uri.encodeComponent(
-  //       'https://tuapp.com/$tema/$ejercicioId',
-  //     ); // CAMBIA aquí tu dominio real
-  //     final quote = Uri.encodeComponent('¡Revisa este material: $titulo!');
-  //     final facebookUrl =
-  //         'https://www.facebook.com/sharer/sharer.php?u=$urlEjercicio&quote=$quote';
+      // Después, compartir en Facebook
+      final urlEjercicio = Uri.encodeComponent(
+        'https://tuapp.com/$tema/$ejercicioId',
+      ); // CAMBIA aquí tu dominio real
+      final quote = Uri.encodeComponent('¡Revisa este material: $titulo!');
+      final facebookUrl =
+          'https://www.facebook.com/sharer/sharer.php?u=$urlEjercicio&quote=$quote';
 
-  //     html.window.open(facebookUrl, '_blank');
-  //   }
-  // }
+      html.window.open(facebookUrl, '_blank');
+    }
+  }
 
   // Future<void> _compartirCapturaYSharePlus(
   //   String titulo,
