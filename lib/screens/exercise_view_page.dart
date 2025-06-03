@@ -90,14 +90,14 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     }
   }
 
-  /// FUNCIÓN PARA PUBLICAR EL EJERCICIO EN FACEBOOK (se llama desde el BottomSheet)
+  /// FUNCIÓN PARA PUBLICAR EL EJERCICIO EN FACEBOOK EN UNA PÁGINA
   Future<void> _postDirectlyToFacebook() async {
     // 1. Obtener el token guardado del usuario desde Firestore
     // final userDoc = await FirebaseFirestore.instance.collection('usuarios').doc(currentUser.uid).get();
     // final String? userToken = userDoc.data()?['facebookAccessToken'];
 
     // --- Usaremos un token de ejemplo para la demostración ---
-    final String? userToken = "TU_TOKEN_DE_ACCESO_GUARDADO_AQUI";
+    final String? userToken = "TOKEN_DE_ACCESO_GUARDADO_AQUI";
 
     if (userToken == null) {
       showCustomSnackbar(
@@ -132,7 +132,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
       // NOTA: Necesitas el ID de la página donde quieres publicar.
 
       //TODO Checar implementacion con api
-      final String pageId = "ID_DE_LA_PAGINA_DEL_USUARIO";
+      final String pageId = "ID_DE_LA_PAGINA_DE_USUARIO";
       var request = http.MultipartRequest(
         'POST',
         Uri.parse('https://graph.facebook.com/$pageId/photos'),
