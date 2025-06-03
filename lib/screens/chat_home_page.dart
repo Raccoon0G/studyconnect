@@ -189,91 +189,67 @@ class _ChatHomePageState extends State<ChatHomePage> {
     }
   }
 
-  // void _iniciarChat(String otroId) async {
-  //   // 1) Creamos el chatId ordenado
-  //   final nuevoChatId =
-  //       uid.compareTo(otroId) < 0 ? '${uid}_$otroId' : '${otroId}_$uid';
-  //   // 2) Precargamos datos del otro usuario en caché
-  //   await _obtenerUsuario(otroId);
+  // Añade estas funciones a tu _ChatHomePageState
 
-  //   // ── creamos/mergeamos el documento Chats/{chatId}
-  //   await FirebaseFirestore.instance.collection('Chats').doc(nuevoChatId).set({
-  //     'ids': [uid, otroId],
-  //     'UltimaAct': FieldValue.serverTimestamp(),
-  //     'typing': {uid: false, otroId: false},
-  //   }, SetOptions(merge: true));
+  Future<void> _silenciarChat(String chatId) async {
+    if (chatId.isEmpty) return;
+    final DocumentReference chatDocRef = FirebaseFirestore.instance
+        .collection('Chats')
+        .doc(chatId);
 
-  //   // 3) Disparamos el cambio de chat
-  //   setState(() {
-  //     filtro = ''; // reset del filtro
-  //     _busquedaController.clear(); // limpiamos la caja de texto
-  //     _showList = false;
-  //     chatIdSeleccionado = nuevoChatId;
-  //     otroUid = otroId;
-  //   });
-  // }
+    try {
+      await chatDocRef.update({
+        'silenciadoPor': FieldValue.arrayUnion([uid]), // Añade el uid actual
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Chat silenciado. No recibirás notificaciones.'),
+          ),
+        );
+      }
+      // No es necesario un setState para la UI de la lista aquí,
+      // el cambio se reflejará en el ícono del PopupMenuButton en la próxima reconstrucción del item.
+    } catch (e) {
+      print('Error al silenciar el chat: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al silenciar el chat: ${e.toString()}'),
+          ),
+        );
+      }
+    }
+  }
 
-  // void _enviarMensaje() async {
-  //   if (chatIdSeleccionado == null || mensaje.trim().isEmpty) return;
+  Future<void> _quitarSilencioChat(String chatId) async {
+    if (chatId.isEmpty) return;
+    final DocumentReference chatDocRef = FirebaseFirestore.instance
+        .collection('Chats')
+        .doc(chatId);
 
-  //   // 1) Creamos un timestamp único para usarlo en mensaje y chat
-  //   final now = Timestamp.now();
-
-  //   // 2) Añadimos el mensaje con esa fecha
-  //   await FirebaseFirestore.instance
-  //       .collection('Chats')
-  //       .doc(chatIdSeleccionado)
-  //       .collection('Mensajes')
-  //       .add({
-  //         'AutorID': uid,
-  //         'Contenido': mensaje.trim(),
-  //         'Fecha': now, // <-- usamos now aquí
-  //         'reacciones': {},
-  //         'editado': false,
-  //         'eliminado': false,
-  //         'leidoPor': [uid],
-  //       });
-
-  //   // 3) Actualizamos el documento de chat con lastMessageAt
-  //   await FirebaseFirestore.instance
-  //       .collection('Chats')
-  //       .doc(chatIdSeleccionado)
-  //       .update({
-  //         'typing.$uid': false,
-  //         'lastMessageAt': now,
-  //         'lastMessage': mensaje.trim(),
-  //       });
-
-  //   // Crear notificación para el receptor
-  //   if (otroUid != null && otroUid != uid) {
-  //     await NotificationService.crearNotificacion(
-  //       uidDestino: otroUid!,
-  //       tipo: 'mensaje',
-  //       titulo: 'Nuevo mensaje de $nombreUsuario',
-  //       contenido:
-  //           mensaje.trim().length > 40
-  //               ? '${mensaje.trim().substring(0, 40)}...'
-  //               : mensaje.trim(),
-  //       referenciaId: chatIdSeleccionado!,
-  //       uidEmisor: uid,
-  //       nombreEmisor: nombreUsuario ?? 'Usuario',
-  //     );
-  //   }
-
-  //   _mensajeController.clear();
-  //   setState(() => mensaje = '');
-
-  //   // ── AUTO‐SCROLL TRAS ENVÍO ──
-  //   WidgetsBinding.instance.addPostFrameCallback((_) {
-  //     if (_scrollController.hasClients) {
-  //       _scrollController.animateTo(
-  //         0.0,
-  //         duration: const Duration(milliseconds: 300),
-  //         curve: Curves.easeOut,
-  //       );
-  //     }
-  //   });
-  // }
+    try {
+      await chatDocRef.update({
+        'silenciadoPor': FieldValue.arrayRemove([uid]), // Quita el uid actual
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Notificaciones activadas para este chat.'),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error al quitar silencio del chat: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al activar notificaciones: ${e.toString()}'),
+          ),
+        );
+      }
+    }
+  }
 
   void _iniciarChat(String otroId) async {
     // 1) Creamos el chatId ordenado para chats 1 a 1.
@@ -1930,7 +1906,14 @@ class _ChatHomePageState extends State<ChatHomePage> {
               final bool estaArchivadoActual = archivadoPorEsteChat.contains(
                 uid,
               );
-              // --- FIN: LÓGICA PARA DETERMINAR SI EL CHAT ACTUAL ESTÁ ARCHIVADO ---
+              // --- INICIO: LÓGICA PARA DETERMINAR SI EL CHAT ACTUAL ESTÁ Silenciado ---
+              final List<dynamic> silenciadoPorDinamico =
+                  data['silenciadoPor'] as List<dynamic>? ?? [];
+              final List<String> silenciadoPorEsteChat =
+                  silenciadoPorDinamico.map((item) => item.toString()).toList();
+              final bool estaSilenciadoActual = silenciadoPorEsteChat.contains(
+                uid,
+              );
 
               return ValueListenableBuilder<String?>(
                 valueListenable: hoveredChatId,
@@ -2104,8 +2087,9 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                     } else if (value == 'desarchivar') {
                                       _desarchivarChat(chatId);
                                     } else if (value == 'silenciar') {
-                                      print('Acción: Silenciar chat $chatId');
-                                      // TODO
+                                      _silenciarChat(chatId);
+                                    } else if (value == 'quitar_silencio') {
+                                      _quitarSilencioChat(chatId);
                                     } else if (value == 'eliminar') {
                                       print('Acción: Eliminar chat $chatId');
                                       // TODO
@@ -2132,12 +2116,23 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                         ),
                                       );
                                     }
-                                    items.add(
-                                      const PopupMenuItem(
-                                        value: 'silenciar',
-                                        child: Text('Silenciar'),
-                                      ),
-                                    );
+                                    if (estaSilenciadoActual) {
+                                      items.add(
+                                        const PopupMenuItem(
+                                          value:
+                                              'quitar_silencio', // Nuevo valor
+                                          child: Text('Quitar silencio'),
+                                        ),
+                                      );
+                                    } else {
+                                      items.add(
+                                        const PopupMenuItem(
+                                          value: 'silenciar',
+                                          child: Text('Silenciar'),
+                                        ),
+                                      );
+                                    }
+
                                     items.add(
                                       const PopupMenuItem(
                                         value: 'eliminar',
