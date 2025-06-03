@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:html' as html;
 
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -105,47 +107,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
     });
   }
 
-  // // Puedes agregar más funciones como _seleccionarDocumento, _seleccionarAudio, etc.
-  // // usando file_picker para una experiencia más nativa en móvil y una UI de selección más rica.
-  // // Ejemplo con file_picker (necesitarías agregar el import 'package:file_picker/file_picker.dart';)
-  // // y manejar la lógica para web vs móvil si usas file_picker.
-
-  // Future<void> _seleccionarArchivoGenerico(FileType type) async {
-  //   FilePickerResult? result = await FilePicker.platform.pickFiles(
-  //     type: type,
-  //     // allowedExtensions: (type == FileType.custom) ? ['pdf', 'doc', 'docx'] : null, // Ejemplo para documentos
-  //   );
-
-  //   if (result != null) {
-  //     PlatformFile file = result.files.first;
-  //     setState(() {
-  //       // Para web, result.files.first.bytes contendrá los bytes.
-  //       // Para móvil, result.files.first.path te dará la ruta, y tendrás que leer los bytes desde ahí.
-  //       _archivoSeleccionadoBytes =
-  //           file.bytes; // ¡Cuidado! file.bytes solo está disponible en web.
-  //       // En móvil, usa file.path y luego File(file.path!).readAsBytes()
-  //       _nombreArchivoSeleccionado = file.name;
-  //       _mimeTypeSeleccionado = lookupMimeType(file.name); // Usar paquete mime
-
-  //       if (_mimeTypeSeleccionado != null) {
-  //         if (_mimeTypeSeleccionado!.startsWith('image/')) {
-  //           _tipoContenidoAEnviar = "imagen";
-  //           if (_mimeTypeSeleccionado == 'image/gif')
-  //             _tipoContenidoAEnviar = "gif";
-  //         } else if (_mimeTypeSeleccionado!.startsWith('video/')) {
-  //           _tipoContenidoAEnviar = "video";
-  //         } else if (_mimeTypeSeleccionado!.startsWith('audio/')) {
-  //           _tipoContenidoAEnviar = "audio";
-  //         } else {
-  //           _tipoContenidoAEnviar = "documento";
-  //         }
-  //       } else {
-  //         _tipoContenidoAEnviar = "documento"; // Fallback
-  //       }
-  //     });
-  //   }
-  // }
-
   Future<String> _subirArchivoMultimedia(
     Uint8List fileBytes,
     String fileName,
@@ -161,6 +122,143 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
     await ref.putData(fileBytes, metadata);
     return await ref.getDownloadURL();
+  }
+
+  Future<void> _seleccionarArchivoGenerico(
+    FileType fileType, {
+    List<String>? allowedExtensions,
+  }) async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: fileType,
+      allowedExtensions:
+          (fileType == FileType.custom && allowedExtensions != null)
+              ? allowedExtensions
+              : null,
+      withData:
+          kIsWeb, // En web, pedimos los bytes directamente. En móvil, obtendremos la ruta.
+    );
+
+    if (result != null) {
+      PlatformFile file = result.files.first;
+      Uint8List? fileBytes;
+
+      if (kIsWeb) {
+        fileBytes = file.bytes;
+        if (fileBytes == null) {
+          print("Error: file.bytes es null en web para ${file.name}");
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'No se pudieron obtener los datos del archivo (web).',
+                ),
+              ),
+            );
+          }
+          return;
+        }
+      } else {
+        // Plataformas móviles (Android, iOS)
+        if (file.path != null) {
+          try {
+            fileBytes = await File(file.path!).readAsBytes();
+          } catch (e) {
+            print("Error al leer bytes del archivo en móvil: $e");
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Error al procesar el archivo: ${e.toString()}',
+                  ),
+                ),
+              );
+            }
+            return;
+          }
+        } else {
+          print("Error: file.path es null en móvil para ${file.name}");
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'No se pudo obtener la ruta del archivo (móvil).',
+                ),
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      // Si llegamos aquí, fileBytes debería tener datos.
+      // _archivoSeleccionadoBytes ya se asigna en el setState.
+
+      setState(() {
+        _archivoSeleccionadoBytes = fileBytes;
+        _nombreArchivoSeleccionado = file.name;
+
+        // Detección de MIME type
+        // Usamos los primeros bytes para ayudar a la detección si están disponibles.
+        int headerByteCount =
+            (_archivoSeleccionadoBytes != null &&
+                    _archivoSeleccionadoBytes!.length > 16)
+                ? 16
+                : (_archivoSeleccionadoBytes?.length ?? 0);
+        List<int>? headerBytes = _archivoSeleccionadoBytes?.sublist(
+          0,
+          headerByteCount,
+        );
+        _mimeTypeSeleccionado = lookupMimeType(
+          file.name,
+          headerBytes: headerBytes,
+        );
+
+        if (fileType == FileType.audio) {
+          _tipoContenidoAEnviar = "audio";
+        } else if (fileType == FileType.video) {
+          _tipoContenidoAEnviar = "video";
+        } else if (fileType == FileType.image ||
+            (fileType == FileType.any &&
+                _mimeTypeSeleccionado?.startsWith('image/') == true)) {
+          _tipoContenidoAEnviar = "imagen";
+          if (_mimeTypeSeleccionado == 'image/gif') {
+            _tipoContenidoAEnviar = "gif";
+          }
+        } else if (fileType == FileType.custom ||
+            _mimeTypeSeleccionado != null) {
+          _tipoContenidoAEnviar = "documento";
+        } else {
+          _tipoContenidoAEnviar = "documento"; // Fallback
+        }
+      });
+    } else {
+      // El usuario canceló la selección
+      if (mounted) {
+        // print('Selección de archivo cancelada.');
+      }
+    }
+  }
+
+  Future<void> _seleccionarDocumento() async {
+    await _seleccionarArchivoGenerico(
+      FileType.custom,
+      allowedExtensions: [
+        'pdf',
+        'doc',
+        'docx',
+        'txt',
+        'xls',
+        'xlsx',
+        'ppt',
+        'pptx',
+        'zip',
+        'rar',
+      ],
+    );
+  }
+
+  Future<void> _seleccionarAudio() async {
+    await _seleccionarArchivoGenerico(FileType.audio);
   }
 
   Future<void> _obtenerNombreUsuario() async {
@@ -3404,52 +3502,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
     );
   }
 
-  /// 4) Caja de texto + botón enviar
-  // Widget _buildInputBox() {
-  //   return Padding(
-  //     padding: const EdgeInsets.all(12.0),
-  //     child: Row(
-  //       children: [
-  //         Expanded(
-  //           child: TextField(
-  //             controller: _mensajeController,
-  //             onChanged: (val) {
-  //               mensaje = val;
-  //               final typing = val.trim().isNotEmpty;
-  //               if (typing != _isTyping && chatIdSeleccionado != null) {
-  //                 _isTyping = typing;
-  //                 FirebaseFirestore.instance
-  //                     .collection('Chats')
-  //                     .doc(chatIdSeleccionado)
-  //                     .update({'typing.$uid': typing});
-  //               }
-  //               // Dispara rebuild para que el botón se actualice
-  //               setState(() {});
-  //             },
-  //             decoration: const InputDecoration(
-  //               hintText: 'Escribe tu mensaje…',
-  //             ),
-  //           ),
-  //         ),
-  //         // IconButton(
-  //         //   icon: const Icon(Icons.send, color: Colors.blueAccent),
-  //         //   onPressed: _enviarMensaje,
-  //         // ),
-  //         // Si mensaje.trim() está vacío, onPressed será null y el botón deshabilitado
-  //         IconButton(
-  //           icon: Icon(
-  //             Icons.send,
-  //             // color cambia según si está habilitado o no
-  //             color:
-  //                 mensaje.trim().isNotEmpty ? Colors.blueAccent : Colors.grey,
-  //           ),
-  //           onPressed: mensaje.trim().isNotEmpty ? _enviarMensaje : null,
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
-
+  /// 4) Caja de texto + botón enviar_buildInputBox
   Widget _buildInputBox() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
@@ -3477,7 +3530,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
                 color: Theme.of(context).colorScheme.primary,
               ),
               onPressed: () {
-                // Para un menú más completo:
                 showModalBottomSheet(
                   context: context,
                   builder: (BuildContext bc) {
@@ -3489,7 +3541,10 @@ class _ChatHomePageState extends State<ChatHomePage> {
                             title: const Text('Galería (Imagen/Video)'),
                             onTap: () {
                               Navigator.of(context).pop();
-                              _seleccionarImagen(); // Usa tu función para seleccionar imágenes/videos
+                              _seleccionarImagen(); // Mantenemos tu función original para imágenes/videos vía html.FileUploadInputElement
+                              // Si quieres usar file_picker para imágenes/videos también,
+                              // llamarías a: _seleccionarArchivoGenerico(FileType.media);
+                              // o _seleccionarArchivoGenerico(FileType.image); y _seleccionarArchivoGenerico(FileType.video);
                             },
                           ),
                           ListTile(
@@ -3497,15 +3552,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                             title: const Text('Audio'),
                             onTap: () {
                               Navigator.of(context).pop();
-                              // TODO: Implementar _seleccionarAudio()
-                              // _seleccionarArchivoGenerico(FileType.audio);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Selector de audio no implementado',
-                                  ),
-                                ),
-                              );
+                              _seleccionarAudio(); // <--- MODIFICADO
                             },
                           ),
                           ListTile(
@@ -3513,15 +3560,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                             title: const Text('Documento'),
                             onTap: () {
                               Navigator.of(context).pop();
-                              // TODO: Implementar _seleccionarDocumento()
-                              // _seleccionarArchivoGenerico(FileType.custom, allowedExtensions: ['pdf', 'doc', 'docx', 'txt', 'xls', 'xlsx', 'ppt', 'pptx']);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Selector de documentos no implementado',
-                                  ),
-                                ),
-                              );
+                              _seleccionarDocumento(); // <--- MODIFICADO
                             },
                           ),
                         ],
