@@ -1480,6 +1480,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
   }
 
   // Panel izquierdo con header, tabs, buscador, historias y lista de chats
+
   Widget _buildChatList() {
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 200, maxWidth: 320),
@@ -1524,50 +1525,37 @@ class _ChatHomePageState extends State<ChatHomePage> {
                 ),
               ),
 
-              // --- 2) TabBar ---
-              Theme(
-                data: Theme.of(context).copyWith(
-                  colorScheme: Theme.of(context).colorScheme.copyWith(
-                    surfaceVariant:
-                        Colors
-                            .transparent, // Para que el fondo del indicator sea transparente
-                  ),
+              // --- 2) TabBar (como lo dejamos, que ya funciona bien centrado) ---
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8.0,
+                  vertical: 4.0,
                 ),
                 child: TabBar(
-                  isScrollable: true,
-                  labelColor: Colors.white,
-                  unselectedLabelColor: Colors.white.withOpacity(
-                    0.65,
-                  ), // MODIFICADO: Un poco más de opacidad
+                  isScrollable:
+                      false, // Para que intenten caber todas las pestañas
+                  labelColor: Theme.of(context).colorScheme.onPrimary,
+                  unselectedLabelColor: Colors.white.withOpacity(0.75),
                   labelStyle: const TextStyle(
-                    fontSize: 13.0, // MODIFICADO: Tamaño de fuente reducido
-                    fontWeight: FontWeight.bold, // Negrita para la seleccionada
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.bold,
                   ),
                   unselectedLabelStyle: const TextStyle(
-                    fontSize: 13.0, // MODIFICADO: Tamaño de fuente reducido
-                    fontWeight:
-                        FontWeight.w500, // Peso normal para no seleccionada
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w500,
                   ),
-                  indicator: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary.withOpacity(
-                      0.5,
-                    ), // MODIFICADO: Color del indicador
-                    borderRadius: BorderRadius.circular(
-                      16,
-                    ), // MODIFICADO: Radio del borde
-                  ),
-                  indicatorWeight:
-                      0, // Necesario si usas BoxDecoration para el indicador
-                  indicatorSize:
-                      TabBarIndicatorSize
-                          .tab, // El indicador cubre toda la pestaña
+                  indicatorSize: TabBarIndicatorSize.tab,
                   indicatorPadding: const EdgeInsets.symmetric(
                     vertical: 5.0,
-                    horizontal: 4.0,
-                  ), // MODIFICADO: Padding del indicador
-                  labelPadding: const EdgeInsets.symmetric(
-                    horizontal: 11.0,
-                  ), // MODIFICADO: Reducido para que quepan más pestañas
+                    horizontal: 2.0,
+                  ),
+                  indicator: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withOpacity(0.85),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 9.0),
                   tabs: const [
                     Tab(text: 'Todos'),
                     Tab(text: 'No leídos'),
@@ -1579,40 +1567,36 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
               // --- 3) Buscador ---
               Container(
-                margin: const EdgeInsets.fromLTRB(
-                  12,
-                  10,
-                  12,
-                  6,
-                ), // Ajustado margen inferior
+                margin: const EdgeInsets.fromLTRB(12, 10, 12, 6),
                 decoration: BoxDecoration(
-                  color: Theme.of(
-                    context,
-                  ).scaffoldBackgroundColor.withOpacity(0.15),
+                  color: Colors.black.withOpacity(
+                    0.20,
+                  ), // Ligeramente más opaco para contraste del hint
                   borderRadius: BorderRadius.circular(25),
                 ),
                 child: TextField(
                   controller: _busquedaController,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: const TextStyle(color: Colors.black, fontSize: 14.5),
                   decoration: InputDecoration(
-                    hintText: 'Buscar chats o usuarios...',
+                    hintText:
+                        'Buscar chats o usuarios...', // MODIFICADO: Texto original
                     hintStyle: TextStyle(
-                      color: Colors.black.withOpacity(0.7),
-                      fontSize: 14,
-                    ),
+                      color: Colors.black.withOpacity(0.75),
+                      fontSize: 14.5,
+                    ), // MODIFICADO: Mayor opacidad
                     prefixIcon: Icon(
                       Icons.search,
-                      color: Colors.white.withOpacity(0.7),
-                      size: 20,
-                    ),
+                      color: Colors.black.withOpacity(0.75),
+                      size: 22,
+                    ), // MODIFICADO
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(
-                      vertical: 13,
+                      vertical: 14,
                       horizontal: 16,
                     ),
                   ),
                   onChanged: (texto) {
-                    // ... (tu lógica de debounce onChanged se mantiene igual) ...
+                    // ... (lógica de debounce onChanged se mantiene igual) ...
                     final lower = texto.trim().toLowerCase();
                     if (filtro != lower) {
                       setState(() {
@@ -1674,15 +1658,15 @@ class _ChatHomePageState extends State<ChatHomePage> {
               Padding(
                 padding: const EdgeInsets.only(
                   left: 16.0,
-                  top: 8.0,
+                  top: 10.0,
                   bottom: 2.0,
                   right: 16.0,
-                ), // Ajustado padding
+                ),
                 child: Text(
-                  'Quizás conozcas a...',
+                  'Sugerencias', // Cambiado para que sea más general
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.85),
-                    fontSize: 13.5, // Ligeramente más pequeño
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -1690,11 +1674,10 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
               // --- 4) Carrusel de "Historias" (Sugerencias de Usuarios) ---
               SizedBox(
-                height: 90, // Altura para los avatares y nombres
+                height: 99,
                 child: Scrollbar(
-                  // Scrollbar para visibilidad en desktop/web
                   thumbVisibility:
-                      true, // O false si prefieres que aparezca al hacer scroll
+                      true, // Intenta que la barra sea visible (en web/desktop al menos con hover)
                   child: StreamBuilder<QuerySnapshot>(
                     stream:
                         FirebaseFirestore.instance
@@ -1705,23 +1688,25 @@ class _ChatHomePageState extends State<ChatHomePage> {
                           !snap.hasData) {
                         return const Center(
                           child: SizedBox(
-                            width: 20,
-                            height: 20,
+                            width: 24,
+                            height: 24,
                             child: CircularProgressIndicator(
-                              strokeWidth: 2,
+                              strokeWidth: 2.5,
                               valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white54,
+                                Colors.white60,
                               ),
                             ),
                           ),
                         );
                       }
-                      if (!snap.hasData || snap.data!.docs.isEmpty) {
+                      if (!snap.hasData ||
+                          snap.data == null ||
+                          snap.data!.docs.isEmpty) {
                         return const Center(
                           child: Text(
-                            "No hay usuarios",
+                            "No hay usuarios para sugerir.",
                             style: TextStyle(
-                              color: Colors.white54,
+                              color: Colors.white60,
                               fontSize: 12,
                             ),
                           ),
@@ -1733,9 +1718,9 @@ class _ChatHomePageState extends State<ChatHomePage> {
                       if (allOtherUsers.isEmpty) {
                         return const Center(
                           child: Text(
-                            "No hay sugerencias.",
+                            "No hay sugerencias por ahora.",
                             style: TextStyle(
-                              color: Colors.white54,
+                              color: Colors.white60,
                               fontSize: 12,
                             ),
                           ),
@@ -1744,14 +1729,27 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
                       allOtherUsers.shuffle();
                       List<DocumentSnapshot> suggestedUsers =
-                          allOtherUsers.take(10).toList();
+                          allOtherUsers.take(10).toList(); // Mostrar hasta 10
+
+                      if (suggestedUsers.isEmpty) {
+                        // Por si acaso take(10) devuelve vacío
+                        return const Center(
+                          child: Text(
+                            "No hay sugerencias disponibles.",
+                            style: TextStyle(
+                              color: Colors.white60,
+                              fontSize: 12,
+                            ),
+                          ),
+                        );
+                      }
 
                       return ListView.builder(
                         scrollDirection: Axis.horizontal,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
-                          vertical: 6,
-                        ), // Ajustado padding
+                          vertical: 8,
+                        ),
                         itemCount: suggestedUsers.length,
                         itemBuilder: (contextItemBuilder, i) {
                           final userDoc = suggestedUsers[i];
@@ -1763,74 +1761,78 @@ class _ChatHomePageState extends State<ChatHomePage> {
                           final nombre =
                               userData['Nombre'] as String? ?? 'Usuario';
 
-                          return GestureDetector(
-                            onTap: () {
-                              final screenWidth =
-                                  MediaQuery.of(contextItemBuilder).size.width;
-                              const double tabletBreakpoint = 720.0;
-                              final bool currentIsLargeScreen =
-                                  screenWidth >= tabletBreakpoint;
-                              _iniciarChat(
-                                userDoc.id,
-                                isLargeScreen: currentIsLargeScreen,
-                              );
-                            },
-                            child: Container(
-                              width: 65, // Ancho para cada item
-                              margin: const EdgeInsets.symmetric(
-                                horizontal: 4.5,
-                              ), // Margen entre items
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Stack(
-                                    children: [
-                                      CircleAvatar(
-                                        radius: 26, // Tamaño del avatar
-                                        backgroundImage:
-                                            foto.isNotEmpty
-                                                ? NetworkImage(foto)
-                                                : const AssetImage(
-                                                      'assets/images/avatar1.png',
-                                                    )
-                                                    as ImageProvider,
-                                      ),
-                                      if (online)
-                                        Positioned(
-                                          right: 0,
-                                          bottom: 0,
-                                          child: Container(
+                          return Tooltip(
+                            // Añadido Tooltip para el nombre completo
+                            message: nombre,
+                            child: GestureDetector(
+                              onTap: () {
+                                final screenWidth =
+                                    MediaQuery.of(
+                                      contextItemBuilder,
+                                    ).size.width;
+                                const double tabletBreakpoint = 720.0;
+                                final bool currentIsLargeScreen =
+                                    screenWidth >= tabletBreakpoint;
+                                _iniciarChat(
+                                  userDoc.id,
+                                  isLargeScreen: currentIsLargeScreen,
+                                );
+                              },
+                              child: Container(
+                                width: 68,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 4.0,
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Stack(
+                                      alignment: Alignment.bottomRight,
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 28, // Un poco más grande
+                                          backgroundImage:
+                                              foto.isNotEmpty
+                                                  ? NetworkImage(foto)
+                                                  : const AssetImage(
+                                                        'assets/images/avatar1.png',
+                                                      )
+                                                      as ImageProvider,
+                                        ),
+                                        if (online)
+                                          Container(
                                             padding: const EdgeInsets.all(1.5),
                                             decoration: BoxDecoration(
                                               color: const Color(0xFF015C8B),
                                               shape: BoxShape.circle,
                                             ),
                                             child: Container(
-                                              width: 9,
-                                              height:
-                                                  9, // Tamaño del indicador online
+                                              width: 10,
+                                              height: 10,
                                               decoration: BoxDecoration(
                                                 color:
-                                                    Colors.greenAccent.shade400,
+                                                    Colors
+                                                        .lightGreenAccent
+                                                        .shade700, // Más intenso
                                                 shape: BoxShape.circle,
                                               ),
                                             ),
                                           ),
-                                        ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 5),
-                                  Text(
-                                    nombre,
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 11,
+                                      ],
                                     ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
+                                    const SizedBox(height: 5),
+                                    Text(
+                                      nombre,
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11.5,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           );
@@ -2494,9 +2496,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
   /// 1) Header con botón atrás, avatar, nombre y última conexión
 
-  // Antes era: Widget _buildChatHeader() {
   Widget _buildChatHeader({required bool isLargeScreen}) {
-    // Nueva firma
     return Container(
       color: const Color(0xFF048DD2),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
