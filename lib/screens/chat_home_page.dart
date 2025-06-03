@@ -805,6 +805,77 @@ class _ChatHomePageState extends State<ChatHomePage> {
     }
   }
 
+  void _confirmarEliminarChat(String chatId, String chatTitle) {
+    // ... (el código que ya tienes para esta función)
+    showDialog(
+      context: context,
+      builder: (BuildContext contextDialog) {
+        return AlertDialog(
+          title: Text('Eliminar Chat "$chatTitle"'),
+          content: const Text(
+            'Este chat se ocultará de tu lista. No podrás acceder a él a menos que alguien te envíe un nuevo mensaje en esta conversación (lo que podría hacerlo visible de nuevo, dependiendo de la lógica futura).\n\nLos demás participantes seguirán viendo el chat.\n\n¿Estás seguro?',
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancelar'),
+              onPressed: () {
+                Navigator.of(contextDialog).pop();
+              },
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(contextDialog).colorScheme.error,
+              ),
+              child: const Text('Eliminar para mí'),
+              onPressed: () {
+                Navigator.of(contextDialog).pop();
+                _ejecutarEliminarChatParaMi(chatId);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _ejecutarEliminarChatParaMi(String chatId) async {
+    // ... (el código que ya tienes para esta función)
+    if (chatId.isEmpty)
+      return; // Ya tenías una guarda para null/empty, isEmpty es suficiente.
+
+    final DocumentReference chatDocRef = FirebaseFirestore.instance
+        .collection('Chats')
+        .doc(chatId);
+
+    try {
+      await chatDocRef.update({
+        'ocultoPara': FieldValue.arrayUnion([uid]),
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Chat eliminado de tu lista.')),
+        );
+        if (chatIdSeleccionado == chatId) {
+          setState(() {
+            _showList = true;
+            chatIdSeleccionado = null;
+            otroUid = null;
+          });
+        }
+      }
+      print('Chat $chatId ocultado para el usuario $uid');
+    } catch (e, s) {
+      print('Error al ocultar el chat: ${e.toString()}');
+      print('Stack trace: ${s.toString()}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al ocultar el chat: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
   void _mostrarDialogoSeleccionarNuevosMiembros(
     String groupId,
     List<String> idsMiembrosActuales,
@@ -815,7 +886,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
     final ValueNotifier<String> filtroDialogo = ValueNotifier<String>('');
     List<String> idsSeleccionadosParaAnadir =
         []; // IDs de usuarios seleccionados en este diálogo
-
     showDialog(
       context: context,
       builder: (BuildContext contextDialog) {
@@ -1637,37 +1707,35 @@ class _ChatHomePageState extends State<ChatHomePage> {
   }
 
   /// Helper que construye la lista aplicando filtros
-
   // Reemplaza TODA tu función _chatListStream con esta:
   Widget _chatListStream({
     required bool filterUnread,
     required bool filterGroups,
-    required bool filterArchived, // Parámetro para la pestaña "Archivados"
+    required bool filterArchived,
   }) {
     // --- CASO 1: HAY TEXTO EN EL FILTRO DE BÚSQUEDA ---
     if (filtro.isNotEmpty) {
       if (_isSearchingGlobalUsers) {
         return ListView.builder(
           itemCount: 5,
-          itemBuilder:
-              (_, __) => const ShimmerChatTile(), // O un ShimmerUserTile
+          itemBuilder: (_, __) => const ShimmerChatTile(),
         );
       } else if (_usuarios.isEmpty) {
         return const Center(
           child: Text('No se encontraron usuarios con ese nombre.'),
         );
       } else {
-        // Construir lista de _usuarios (resultados de búsqueda global)
         return ListView.builder(
           padding: const EdgeInsets.symmetric(vertical: 4),
           itemCount: _usuarios.length,
           itemBuilder: (_, i) {
             final userDoc = _usuarios[i];
-            final nombre = userDoc['Nombre'] ?? 'Usuario';
+            final userData = userDoc.data() as Map<String, dynamic>? ?? {};
+            final nombre = userData['Nombre'] ?? 'Usuario';
             final foto = cacheUsuarios[userDoc.id]?['foto'] ?? '';
 
-            // UI para mostrar un usuario de la búsqueda global
             return MouseRegion(
+              /* ... tu widget completo para item de usuario ... */
               cursor: SystemMouseCursors.click,
               onEnter: (_) => setState(() => hoveredUserId = userDoc.id),
               onExit: (_) => setState(() => hoveredUserId = null),
@@ -1690,32 +1758,37 @@ class _ChatHomePageState extends State<ChatHomePage> {
                     decoration: BoxDecoration(
                       gradient:
                           hoveredUserId == userDoc.id
-                              ? const LinearGradient(
+                              ? LinearGradient(
                                 colors: [
-                                  Color(0xFF1976D2),
-                                  Color(0xFF42A5F5),
-                                ], // Considera Theme.of(context)
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
+                                  Theme.of(context).colorScheme.secondary,
+                                  Theme.of(
+                                    context,
+                                  ).colorScheme.primaryContainer,
+                                ],
                               )
                               : null,
                       color:
                           hoveredUserId != userDoc.id
-                              ? const Color(0xFF1565C0)
-                              : null, // Considera Theme.of(context)
+                              ? Theme.of(
+                                context,
+                              ).colorScheme.primary.withOpacity(0.8)
+                              : null,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
                           color:
                               hoveredUserId == userDoc.id
-                                  ? Colors.blueAccent.withOpacity(0.6)
-                                  : Colors.black.withOpacity(0.2),
-                          blurRadius: hoveredUserId == userDoc.id ? 12 : 6,
-                          offset: const Offset(0, 4),
+                                  ? Theme.of(
+                                    context,
+                                  ).colorScheme.secondary.withOpacity(0.5)
+                                  : Colors.black.withOpacity(0.15),
+                          blurRadius: hoveredUserId == userDoc.id ? 10 : 5,
+                          offset: const Offset(0, 3),
                         ),
                       ],
                     ),
                     child: Row(
+                      /* ... tu Row para item de usuario ... */
                       children: [
                         CircleAvatar(
                           radius: 26,
@@ -1734,28 +1807,27 @@ class _ChatHomePageState extends State<ChatHomePage> {
                             children: [
                               Text(
                                 nombre,
-                                style: const TextStyle(
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.titleMedium?.copyWith(
                                   color: Colors.white,
-                                  fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                ), // Considera Theme.of(context)
+                                ),
                               ),
                               const SizedBox(height: 4),
-                              const Text(
+                              Text(
                                 'Haz clic para iniciar conversación',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12,
-                                ), // Considera Theme.of(context)
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: Colors.white70),
                               ),
                             ],
                           ),
                         ),
-                        const Icon(
+                        Icon(
                           Icons.arrow_forward_ios,
                           color: Colors.white54,
                           size: 16,
-                        ), // Considera Theme.of(context)
+                        ),
                       ],
                     ),
                   ),
@@ -1802,19 +1874,26 @@ class _ChatHomePageState extends State<ChatHomePage> {
                 final data = chatDoc.data() as Map<String, dynamic>?;
                 if (data == null) return false;
 
-                final List<dynamic> archivadoPorListaDinamica =
-                    data['archivadoPara'] as List<dynamic>? ?? [];
-                final List<String> archivadoPorLista =
-                    archivadoPorListaDinamica
-                        .map((item) => item.toString())
-                        .toList();
+                // ========= INICIO: MODIFICACIÓN PARA OCULTAR CHATS ELIMINADOS PRIMERO =========
+                final List<String> ocultoPorLista = List<String>.from(
+                  data['ocultoPara'] ?? [],
+                );
+                if (ocultoPorLista.contains(uid)) {
+                  return false; // Si el chat está oculto (eliminado para mí), no lo muestro nunca.
+                }
+                // ========= FIN: MODIFICACIÓN PARA OCULTAR CHATS ELIMINADOS =========
+
+                final List<String> archivadoPorLista = List<String>.from(
+                  data['archivadoPara'] ?? [],
+                );
                 final bool estaArchivadoPorUsuarioActual = archivadoPorLista
                     .contains(uid);
 
                 if (filterArchived) {
-                  return estaArchivadoPorUsuarioActual;
+                  return estaArchivadoPorUsuarioActual; // Ya sabemos que no está en ocultoPara
                 } else {
-                  if (estaArchivadoPorUsuarioActual) return false;
+                  if (estaArchivadoPorUsuarioActual)
+                    return false; // Ocultar archivados de otras pestañas
 
                   final bool esUnGrupo = (data['isGroup'] as bool?) ?? false;
                   final Map<String, dynamic> unreadMap =
@@ -1828,6 +1907,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
               }).toList();
 
           if (chatsVisibles.isEmpty) {
+            // ... (tus mensajes de lista vacía, como los tenías) ...
             if (filterArchived)
               return const Center(child: Text('No tienes chats archivados'));
             if (filterUnread)
@@ -1841,8 +1921,8 @@ class _ChatHomePageState extends State<ChatHomePage> {
                 !filterArchived &&
                 chatsExistentes.isNotEmpty) {
               return const Center(
-                child: Text('Todos tus chats están archivados'),
-              );
+                child: Text('Todos tus chats están ocultos o archivados'),
+              ); // Mensaje ajustado
             }
             return const Center(
               child: Text('No hay conversaciones para mostrar aquí'),
@@ -1854,13 +1934,15 @@ class _ChatHomePageState extends State<ChatHomePage> {
             itemCount: chatsVisibles.length,
             itemBuilder: (ctxBuilder, idx) {
               final chatDoc = chatsVisibles[idx];
+              // ... (El resto de tu itemBuilder para el ChatTile, incluyendo el PopupMenuButton dinámico,
+              //      asegúrate que las variables `estaArchivadoActual` y `estaSilenciadoActual`
+              //      se definan aquí dentro usando `chatDoc.data()` para el chat actual)
               final data = chatDoc.data()! as Map<String, dynamic>;
               final List<String> otherIds = List<String>.from(
                 data['ids'] ?? [],
               );
               final bool isGroup = (data['isGroup'] as bool?) ?? false;
               final String chatId = chatDoc.id;
-
               final String? other =
                   isGroup
                       ? null
@@ -1868,14 +1950,12 @@ class _ChatHomePageState extends State<ChatHomePage> {
                         (id) => id != uid,
                         orElse: () => '',
                       );
-
               if (!isGroup &&
                   (other == null ||
                       other.isEmpty ||
                       !cacheUsuarios.containsKey(other))) {
                 return const ShimmerChatTile();
               }
-
               final String preview =
                   (data['lastMessage'] as String?)?.trim().isNotEmpty == true
                       ? data['lastMessage']
@@ -1884,7 +1964,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                       : 'Inicia la conversación';
               final String title =
                   isGroup
-                      ? (data['groupName'] ?? 'Grupo (${otherIds.length})')
+                      ? (data['groupName'] ?? 'Grupo')
                       : cacheUsuarios[other!]!['nombre']!;
               final String? photoUrl =
                   isGroup ? data['groupPhoto'] : cacheUsuarios[other!]!['foto'];
@@ -1898,22 +1978,15 @@ class _ChatHomePageState extends State<ChatHomePage> {
                   (data['unreadCounts'] as Map<String, dynamic>?) ?? {};
               final int unreadCount = (unreadMap[uid] as int?) ?? 0;
 
-              // --- INICIO: LÓGICA PARA DETERMINAR SI EL CHAT ACTUAL ESTÁ ARCHIVADO ---
-              final List<dynamic> archivadoPorDinamico =
-                  data['archivadoPara'] as List<dynamic>? ?? [];
-              final List<String> archivadoPorEsteChat =
-                  archivadoPorDinamico.map((item) => item.toString()).toList();
-              final bool estaArchivadoActual = archivadoPorEsteChat.contains(
-                uid,
+              final List<String> archivadoPorItem = List<String>.from(
+                data['archivadoPara'] ?? [],
+              ); // Renombrado para evitar colisión con parámetro de función
+              final bool estaArchivadoItem = archivadoPorItem.contains(uid);
+
+              final List<String> silenciadoPorItem = List<String>.from(
+                data['silenciadoPor'] ?? [],
               );
-              // --- INICIO: LÓGICA PARA DETERMINAR SI EL CHAT ACTUAL ESTÁ Silenciado ---
-              final List<dynamic> silenciadoPorDinamico =
-                  data['silenciadoPor'] as List<dynamic>? ?? [];
-              final List<String> silenciadoPorEsteChat =
-                  silenciadoPorDinamico.map((item) => item.toString()).toList();
-              final bool estaSilenciadoActual = silenciadoPorEsteChat.contains(
-                uid,
-              );
+              final bool estaSilenciadoItem = silenciadoPorItem.contains(uid);
 
               return ValueListenableBuilder<String?>(
                 valueListenable: hoveredChatId,
@@ -1924,7 +1997,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                     onExit: (_) => hoveredChatId.value = null,
                     child: GestureDetector(
                       onTap: () {
-                        if (chatId != null && uid != null) {
+                        if (chatId.isNotEmpty && uid.isNotEmpty) {
                           FirebaseFirestore.instance
                               .collection('Chats')
                               .doc(chatId)
@@ -1963,9 +2036,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                           color:
                               isHovered
                                   ? Colors.blue.shade800
-                                  : const Color(
-                                    0xFF015C8B,
-                                  ), // Considera Theme.of(context)
+                                  : const Color(0xFF015C8B),
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
@@ -1979,7 +2050,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                           ],
                         ),
                         child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             CircleAvatar(
                               radius: 26,
@@ -1995,151 +2066,142 @@ class _ChatHomePageState extends State<ChatHomePage> {
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          title,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        hora,
-                                        style: const TextStyle(
-                                          color: Colors.white54,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                    ],
+                                  Text(
+                                    title,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      if (preview.contains(
-                                        'ha creado el grupo',
-                                      ))
-                                        const Icon(
-                                          Icons.group_add,
-                                          size: 14,
-                                          color: Colors.white70,
-                                        ),
-                                      if (preview.contains(
-                                        'ha creado el grupo',
-                                      ))
-                                        const SizedBox(width: 4),
-                                      Expanded(
-                                        child: Text(
-                                          preview,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    preview,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
-                            const SizedBox(width: 10),
                             Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                if (unreadCount > 0 &&
-                                    !filterArchived) // No mostramos contador en la pestaña de archivados
-                                  Container(
-                                    margin: const EdgeInsets.only(bottom: 6),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      '$unreadCount',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
+                                Text(
+                                  hora,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 10,
                                   ),
-                                PopupMenuButton<String>(
-                                  icon: const Icon(
-                                    Icons.more_vert,
-                                    color: Colors.white,
-                                  ), // Considera Theme.of(context)
-                                  onSelected: (value) {
-                                    if (value == 'archivar') {
-                                      _archivarChat(chatId);
-                                    } else if (value == 'desarchivar') {
-                                      _desarchivarChat(chatId);
-                                    } else if (value == 'silenciar') {
-                                      _silenciarChat(chatId);
-                                    } else if (value == 'quitar_silencio') {
-                                      _quitarSilencioChat(chatId);
-                                    } else if (value == 'eliminar') {
-                                      print('Acción: Eliminar chat $chatId');
-                                      // TODO
-                                    }
-                                  },
-                                  itemBuilder: (BuildContext context) {
-                                    List<PopupMenuEntry<String>> items = [];
-                                    // Usamos el parámetro filterArchived de la función _chatListStream
-                                    // para decidir si este chat se está mostrando en la pestaña "Archivados".
-                                    // O, como lo tenías, usando estaArchivadoActual que definimos arriba a partir de los datos del chatDoc.
-                                    // Ambas son válidas. Usar 'estaArchivadoActual' es más directo al dato.
-                                    if (estaArchivadoActual) {
-                                      items.add(
-                                        const PopupMenuItem(
-                                          value: 'desarchivar',
-                                          child: Text('Desarchivar chat'),
+                                  textAlign: TextAlign.end,
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (unreadCount > 0 &&
+                                        !estaArchivadoItem) // Usar estaArchivadoItem y no filterArchived
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
                                         ),
-                                      );
-                                    } else {
-                                      items.add(
-                                        const PopupMenuItem(
-                                          value: 'archivar',
-                                          child: Text('Archivar chat'),
+                                        decoration: BoxDecoration(
+                                          color: Colors.red,
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
                                         ),
-                                      );
-                                    }
-                                    if (estaSilenciadoActual) {
-                                      items.add(
-                                        const PopupMenuItem(
-                                          value:
-                                              'quitar_silencio', // Nuevo valor
-                                          child: Text('Quitar silencio'),
+                                        child: Text(
+                                          '$unreadCount',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
-                                      );
-                                    } else {
-                                      items.add(
-                                        const PopupMenuItem(
-                                          value: 'silenciar',
-                                          child: Text('Silenciar'),
-                                        ),
-                                      );
-                                    }
-                                    items.add(
-                                      const PopupMenuItem(
-                                        value: 'eliminar',
-                                        child: Text('Eliminar chat'),
                                       ),
-                                    );
-                                    return items;
-                                  },
+                                    if (unreadCount > 0 && !estaArchivadoItem)
+                                      const SizedBox(width: 4),
+                                    PopupMenuButton<String>(
+                                      icon: const Icon(
+                                        Icons.more_vert,
+                                        color: Colors.white70,
+                                        size: 20,
+                                      ),
+                                      tooltip: "Más opciones",
+                                      onSelected: (value) {
+                                        if (value == 'archivar') {
+                                          _archivarChat(chatId);
+                                        } else if (value == 'desarchivar') {
+                                          _desarchivarChat(chatId);
+                                        } else if (value == 'silenciar') {
+                                          _silenciarChat(chatId);
+                                        } else if (value == 'quitar_silencio') {
+                                          _quitarSilencioChat(chatId);
+                                        } else if (value == 'eliminar') {
+                                          _confirmarEliminarChat(chatId, title);
+                                        }
+                                      },
+                                      itemBuilder: (BuildContext context) {
+                                        List<PopupMenuEntry<String>> items = [];
+                                        if (estaArchivadoItem) {
+                                          // Usar la variable local del item
+                                          items.add(
+                                            const PopupMenuItem(
+                                              value: 'desarchivar',
+                                              child: Text('Desarchivar chat'),
+                                            ),
+                                          );
+                                        } else {
+                                          items.add(
+                                            const PopupMenuItem(
+                                              value: 'archivar',
+                                              child: Text('Archivar chat'),
+                                            ),
+                                          );
+                                        }
+                                        if (estaSilenciadoItem) {
+                                          // Usar la variable local del item
+                                          items.add(
+                                            const PopupMenuItem(
+                                              value: 'quitar_silencio',
+                                              child: Text('Quitar silencio'),
+                                            ),
+                                          );
+                                        } else {
+                                          items.add(
+                                            const PopupMenuItem(
+                                              value: 'silenciar',
+                                              child: Text('Silenciar'),
+                                            ),
+                                          );
+                                        }
+
+                                        items.add(
+                                          PopupMenuItem(
+                                            value: 'eliminar',
+                                            child: Text(
+                                              'Eliminar chat',
+                                              style: TextStyle(
+                                                color:
+                                                    Theme.of(
+                                                      context,
+                                                    ).colorScheme.error,
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                        return items;
+                                      },
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
