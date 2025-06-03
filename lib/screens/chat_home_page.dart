@@ -2132,7 +2132,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                         ),
                                       );
                                     }
-
                                     items.add(
                                       const PopupMenuItem(
                                         value: 'eliminar',
@@ -2461,47 +2460,112 @@ class _ChatHomePageState extends State<ChatHomePage> {
   }
 
   /// 3) StreamBuilder de mensajes, con separador de fecha y ChatBubble
+  // Dentro de tu clase _ChatHomePageState
+
   Widget _buildMessagesStream() {
+    // Asegurarnos de que chatIdSeleccionado no sea null antes de construir el stream
+    if (chatIdSeleccionado == null) {
+      return const Center(
+        child: Text("Selecciona un chat para ver los mensajes."),
+      );
+    }
+
     return StreamBuilder<QuerySnapshot>(
       stream:
           FirebaseFirestore.instance
               .collection('Chats')
-              .doc(chatIdSeleccionado)
+              .doc(
+                chatIdSeleccionado,
+              ) // No necesita '!' si ya verificamos arriba
               .collection('Mensajes')
-              .orderBy('Fecha')
+              .orderBy(
+                'Fecha',
+              ) // Ordena por fecha, la lista se invierte luego para visualización
               .snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData) {
+        if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
+        if (!snap.hasData || snap.data!.docs.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text(
+                "Aún no hay mensajes en este chat. ¡Sé el primero en enviar uno!",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            ),
+          );
+        }
 
-        // ── 1) Marcar como leídos los mensajes que veo y que no son míos ──
+        // --- INICIO: LÓGICA PARA MARCAR MENSAJES COMO LEÍDOS Y LIMPIAR TYPING DEL OTRO (OPCIONAL) ---
+        // (Esta parte la tenías antes, la mantenemos y revisamos)
+        List<Future<void>> updateFutures =
+            []; // Para agrupar las actualizaciones de 'leidoPor'
+
         for (var doc in snap.data!.docs) {
           final data = doc.data() as Map<String, dynamic>;
-          final autor = data['AutorID'] as String;
-          final leidoPor = List<String>.from(data['leidoPor'] ?? []);
-          if (autor != uid && !leidoPor.contains(uid)) {
+          final autorIdMensaje = data['AutorID'] as String?;
+
+          // Marcar como leído
+          if (autorIdMensaje != null && autorIdMensaje != uid) {
+            final leidoPor = List<String>.from(data['leidoPor'] ?? []);
+            if (!leidoPor.contains(uid)) {
+              updateFutures.add(
+                doc.reference.update({
+                  'leidoPor': FieldValue.arrayUnion([uid]),
+                }),
+              );
+            }
+          }
+
+          // Opcional: Limpiar "está escribiendo..." del otro usuario si este mensaje es de él
+          // (Como lo discutimos para el bug del indicador de "escribiendo" atascado)
+          if (otroUid != null &&
+              autorIdMensaje == otroUid &&
+              chatIdSeleccionado != null) {
+            // Verificamos el estado actual antes de escribir para evitar escrituras innecesarias
             FirebaseFirestore.instance
                 .collection('Chats')
-                .doc(chatIdSeleccionado)
-                .collection('Mensajes')
-                .doc(doc.id)
-                .update({
-                  'leidoPor': FieldValue.arrayUnion([uid]),
+                .doc(chatIdSeleccionado!)
+                .get()
+                .then((chatDocSnap) {
+                  if (chatDocSnap.exists) {
+                    final chatDataTyping =
+                        chatDocSnap.data() as Map<String, dynamic>;
+                    final typingMap =
+                        chatDataTyping['typing'] as Map<String, dynamic>? ?? {};
+                    if (typingMap[otroUid!] == true) {
+                      // Solo actualiza si realmente estaba en true
+                      FirebaseFirestore.instance
+                          .collection('Chats')
+                          .doc(chatIdSeleccionado!)
+                          .update({'typing.$otroUid': false})
+                          .catchError(
+                            (e) => print(
+                              "Error al limpiar typing del otro al recibir mensaje: $e",
+                            ),
+                          );
+                    }
+                  }
                 });
           }
         }
+        // Si quieres esperar a que todas las actualizaciones de 'leidoPor' terminen antes de construir la lista (raro, puede ser lento)
+        // Podrías usar Future.wait(updateFutures).then((_) { /* construir lista */ });
+        // Pero usualmente dejar que se actualicen en segundo plano está bien para 'leidoPor'.
+        // --- FIN: LÓGICA PARA MARCAR MENSAJES COMO LEÍDOS Y LIMPIAR TYPING ---
 
-        // ── 2) Construir la lista invertida y auto‑scroll ──
-        // final asc = snap.data!.docs;
-        // final inv = asc.reversed.toList();
-        final inv = snap.data!.docs.reversed.toList();
+        final List<DocumentSnapshot> inv = snap.data!.docs.reversed.toList();
 
-        // Después de rebuild, asegurar scroll al fondo:
+        // Auto-scroll al final (o al principio, ya que está invertida)
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_scrollController.hasClients) {
+          if (_scrollController.hasClients &&
+              _scrollController.position.maxScrollExtent > 0) {
+            // Solo si hay contenido para scrollear
             _scrollController.animateTo(
-              0.0,
+              0.0, // Al principio de la lista invertida (últimos mensajes)
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeOut,
             );
@@ -2510,135 +2574,168 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
         return ListView.builder(
           controller: _scrollController,
-          reverse: true,
-          padding: const EdgeInsets.all(12),
-          itemCount: inv.length, // 'inv' es tu lista de mensajes invertida
+          reverse:
+              true, // Fundamental para que los mensajes nuevos aparezcan abajo y el scroll sea natural
+          padding: const EdgeInsets.all(12.0),
+          itemCount: inv.length,
           itemBuilder: (context, i) {
-            final doc = inv[i];
-            final data = doc.data() as Map<String, dynamic>;
-            final esMio = data['AutorID'] == uid;
-            final fecha = (data['Fecha'] as Timestamp).toDate();
+            final docMsg = inv[i];
+            final dataMsg = docMsg.data() as Map<String, dynamic>;
+            final bool esMio = dataMsg['AutorID'] == uid;
+            final Timestamp fechaTimestamp =
+                dataMsg['Fecha'] as Timestamp? ??
+                Timestamp.now(); // Default a now() si es null
+            final DateTime fecha = fechaTimestamp.toDate();
 
-            // Separador de fecha (tu lógica actual)
             bool showDateSeparator = false;
             if (i == inv.length - 1) {
+              // Es el mensaje más antiguo en la lista (el primero después de invertir)
               showDateSeparator = true;
             } else {
-              final nextTs =
+              final Timestamp nextTs =
                   (inv[i + 1].data() as Map<String, dynamic>)['Fecha']
-                      as Timestamp;
-              final d1 = fecha;
-              final d2 = nextTs.toDate();
+                      as Timestamp? ??
+                  Timestamp.now();
+              final DateTime d1 = fecha;
+              final DateTime d2 = nextTs.toDate();
               showDateSeparator =
                   d1.year != d2.year ||
                   d1.month != d2.month ||
                   d1.day != d2.day;
             }
 
-            final leidoPor = List<String>.from(data['leidoPor'] ?? []);
-            final readByPeer = otroUid != null && leidoPor.contains(otroUid);
+            final List<String> leidoPor = List<String>.from(
+              dataMsg['leidoPor'] ?? [],
+            );
+            final bool readByPeer =
+                otroUid != null && leidoPor.contains(otroUid!);
 
-            // --- INICIO DE MODIFICACIÓN PARA MANEJAR autorInfo ---
-            final String? autorId =
-                data['AutorID'] as String?; // Hacemos el ID del autor nulable
+            final String? autorId = dataMsg['AutorID'] as String?;
             Map<String, String>? autorInfo =
                 autorId != null ? cacheUsuarios[autorId] : null;
 
-            // Si la info del autor no está en caché y el autorId es válido, intenta cargarla
             if (autorId != null &&
                 autorId != 'sistema' &&
                 autorInfo == null &&
                 mounted) {
-              // Llamamos esto en addPostFrameCallback para evitar llamar a setState durante un build.
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted && !cacheUsuarios.containsKey(autorId)) {
-                  // Doble chequeo
-                  _obtenerUsuario(
-                    autorId,
-                  ); // _obtenerUsuario llama a setState cuando completa
+                  _obtenerUsuario(autorId);
                 }
               });
             }
 
-            // Prepara valores seguros para pasar al ChatBubbleCustom
             final String nombreAutorParaMostrar =
                 autorInfo?['nombre'] ??
                 (autorId == 'sistema'
-                    ? ''
+                    ? '' // Los mensajes del sistema no suelen mostrar nombre de autor
                     : (autorId == uid
                         ? (nombreUsuario ?? 'Tú')
-                        : 'Usuario...'));
+                        : 'Cargando...')); // Muestra 'Cargando...' si no está en caché
+
             final String? urlAvatarParaMostrar = autorInfo?['foto'];
-            // Considera un estado de carga si autorInfo es null y no es un mensaje del sistema ni tuyo
+
             final bool estaCargandoInfoAutor =
                 autorId != null &&
                 autorId != 'sistema' &&
-                autorId != uid &&
+                autorId !=
+                    uid && // No mostrar "cargando" para mis propios mensajes
                 autorInfo == null;
-            // --- FIN DE MODIFICACIÓN ---
 
-            final total = inv.length;
-            final showName =
-                i == total - 1 ||
-                (i < total - 1 &&
-                    (inv[i + 1].data() as Map<String, dynamic>)['AutorID'] !=
-                        data['AutorID']);
+            final int totalMensajes = inv.length;
+            final bool showName =
+                (dataMsg['isGroup'] == true &&
+                    !esMio && // Solo para mensajes de otros en grupos
+                    (i ==
+                            totalMensajes -
+                                1 || // Primer mensaje del bloque de ese autor
+                        (i < totalMensajes - 1 &&
+                            (inv[i + 1].data()
+                                    as Map<String, dynamic>)['AutorID'] !=
+                                autorId))) ||
+                // O si el mensaje anterior es de un autor diferente o es un separador de fecha (si es el primer mensaje después del separador)
+                (i > 0 &&
+                    showDateSeparator &&
+                    !esMio &&
+                    dataMsg['isGroup'] == true) ||
+                (i > 0 &&
+                    !esMio &&
+                    dataMsg['isGroup'] == true &&
+                    (inv[i - 1].data() as Map<String, dynamic>)['AutorID'] !=
+                        autorId &&
+                    !showDateSeparator);
 
             return Column(
               crossAxisAlignment:
                   esMio ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
-                if (showDateSeparator) DateSeparator(fecha),
+                if (showDateSeparator)
+                  DateSeparator(fecha), // Tu widget DateSeparator
 
-                // Si está cargando la info del autor Y NO es tu mensaje, muestra un loader simple
-                // (Podrías hacer un ShimmerBubble más elaborado aquí)
-                if (estaCargandoInfoAutor && !esMio)
+                if (estaCargandoInfoAutor) // No esMio ya está implícito en la definición de estaCargandoInfoAutor
                   Padding(
                     padding: EdgeInsets.symmetric(
-                      vertical: 8.0,
-                      horizontal: esMio ? 0 : 10,
+                      vertical: 4.0,
+                      horizontal: esMio ? 0 : 8.0,
                     ),
                     child: Align(
                       alignment:
-                          esMio ? Alignment.centerRight : Alignment.centerLeft,
+                          Alignment
+                              .centerLeft, // Los mensajes de otros siempre a la izquierda
                       child: Container(
-                        padding: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
-                          color: Colors.grey[300],
+                          color:
+                              Colors.grey[200], // Un color de burbuja de carga
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const SizedBox(
-                          width: 100,
-                          child: Text(
-                            'Cargando mensaje...',
-                            style: TextStyle(fontSize: 10),
+                        child: const Text(
+                          '...',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontStyle: FontStyle.italic,
                           ),
                         ),
                       ),
                     ),
                   )
-                else // Si no está cargando, o es tu mensaje, muestra el ChatBubbleCustom
+                else
                   ChatBubbleCustom(
+                    // Tu widget ChatBubbleCustom
                     isMine: esMio,
                     read: readByPeer,
                     avatarUrl:
                         urlAvatarParaMostrar ??
-                        '', // Pasa string vacío si es null
+                        '', // Pasa string vacío como fallback si tu ChatBubble no maneja null
                     authorName: nombreAutorParaMostrar,
-                    text: data['Contenido'] as String,
+                    text:
+                        dataMsg['Contenido'] as String? ??
+                        '', // Manejar contenido null
                     time: fecha,
-                    edited: data['editado'] as bool? ?? false,
-                    deleted: data['eliminado'] as bool? ?? false,
-                    reactions: Map<String, int>.from(data['reacciones'] ?? {}),
-                    showName: showName,
+                    edited: dataMsg['editado'] as bool? ?? false,
+                    deleted: dataMsg['eliminado'] as bool? ?? false,
+                    reactions: Map<String, int>.from(
+                      dataMsg['reacciones'] ?? {},
+                    ),
+                    showName:
+                        showName &&
+                        nombreAutorParaMostrar.isNotEmpty &&
+                        nombreAutorParaMostrar !=
+                            'Cargando...', // Solo mostrar nombre si es relevante
                     onEdit:
-                        () => _editarMensaje(
-                          doc.id,
-                          data['Contenido'],
-                          data['Fecha'],
-                        ),
-                    onDelete: () => _eliminarMensaje(doc.id),
-                    onReact: () => _reaccionarMensaje(doc.id),
+                        esMio
+                            ? () => _editarMensaje(
+                              docMsg.id,
+                              dataMsg['Contenido'],
+                              fechaTimestamp,
+                            )
+                            : null,
+                    onDelete: esMio ? () => _eliminarMensaje(docMsg.id) : null,
+                    onReact: () => _reaccionarMensaje(docMsg.id),
+                    // Asegúrate que ChatBubbleCustom puede manejar avatarUrl vacío y authorName como "Cargando..." o ""
                   ),
               ],
             );
