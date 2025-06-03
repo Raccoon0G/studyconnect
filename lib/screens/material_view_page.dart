@@ -1047,10 +1047,10 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
               style: const TextStyle(color: Colors.white60),
             ),
           ),
-          const SizedBox(height: 38),
+          const SizedBox(height: 18),
 
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 260, minHeight: 120),
+            constraints: const BoxConstraints(maxHeight: 230, minHeight: 120),
             child: const ExerciseCarousel(),
           ),
           const SizedBox(height: 16),

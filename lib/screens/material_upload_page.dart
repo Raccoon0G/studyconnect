@@ -395,7 +395,7 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
             arguments: {'tema': _temaSeleccionado!, 'materialId': _materialId!},
           );
 
-          return;
+          //return;
         } else {
           // ---- EDICIÓN NORMAL ----
           final doc = await coleccionMateriales.doc(materialId).get();
@@ -458,7 +458,7 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
             '/material_view', // Ruta a tu MaterialViewPage
             arguments: {'tema': _temaSeleccionado!, 'materialId': _materialId!},
           );
-          return;
+          //return;
         }
       } else {
         // ---- NUEVO MATERIAL ----

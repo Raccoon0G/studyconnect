@@ -836,7 +836,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
 
                                       if (raw.trim().isEmpty) {
                                         return Text(
-                                          'Escribe un título aquí',
+                                          'Escribe un título',
                                           style: TextStyle(
                                             fontSize: 16,
                                             fontStyle: FontStyle.italic,
@@ -895,7 +895,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                                   ),
                                   child: Text(
                                     _descriptionController.text.isEmpty
-                                        ? 'Escribe una descripción aquí'
+                                        ? 'Escribe una descripción'
                                         : dividirDescripcionEnLineas(
                                           _descriptionController.text,
                                         ),
@@ -912,7 +912,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                                     borderRadius: BorderRadius.circular(12),
                                     child: SizedBox(
                                       width: double.infinity,
-                                      height: 265,
+                                      height: 244,
                                       child: AspectRatio(
                                         aspectRatio: 4 / 3,
                                         child: Container(
@@ -1335,7 +1335,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
 
                                       if (raw.trim().isEmpty) {
                                         return Text(
-                                          'Escribe un título aquí',
+                                          'Escribe un título',
                                           style: TextStyle(
                                             fontSize: 16,
                                             fontStyle: FontStyle.italic,
@@ -1394,7 +1394,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                                   ),
                                   child: Text(
                                     _descriptionController.text.isEmpty
-                                        ? 'Escribe una descripción aquí'
+                                        ? 'Escribe una descripción '
                                         : dividirDescripcionEnLineas(
                                           _descriptionController.text,
                                         ),
