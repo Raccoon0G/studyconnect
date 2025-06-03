@@ -10,6 +10,9 @@ import 'package:intl/intl.dart';
 import 'package:study_connect/services/services.dart';
 import 'package:study_connect/widgets/widgets.dart';
 
+import 'package:file_picker/file_picker.dart';
+import 'package:mime/mime.dart';
+
 class ChatHomePage extends StatefulWidget {
   const ChatHomePage({super.key});
 
@@ -41,6 +44,10 @@ class _ChatHomePageState extends State<ChatHomePage> {
   bool _isSearchingGlobalUsers = false;
   Timer? _debounceTimer; // Variable para el debounce
   final Duration _debounceDuration = const Duration(milliseconds: 350);
+  Uint8List? _archivoSeleccionadoBytes;
+  String? _nombreArchivoSeleccionado;
+  String? _mimeTypeSeleccionado;
+  String _tipoContenidoAEnviar = "texto";
 
   @override
   void initState() {
@@ -59,6 +66,101 @@ class _ChatHomePageState extends State<ChatHomePage> {
     _groupNameController.dispose();
     _debounceTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _seleccionarImagen() async {
+    // Esta implementación es para web. Para móvil, usarías image_picker o file_picker directamente.
+    final html.FileUploadInputElement input =
+        html.FileUploadInputElement()
+          ..accept = 'image/*,video/*'; // Acepta imágenes y videos
+    input.click();
+    input.onChange.listen((event) {
+      final file = input.files?.first;
+      if (file != null) {
+        final reader = html.FileReader();
+        reader.readAsArrayBuffer(file);
+        reader.onLoadEnd.listen((event) {
+          setState(() {
+            _archivoSeleccionadoBytes = reader.result as Uint8List?;
+            _nombreArchivoSeleccionado = file.name;
+            _mimeTypeSeleccionado = file.type; // e.g., "image/png", "video/mp4"
+
+            if (_mimeTypeSeleccionado != null) {
+              if (_mimeTypeSeleccionado!.startsWith('image/')) {
+                _tipoContenidoAEnviar = "imagen";
+                if (_mimeTypeSeleccionado == 'image/gif') {
+                  _tipoContenidoAEnviar = "gif";
+                }
+              } else if (_mimeTypeSeleccionado!.startsWith('video/')) {
+                _tipoContenidoAEnviar = "video";
+              } else {
+                // Fallback o manejo para otros tipos si los permites desde este picker
+                _tipoContenidoAEnviar = "documento"; // O un tipo genérico
+              }
+            }
+            // Actualiza el estado para que el botón de enviar se habilite si es necesario
+          });
+        });
+      }
+    });
+  }
+
+  // // Puedes agregar más funciones como _seleccionarDocumento, _seleccionarAudio, etc.
+  // // usando file_picker para una experiencia más nativa en móvil y una UI de selección más rica.
+  // // Ejemplo con file_picker (necesitarías agregar el import 'package:file_picker/file_picker.dart';)
+  // // y manejar la lógica para web vs móvil si usas file_picker.
+
+  // Future<void> _seleccionarArchivoGenerico(FileType type) async {
+  //   FilePickerResult? result = await FilePicker.platform.pickFiles(
+  //     type: type,
+  //     // allowedExtensions: (type == FileType.custom) ? ['pdf', 'doc', 'docx'] : null, // Ejemplo para documentos
+  //   );
+
+  //   if (result != null) {
+  //     PlatformFile file = result.files.first;
+  //     setState(() {
+  //       // Para web, result.files.first.bytes contendrá los bytes.
+  //       // Para móvil, result.files.first.path te dará la ruta, y tendrás que leer los bytes desde ahí.
+  //       _archivoSeleccionadoBytes =
+  //           file.bytes; // ¡Cuidado! file.bytes solo está disponible en web.
+  //       // En móvil, usa file.path y luego File(file.path!).readAsBytes()
+  //       _nombreArchivoSeleccionado = file.name;
+  //       _mimeTypeSeleccionado = lookupMimeType(file.name); // Usar paquete mime
+
+  //       if (_mimeTypeSeleccionado != null) {
+  //         if (_mimeTypeSeleccionado!.startsWith('image/')) {
+  //           _tipoContenidoAEnviar = "imagen";
+  //           if (_mimeTypeSeleccionado == 'image/gif')
+  //             _tipoContenidoAEnviar = "gif";
+  //         } else if (_mimeTypeSeleccionado!.startsWith('video/')) {
+  //           _tipoContenidoAEnviar = "video";
+  //         } else if (_mimeTypeSeleccionado!.startsWith('audio/')) {
+  //           _tipoContenidoAEnviar = "audio";
+  //         } else {
+  //           _tipoContenidoAEnviar = "documento";
+  //         }
+  //       } else {
+  //         _tipoContenidoAEnviar = "documento"; // Fallback
+  //       }
+  //     });
+  //   }
+  // }
+
+  Future<String> _subirArchivoMultimedia(
+    Uint8List fileBytes,
+    String fileName,
+    String? mimeType, // Puede ser null, Firebase Storage intentará detectarlo
+    String chatId,
+    String mensajeId,
+  ) async {
+    final String filePath = 'chats/$chatId/media/$mensajeId/$fileName';
+    final ref = FirebaseStorage.instance.ref().child(filePath);
+
+    final metadata =
+        mimeType != null ? SettableMetadata(contentType: mimeType) : null;
+
+    await ref.putData(fileBytes, metadata);
+    return await ref.getDownloadURL();
   }
 
   Future<void> _obtenerNombreUsuario() async {
@@ -310,34 +412,278 @@ class _ChatHomePageState extends State<ChatHomePage> {
     });
   }
 
-  // Reemplaza TODA tu función _enviarMensaje con esta:
+  // void _enviarMensaje() async {
+  //   // 0. Verificaciones iniciales
+  //   if (chatIdSeleccionado == null || mensaje.trim().isEmpty) return;
+
+  //   final now = Timestamp.now();
+  //   final String mensajeActual = mensaje.trim();
+
+  //   // Limpiar UI inmediatamente
+  //   _mensajeController.clear();
+  //   setState(() {
+  //     mensaje = '';
+  //   });
+
+  //   // 1. Añadir el nuevo mensaje a la subcolección 'Mensajes'
+  //   await FirebaseFirestore.instance
+  //       .collection('Chats')
+  //       .doc(chatIdSeleccionado)
+  //       .collection('Mensajes')
+  //       .add({
+  //         'AutorID': uid,
+  //         'Contenido': mensajeActual,
+  //         'Fecha': now,
+  //         'reacciones': {},
+  //         'editado': false,
+  //         'eliminado': false,
+  //         'leidoPor': [uid],
+  //       });
+
+  //   // 2. Preparar la actualización del documento principal del Chat
+  //   final DocumentReference chatDocRef = FirebaseFirestore.instance
+  //       .collection('Chats')
+  //       .doc(chatIdSeleccionado!);
+  //   final DocumentSnapshot chatSnapshot = await chatDocRef.get();
+
+  //   Map<String, dynamic> chatUpdateData = {
+  //     'typing.$uid': false,
+  //     'lastMessageAt': now,
+  //     'lastMessage': mensajeActual,
+  //   };
+
+  //   List<String> uidsDestinatariosNotificacion = [];
+  //   bool esNotificacionDeGrupo = false;
+  //   String nombreGrupoParaNotificacion = '';
+
+  //   if (chatSnapshot.exists) {
+  //     final Map<String, dynamic> chatData =
+  //         chatSnapshot.data() as Map<String, dynamic>;
+
+  //     final List<String> memberIds = List<String>.from(chatData['ids'] ?? []);
+  //     Map<String, dynamic> currentUnreadCounts = Map<String, dynamic>.from(
+  //       chatData['unreadCounts'] ?? {},
+  //     );
+  //     for (String memberId in memberIds) {
+  //       if (memberId != uid) {
+  //         currentUnreadCounts[memberId] =
+  //             (currentUnreadCounts[memberId] as int? ?? 0) + 1;
+  //         // Solo añadir a destinatarios de notificación si no es el usuario actual
+  //         if (!uidsDestinatariosNotificacion.contains(memberId)) {
+  //           uidsDestinatariosNotificacion.add(memberId);
+  //         }
+  //       }
+  //     }
+  //     chatUpdateData['unreadCounts'] = currentUnreadCounts;
+
+  //     esNotificacionDeGrupo = (chatData['isGroup'] as bool?) ?? false;
+  //     if (esNotificacionDeGrupo) {
+  //       nombreGrupoParaNotificacion = chatData['groupName'] ?? 'el grupo';
+  //       // Los destinatarios de grupo ya se llenaron en el bucle anterior.
+  //     } else {
+  //       // Para chat 1 a 1, aseguramos que el destinatario sea el otro miembro.
+  //       // La lista memberIds debería tener 2 UIDs para un chat 1a1.
+  //       final Iterable<String> otrosIdsFiltrados = memberIds.where(
+  //         (id) => id != uid,
+  //       );
+  //       final String? idOtroDelChat =
+  //           otrosIdsFiltrados.isNotEmpty ? otrosIdsFiltrados.first : null;
+
+  //       if (idOtroDelChat != null) {
+  //         // Limpiamos y añadimos solo al otro usuario para 1a1
+  //         uidsDestinatariosNotificacion = [idOtroDelChat];
+  //       } else {
+  //         uidsDestinatariosNotificacion =
+  //             []; // Seguridad: no hay otro usuario claro
+  //       }
+  //     }
+
+  //     final List<dynamic> ocultoParaDinamico =
+  //         chatData['ocultoPara'] as List<dynamic>? ?? [];
+  //     final List<String> ocultoParaLista =
+  //         ocultoParaDinamico.map((item) => item.toString()).toList();
+
+  //     if (ocultoParaLista.contains(uid)) {
+  //       chatUpdateData['ocultoPara'] = FieldValue.arrayRemove([uid]);
+  //       print(
+  //         "Chat $chatIdSeleccionado des-ocultado para $uid porque envió un mensaje.",
+  //       );
+  //     }
+  //   } else {
+  //     // Documento del chat NO existe (raro si _iniciarChat o creación de grupo funciona bien)
+  //     print(
+  //       "Advertencia: Enviando mensaje a un chatId '$chatIdSeleccionado' que no existe. _iniciarChat debería haberlo creado.",
+  //     );
+  //     if (otroUid != null && otroUid != uid) {
+  //       // Asumimos 1a1 basado en la variable de estado 'otroUid'
+  //       chatUpdateData['ids'] = [uid, otroUid!];
+  //       chatUpdateData['isGroup'] = false;
+  //       chatUpdateData['unreadCounts'] = {otroUid!: 1, uid: 0};
+  //       uidsDestinatariosNotificacion = [otroUid!];
+  //       esNotificacionDeGrupo = false;
+  //     }
+  //     // No se puede determinar 'ocultoPara' aquí si el chat no existe.
+  //   }
+
+  //   await chatDocRef.set(chatUpdateData, SetOptions(merge: true));
+
+  //   // 3. Crear notificaciones
+  //   if (nombreUsuario != null && uidsDestinatariosNotificacion.isNotEmpty) {
+  //     for (String destinatarioId in uidsDestinatariosNotificacion) {
+  //       // Asegurarse de no enviar notificación al emisor si por error estuviera en la lista
+  //       if (destinatarioId == uid) continue;
+
+  //       String tituloNotificacion;
+  //       if (esNotificacionDeGrupo) {
+  //         tituloNotificacion = '$nombreUsuario @ $nombreGrupoParaNotificacion';
+  //       } else {
+  //         tituloNotificacion = 'Nuevo mensaje de $nombreUsuario';
+  //       }
+
+  //       await NotificationService.crearNotificacion(
+  //         uidDestino: destinatarioId,
+  //         tipo: esNotificacionDeGrupo ? 'mensaje_grupo' : 'mensaje',
+  //         titulo: tituloNotificacion,
+  //         contenido:
+  //             mensajeActual.length > 40
+  //                 ? '${mensajeActual.substring(0, 40)}...'
+  //                 : mensajeActual,
+  //         referenciaId: chatIdSeleccionado!,
+  //         uidEmisor: uid,
+  //         nombreEmisor: nombreUsuario!,
+  //       );
+  //     }
+  //   } else if (nombreUsuario == null) {
+  //     print(
+  //       "Advertencia: nombreUsuario es null, no se pueden enviar notificaciones personalizadas.",
+  //     );
+  //   }
+
+  //   // 4. Auto-scroll
+  //   WidgetsBinding.instance.addPostFrameCallback((_) {
+  //     if (_scrollController.hasClients) {
+  //       _scrollController.animateTo(
+  //         0.0,
+  //         duration: const Duration(milliseconds: 300),
+  //         curve: Curves.easeOut,
+  //       );
+  //     }
+  //   });
+  // }
+
   void _enviarMensaje() async {
-    // 0. Verificaciones iniciales
-    if (chatIdSeleccionado == null || mensaje.trim().isEmpty) return;
+    if (chatIdSeleccionado == null) return;
+
+    final String mensajeDeTextoActual = _mensajeController.text.trim();
+
+    if (_archivoSeleccionadoBytes == null && mensajeDeTextoActual.isEmpty) {
+      // No hay nada que enviar
+      return;
+    }
 
     final now = Timestamp.now();
-    final String mensajeActual = mensaje.trim();
+    final String nuevoMensajeId =
+        FirebaseFirestore.instance
+            .collection('Chats')
+            .doc(chatIdSeleccionado!)
+            .collection('Mensajes')
+            .doc()
+            .id;
 
-    // Limpiar UI inmediatamente
+    Map<String, dynamic> datosMensaje = {
+      'AutorID': uid,
+      'Fecha': now,
+      'reacciones': {},
+      'editado': false,
+      'eliminado': false,
+      'leidoPor': [uid],
+      'Contenido':
+          mensajeDeTextoActual, // Texto que acompaña al archivo o el mensaje de texto solo
+    };
+
+    String lastMessagePreview = mensajeDeTextoActual;
+    String tipoContenidoFinal = "texto";
+
+    if (_archivoSeleccionadoBytes != null &&
+        _nombreArchivoSeleccionado != null) {
+      tipoContenidoFinal =
+          _tipoContenidoAEnviar; // "imagen", "video", "documento", "audio", "gif"
+      try {
+        final String urlContenido = await _subirArchivoMultimedia(
+          _archivoSeleccionadoBytes!,
+          _nombreArchivoSeleccionado!,
+          _mimeTypeSeleccionado, // Puede ser null
+          chatIdSeleccionado!,
+          nuevoMensajeId,
+        );
+
+        datosMensaje['tipoContenido'] = tipoContenidoFinal;
+        datosMensaje['urlContenido'] = urlContenido;
+        datosMensaje['nombreArchivo'] = _nombreArchivoSeleccionado;
+        datosMensaje['mimeType'] =
+            _mimeTypeSeleccionado ??
+            lookupMimeType(
+              _nombreArchivoSeleccionado!,
+            ); // Usa mime package como fallback
+
+        switch (tipoContenidoFinal) {
+          case "imagen":
+            lastMessagePreview = "📷 Imagen";
+            break;
+          case "gif":
+            lastMessagePreview = "📷 GIF";
+            break;
+          case "video":
+            lastMessagePreview = "🎬 Video";
+            break;
+          case "audio":
+            lastMessagePreview = "🎵 Audio";
+            break;
+          case "documento":
+            lastMessagePreview =
+                "📄 ${_nombreArchivoSeleccionado ?? "Documento"}";
+            break;
+          default: // "texto" u otros desconocidos
+            lastMessagePreview = mensajeDeTextoActual;
+        }
+        if (mensajeDeTextoActual.isNotEmpty && tipoContenidoFinal != "texto") {
+          lastMessagePreview += ": $mensajeDeTextoActual";
+        }
+      } catch (e, s) {
+        print("Error al subir archivo multimedia: $e");
+        print("Stack trace: $s");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error al enviar archivo: ${e.toString()}')),
+          );
+        }
+        return;
+      }
+    } else {
+      // Solo es mensaje de texto
+      datosMensaje['tipoContenido'] = "texto";
+      lastMessagePreview = mensajeDeTextoActual;
+    }
+
+    // Limpiar UI inmediatamente después de preparar los datos del mensaje
     _mensajeController.clear();
+    final String mensajeEnviadoConExito =
+        mensaje; // Guardar para usar en notificación si es necesario
     setState(() {
       mensaje = '';
+      _archivoSeleccionadoBytes = null;
+      _nombreArchivoSeleccionado = null;
+      _mimeTypeSeleccionado = null;
+      _tipoContenidoAEnviar = "texto";
     });
 
     // 1. Añadir el nuevo mensaje a la subcolección 'Mensajes'
     await FirebaseFirestore.instance
         .collection('Chats')
-        .doc(chatIdSeleccionado)
+        .doc(chatIdSeleccionado!)
         .collection('Mensajes')
-        .add({
-          'AutorID': uid,
-          'Contenido': mensajeActual,
-          'Fecha': now,
-          'reacciones': {},
-          'editado': false,
-          'eliminado': false,
-          'leidoPor': [uid],
-        });
+        .doc(nuevoMensajeId)
+        .set(datosMensaje);
 
     // 2. Preparar la actualización del documento principal del Chat
     final DocumentReference chatDocRef = FirebaseFirestore.instance
@@ -346,9 +692,9 @@ class _ChatHomePageState extends State<ChatHomePage> {
     final DocumentSnapshot chatSnapshot = await chatDocRef.get();
 
     Map<String, dynamic> chatUpdateData = {
-      'typing.$uid': false,
-      'lastMessageAt': now,
-      'lastMessage': mensajeActual,
+      'typing.$uid': false, // El usuario actual deja de escribir
+      'lastMessageAt': now, // O 'lastActivityAt' según tu modelo
+      'lastMessage': lastMessagePreview,
     };
 
     List<String> uidsDestinatariosNotificacion = [];
@@ -358,16 +704,15 @@ class _ChatHomePageState extends State<ChatHomePage> {
     if (chatSnapshot.exists) {
       final Map<String, dynamic> chatData =
           chatSnapshot.data() as Map<String, dynamic>;
-
       final List<String> memberIds = List<String>.from(chatData['ids'] ?? []);
       Map<String, dynamic> currentUnreadCounts = Map<String, dynamic>.from(
         chatData['unreadCounts'] ?? {},
       );
+
       for (String memberId in memberIds) {
         if (memberId != uid) {
           currentUnreadCounts[memberId] =
               (currentUnreadCounts[memberId] as int? ?? 0) + 1;
-          // Solo añadir a destinatarios de notificación si no es el usuario actual
           if (!uidsDestinatariosNotificacion.contains(memberId)) {
             uidsDestinatariosNotificacion.add(memberId);
           }
@@ -378,22 +723,16 @@ class _ChatHomePageState extends State<ChatHomePage> {
       esNotificacionDeGrupo = (chatData['isGroup'] as bool?) ?? false;
       if (esNotificacionDeGrupo) {
         nombreGrupoParaNotificacion = chatData['groupName'] ?? 'el grupo';
-        // Los destinatarios de grupo ya se llenaron en el bucle anterior.
       } else {
-        // Para chat 1 a 1, aseguramos que el destinatario sea el otro miembro.
-        // La lista memberIds debería tener 2 UIDs para un chat 1a1.
         final Iterable<String> otrosIdsFiltrados = memberIds.where(
           (id) => id != uid,
         );
         final String? idOtroDelChat =
             otrosIdsFiltrados.isNotEmpty ? otrosIdsFiltrados.first : null;
-
         if (idOtroDelChat != null) {
-          // Limpiamos y añadimos solo al otro usuario para 1a1
           uidsDestinatariosNotificacion = [idOtroDelChat];
         } else {
-          uidsDestinatariosNotificacion =
-              []; // Seguridad: no hay otro usuario claro
+          uidsDestinatariosNotificacion = [];
         }
       }
 
@@ -401,27 +740,21 @@ class _ChatHomePageState extends State<ChatHomePage> {
           chatData['ocultoPara'] as List<dynamic>? ?? [];
       final List<String> ocultoParaLista =
           ocultoParaDinamico.map((item) => item.toString()).toList();
-
       if (ocultoParaLista.contains(uid)) {
         chatUpdateData['ocultoPara'] = FieldValue.arrayRemove([uid]);
-        print(
-          "Chat $chatIdSeleccionado des-ocultado para $uid porque envió un mensaje.",
-        );
       }
     } else {
-      // Documento del chat NO existe (raro si _iniciarChat o creación de grupo funciona bien)
-      print(
-        "Advertencia: Enviando mensaje a un chatId '$chatIdSeleccionado' que no existe. _iniciarChat debería haberlo creado.",
-      );
-      if (otroUid != null && otroUid != uid) {
-        // Asumimos 1a1 basado en la variable de estado 'otroUid'
+      // Si el chat no existe (debería haber sido creado por _iniciarChat o al crear grupo)
+      if (otroUid != null &&
+          otroUid != uid &&
+          !esNotificacionDeGrupo /* Asumiendo que no es grupo si no existe */ ) {
         chatUpdateData['ids'] = [uid, otroUid!];
-        chatUpdateData['isGroup'] = false;
+        chatUpdateData['isGroup'] = false; // Asumiendo 1a1
         chatUpdateData['unreadCounts'] = {otroUid!: 1, uid: 0};
         uidsDestinatariosNotificacion = [otroUid!];
-        esNotificacionDeGrupo = false;
       }
-      // No se puede determinar 'ocultoPara' aquí si el chat no existe.
+      // Para un grupo nuevo que se crea y se envía el primer mensaje,
+      // la lógica de creación de grupo ya debería haber establecido 'ids' y 'isGroup'.
     }
 
     await chatDocRef.set(chatUpdateData, SetOptions(merge: true));
@@ -429,7 +762,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
     // 3. Crear notificaciones
     if (nombreUsuario != null && uidsDestinatariosNotificacion.isNotEmpty) {
       for (String destinatarioId in uidsDestinatariosNotificacion) {
-        // Asegurarse de no enviar notificación al emisor si por error estuviera en la lista
         if (destinatarioId == uid) continue;
 
         String tituloNotificacion;
@@ -439,14 +771,18 @@ class _ChatHomePageState extends State<ChatHomePage> {
           tituloNotificacion = 'Nuevo mensaje de $nombreUsuario';
         }
 
+        String contenidoNotificacion =
+            lastMessagePreview; // Usar la vista previa del mensaje
+        // Puedes acortar 'contenidoNotificacion' si es muy largo para la notificación.
+        // String contenidoCorto = contenidoNotificacion.length > 40
+        //    ? '${contenidoNotificacion.substring(0, 40)}...'
+        //    : contenidoNotificacion;
+
         await NotificationService.crearNotificacion(
           uidDestino: destinatarioId,
           tipo: esNotificacionDeGrupo ? 'mensaje_grupo' : 'mensaje',
           titulo: tituloNotificacion,
-          contenido:
-              mensajeActual.length > 40
-                  ? '${mensajeActual.substring(0, 40)}...'
-                  : mensajeActual,
+          contenido: contenidoNotificacion, // O 'contenidoCorto'
           referenciaId: chatIdSeleccionado!,
           uidEmisor: uid,
           nombreEmisor: nombreUsuario!,
@@ -2809,7 +3145,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
   // Dentro de tu clase _ChatHomePageState
 
   Widget _buildMessagesStream() {
-    // Asegurarnos de que chatIdSeleccionado no sea null antes de construir el stream
     if (chatIdSeleccionado == null) {
       return const Center(
         child: Text("Selecciona un chat para ver los mensajes."),
@@ -2820,13 +3155,9 @@ class _ChatHomePageState extends State<ChatHomePage> {
       stream:
           FirebaseFirestore.instance
               .collection('Chats')
-              .doc(
-                chatIdSeleccionado,
-              ) // No necesita '!' si ya verificamos arriba
+              .doc(chatIdSeleccionado)
               .collection('Mensajes')
-              .orderBy(
-                'Fecha',
-              ) // Ordena por fecha, la lista se invierte luego para visualización
+              .orderBy('Fecha')
               .snapshots(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
@@ -2845,16 +3176,10 @@ class _ChatHomePageState extends State<ChatHomePage> {
           );
         }
 
-        // --- INICIO: LÓGICA PARA MARCAR MENSAJES COMO LEÍDOS Y LIMPIAR TYPING DEL OTRO (OPCIONAL) ---
-        // (Esta parte la tenías antes, la mantenemos y revisamos)
-        List<Future<void>> updateFutures =
-            []; // Para agrupar las actualizaciones de 'leidoPor'
-
+        List<Future<void>> updateFutures = [];
         for (var doc in snap.data!.docs) {
           final data = doc.data() as Map<String, dynamic>;
           final autorIdMensaje = data['AutorID'] as String?;
-
-          // Marcar como leído
           if (autorIdMensaje != null && autorIdMensaje != uid) {
             final leidoPor = List<String>.from(data['leidoPor'] ?? []);
             if (!leidoPor.contains(uid)) {
@@ -2865,13 +3190,9 @@ class _ChatHomePageState extends State<ChatHomePage> {
               );
             }
           }
-
-          // Opcional: Limpiar "está escribiendo..." del otro usuario si este mensaje es de él
-          // (Como lo discutimos para el bug del indicador de "escribiendo" atascado)
           if (otroUid != null &&
               autorIdMensaje == otroUid &&
               chatIdSeleccionado != null) {
-            // Verificamos el estado actual antes de escribir para evitar escrituras innecesarias
             FirebaseFirestore.instance
                 .collection('Chats')
                 .doc(chatIdSeleccionado!)
@@ -2883,35 +3204,26 @@ class _ChatHomePageState extends State<ChatHomePage> {
                     final typingMap =
                         chatDataTyping['typing'] as Map<String, dynamic>? ?? {};
                     if (typingMap[otroUid!] == true) {
-                      // Solo actualiza si realmente estaba en true
                       FirebaseFirestore.instance
                           .collection('Chats')
                           .doc(chatIdSeleccionado!)
                           .update({'typing.$otroUid': false})
                           .catchError(
-                            (e) => print(
-                              "Error al limpiar typing del otro al recibir mensaje: $e",
-                            ),
+                            (e) => print("Error al limpiar typing: $e"),
                           );
                     }
                   }
                 });
           }
         }
-        // Si quieres esperar a que todas las actualizaciones de 'leidoPor' terminen antes de construir la lista (raro, puede ser lento)
-        // Podrías usar Future.wait(updateFutures).then((_) { /* construir lista */ });
-        // Pero usualmente dejar que se actualicen en segundo plano está bien para 'leidoPor'.
-        // --- FIN: LÓGICA PARA MARCAR MENSAJES COMO LEÍDOS Y LIMPIAR TYPING ---
 
         final List<DocumentSnapshot> inv = snap.data!.docs.reversed.toList();
 
-        // Auto-scroll al final (o al principio, ya que está invertida)
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_scrollController.hasClients &&
               _scrollController.position.maxScrollExtent > 0) {
-            // Solo si hay contenido para scrollear
             _scrollController.animateTo(
-              0.0, // Al principio de la lista invertida (últimos mensajes)
+              0.0,
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeOut,
             );
@@ -2920,8 +3232,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
         return ListView.builder(
           controller: _scrollController,
-          reverse:
-              true, // Fundamental para que los mensajes nuevos aparezcan abajo y el scroll sea natural
+          reverse: true,
           padding: const EdgeInsets.all(12.0),
           itemCount: inv.length,
           itemBuilder: (context, i) {
@@ -2929,13 +3240,11 @@ class _ChatHomePageState extends State<ChatHomePage> {
             final dataMsg = docMsg.data() as Map<String, dynamic>;
             final bool esMio = dataMsg['AutorID'] == uid;
             final Timestamp fechaTimestamp =
-                dataMsg['Fecha'] as Timestamp? ??
-                Timestamp.now(); // Default a now() si es null
+                dataMsg['Fecha'] as Timestamp? ?? Timestamp.now();
             final DateTime fecha = fechaTimestamp.toDate();
 
             bool showDateSeparator = false;
             if (i == inv.length - 1) {
-              // Es el mensaje más antiguo en la lista (el primero después de invertir)
               showDateSeparator = true;
             } else {
               final Timestamp nextTs =
@@ -2955,7 +3264,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
             );
             final bool readByPeer =
                 otroUid != null && leidoPor.contains(otroUid!);
-
             final String? autorId = dataMsg['AutorID'] as String?;
             Map<String, String>? autorInfo =
                 autorId != null ? cacheUsuarios[autorId] : null;
@@ -2974,68 +3282,72 @@ class _ChatHomePageState extends State<ChatHomePage> {
             final String nombreAutorParaMostrar =
                 autorInfo?['nombre'] ??
                 (autorId == 'sistema'
-                    ? '' // Los mensajes del sistema no suelen mostrar nombre de autor
+                    ? ''
                     : (autorId == uid
                         ? (nombreUsuario ?? 'Tú')
-                        : 'Cargando...')); // Muestra 'Cargando...' si no está en caché
-
+                        : 'Cargando...'));
             final String? urlAvatarParaMostrar = autorInfo?['foto'];
+
+            // --- Definición correcta de las variables ---
+            final String tipoContenido =
+                dataMsg['tipoContenido'] as String? ?? 'texto';
+            final String? urlContenido = dataMsg['urlContenido'] as String?;
+            final String? nombreArchivo = dataMsg['nombreArchivo'] as String?;
+            final String? textoDelMensaje =
+                dataMsg['Contenido']
+                    as String?; // El campo 'Contenido' se usa para el texto/caption
+            final String? mimeType =
+                dataMsg['mimeType']
+                    as String?; // Añadido por si lo necesitas en ChatBubbleCustom
+            // --- Fin de la definición ---
 
             final bool estaCargandoInfoAutor =
                 autorId != null &&
                 autorId != 'sistema' &&
-                autorId !=
-                    uid && // No mostrar "cargando" para mis propios mensajes
+                autorId != uid &&
                 autorInfo == null;
 
             final int totalMensajes = inv.length;
+            final bool isGroupChat =
+                dataMsg['isGroup']
+                    as bool? ?? // Verificar si el mensaje tiene la propiedad isGroup
+                (chatIdSeleccionado != null &&
+                    cacheUsuarios[chatIdSeleccionado!]?['isGroup'] ==
+                        'true'); // Fallback si no está en dataMsg
+
             final bool showName =
-                (dataMsg['isGroup'] == true &&
-                    !esMio && // Solo para mensajes de otros en grupos
+                (isGroupChat && // Solo en grupos
+                    !esMio && // Solo para mensajes de otros
                     (i ==
                             totalMensajes -
-                                1 || // Primer mensaje del bloque de ese autor
+                                1 || // Si es el último mensaje en la lista (el más "nuevo" visualmente después de invertir)
                         (i < totalMensajes - 1 &&
                             (inv[i + 1].data()
                                     as Map<String, dynamic>)['AutorID'] !=
-                                autorId))) ||
-                // O si el mensaje anterior es de un autor diferente o es un separador de fecha (si es el primer mensaje después del separador)
-                (i > 0 &&
-                    showDateSeparator &&
-                    !esMio &&
-                    dataMsg['isGroup'] == true) ||
-                (i > 0 &&
-                    !esMio &&
-                    dataMsg['isGroup'] == true &&
-                    (inv[i - 1].data() as Map<String, dynamic>)['AutorID'] !=
-                        autorId &&
-                    !showDateSeparator);
+                                autorId) || // El mensaje anterior es de otro autor
+                        showDateSeparator) // O si es el primer mensaje después de un separador de fecha
+                    );
 
             return Column(
               crossAxisAlignment:
                   esMio ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
-                if (showDateSeparator)
-                  DateSeparator(fecha), // Tu widget DateSeparator
-
-                if (estaCargandoInfoAutor) // No esMio ya está implícito en la definición de estaCargandoInfoAutor
+                if (showDateSeparator) DateSeparator(fecha),
+                if (estaCargandoInfoAutor)
                   Padding(
                     padding: EdgeInsets.symmetric(
                       vertical: 4.0,
                       horizontal: esMio ? 0 : 8.0,
                     ),
                     child: Align(
-                      alignment:
-                          Alignment
-                              .centerLeft, // Los mensajes de otros siempre a la izquierda
+                      alignment: Alignment.centerLeft,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color:
-                              Colors.grey[200], // Un color de burbuja de carga
+                          color: Colors.grey[200],
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Text(
@@ -3050,16 +3362,12 @@ class _ChatHomePageState extends State<ChatHomePage> {
                   )
                 else
                   ChatBubbleCustom(
-                    // Tu widget ChatBubbleCustom
                     isMine: esMio,
                     read: readByPeer,
-                    avatarUrl:
-                        urlAvatarParaMostrar ??
-                        '', // Pasa string vacío como fallback si tu ChatBubble no maneja null
+                    avatarUrl: urlAvatarParaMostrar ?? '',
                     authorName: nombreAutorParaMostrar,
                     text:
-                        dataMsg['Contenido'] as String? ??
-                        '', // Manejar contenido null
+                        textoDelMensaje, // Este es el caption o el texto del mensaje
                     time: fecha,
                     edited: dataMsg['editado'] as bool? ?? false,
                     deleted: dataMsg['eliminado'] as bool? ?? false,
@@ -3069,19 +3377,24 @@ class _ChatHomePageState extends State<ChatHomePage> {
                     showName:
                         showName &&
                         nombreAutorParaMostrar.isNotEmpty &&
-                        nombreAutorParaMostrar !=
-                            'Cargando...', // Solo mostrar nombre si es relevante
+                        nombreAutorParaMostrar != 'Cargando...',
+
+                    // Nuevos parámetros pasados correctamente
+                    tipoContenido: tipoContenido,
+                    urlContenido: urlContenido,
+                    nombreArchivo: nombreArchivo,
+
+                    // mimeType: mimeType, // Descomenta si lo añades y usas en ChatBubbleCustom
                     onEdit:
-                        esMio
+                        (esMio && tipoContenido == 'texto')
                             ? () => _editarMensaje(
                               docMsg.id,
-                              dataMsg['Contenido'],
+                              textoDelMensaje ?? '',
                               fechaTimestamp,
                             )
                             : null,
                     onDelete: esMio ? () => _eliminarMensaje(docMsg.id) : null,
                     onReact: () => _reaccionarMensaje(docMsg.id),
-                    // Asegúrate que ChatBubbleCustom puede manejar avatarUrl vacío y authorName como "Cargando..." o ""
                   ),
               ],
             );
@@ -3092,47 +3405,264 @@ class _ChatHomePageState extends State<ChatHomePage> {
   }
 
   /// 4) Caja de texto + botón enviar
+  // Widget _buildInputBox() {
+  //   return Padding(
+  //     padding: const EdgeInsets.all(12.0),
+  //     child: Row(
+  //       children: [
+  //         Expanded(
+  //           child: TextField(
+  //             controller: _mensajeController,
+  //             onChanged: (val) {
+  //               mensaje = val;
+  //               final typing = val.trim().isNotEmpty;
+  //               if (typing != _isTyping && chatIdSeleccionado != null) {
+  //                 _isTyping = typing;
+  //                 FirebaseFirestore.instance
+  //                     .collection('Chats')
+  //                     .doc(chatIdSeleccionado)
+  //                     .update({'typing.$uid': typing});
+  //               }
+  //               // Dispara rebuild para que el botón se actualice
+  //               setState(() {});
+  //             },
+  //             decoration: const InputDecoration(
+  //               hintText: 'Escribe tu mensaje…',
+  //             ),
+  //           ),
+  //         ),
+  //         // IconButton(
+  //         //   icon: const Icon(Icons.send, color: Colors.blueAccent),
+  //         //   onPressed: _enviarMensaje,
+  //         // ),
+  //         // Si mensaje.trim() está vacío, onPressed será null y el botón deshabilitado
+  //         IconButton(
+  //           icon: Icon(
+  //             Icons.send,
+  //             // color cambia según si está habilitado o no
+  //             color:
+  //                 mensaje.trim().isNotEmpty ? Colors.blueAccent : Colors.grey,
+  //           ),
+  //           onPressed: mensaje.trim().isNotEmpty ? _enviarMensaje : null,
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
+
   Widget _buildInputBox() {
-    return Padding(
-      padding: const EdgeInsets.all(12.0),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _mensajeController,
-              onChanged: (val) {
-                mensaje = val;
-                final typing = val.trim().isNotEmpty;
-                if (typing != _isTyping && chatIdSeleccionado != null) {
-                  _isTyping = typing;
-                  FirebaseFirestore.instance
-                      .collection('Chats')
-                      .doc(chatIdSeleccionado)
-                      .update({'typing.$uid': typing});
-                }
-                // Dispara rebuild para que el botón se actualice
-                setState(() {});
-              },
-              decoration: const InputDecoration(
-                hintText: 'Escribe tu mensaje…',
-              ),
-            ),
-          ),
-          // IconButton(
-          //   icon: const Icon(Icons.send, color: Colors.blueAccent),
-          //   onPressed: _enviarMensaje,
-          // ),
-          // Si mensaje.trim() está vacío, onPressed será null y el botón deshabilitado
-          IconButton(
-            icon: Icon(
-              Icons.send,
-              // color cambia según si está habilitado o no
-              color:
-                  mensaje.trim().isNotEmpty ? Colors.blueAccent : Colors.grey,
-            ),
-            onPressed: mensaje.trim().isNotEmpty ? _enviarMensaje : null,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        boxShadow: [
+          BoxShadow(
+            offset: const Offset(0, -2),
+            blurRadius: 4,
+            color: Colors.black.withOpacity(0.05),
           ),
         ],
+      ),
+      child: SafeArea(
+        // SafeArea para evitar que el teclado lo cubra en algunos casos
+        child: Row(
+          crossAxisAlignment:
+              CrossAxisAlignment
+                  .end, // Alinear items al final si el TextField crece
+          children: [
+            // Botón para adjuntar archivos
+            IconButton(
+              icon: Icon(
+                Icons.attach_file,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              onPressed: () {
+                // Para un menú más completo:
+                showModalBottomSheet(
+                  context: context,
+                  builder: (BuildContext bc) {
+                    return SafeArea(
+                      child: Wrap(
+                        children: <Widget>[
+                          ListTile(
+                            leading: const Icon(Icons.photo_library),
+                            title: const Text('Galería (Imagen/Video)'),
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              _seleccionarImagen(); // Usa tu función para seleccionar imágenes/videos
+                            },
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.audiotrack),
+                            title: const Text('Audio'),
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              // TODO: Implementar _seleccionarAudio()
+                              // _seleccionarArchivoGenerico(FileType.audio);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Selector de audio no implementado',
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.insert_drive_file),
+                            title: const Text('Documento'),
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              // TODO: Implementar _seleccionarDocumento()
+                              // _seleccionarArchivoGenerico(FileType.custom, allowedExtensions: ['pdf', 'doc', 'docx', 'txt', 'xls', 'xlsx', 'ppt', 'pptx']);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Selector de documentos no implementado',
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4.0),
+                child: Column(
+                  // Para manejar el nombre del archivo encima o integrado
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_archivoSeleccionadoBytes != null &&
+                        _nombreArchivoSeleccionado != null)
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          bottom: 4.0,
+                          left: 8.0,
+                          right: 8.0,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _tipoContenidoAEnviar == "imagen" ||
+                                      _tipoContenidoAEnviar == "gif"
+                                  ? Icons.image
+                                  : _tipoContenidoAEnviar == "video"
+                                  ? Icons.videocam
+                                  : _tipoContenidoAEnviar == "audio"
+                                  ? Icons.audiotrack
+                                  : Icons.insert_drive_file,
+                              size: 16,
+                              color: Theme.of(context).hintColor,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                _nombreArchivoSeleccionado!,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context).hintColor,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            IconButton(
+                              icon: Icon(
+                                Icons.close,
+                                size: 16,
+                                color: Theme.of(context).hintColor,
+                              ),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () {
+                                setState(() {
+                                  _archivoSeleccionadoBytes = null;
+                                  _nombreArchivoSeleccionado = null;
+                                  _mimeTypeSeleccionado = null;
+                                  _tipoContenidoAEnviar = "texto";
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    TextField(
+                      controller: _mensajeController,
+                      maxLines: null, // Permite múltiples líneas
+                      keyboardType: TextInputType.multiline,
+                      textCapitalization: TextCapitalization.sentences,
+                      onChanged: (val) {
+                        setState(() {
+                          mensaje =
+                              val; // Actualiza tu variable de estado 'mensaje'
+                        });
+                        // Lógica de 'typing'
+                        final typing = val.trim().isNotEmpty;
+                        if (typing != _isTyping && chatIdSeleccionado != null) {
+                          _isTyping = typing;
+                          FirebaseFirestore.instance
+                              .collection('Chats')
+                              .doc(chatIdSeleccionado)
+                              .update({'typing.$uid': typing});
+                        }
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Escribe un mensaje...',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20.0),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor:
+                            Theme.of(context).brightness == Brightness.light
+                                ? Colors.grey[200]
+                                : Colors.grey[800],
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            // Botón de Enviar
+            Material(
+              // Para el efecto splash
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(24),
+                onTap:
+                    (_mensajeController.text.trim().isNotEmpty ||
+                            _archivoSeleccionadoBytes != null)
+                        ? _enviarMensaje
+                        : null,
+                child: Padding(
+                  padding: const EdgeInsets.all(
+                    10.0,
+                  ), // Padding para el área táctil
+                  child: Icon(
+                    Icons.send,
+                    color:
+                        (_mensajeController.text.trim().isNotEmpty ||
+                                _archivoSeleccionadoBytes != null)
+                            ? Theme.of(context).colorScheme.primary
+                            : Colors.grey,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
