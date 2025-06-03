@@ -265,64 +265,48 @@ class _ChatHomePageState extends State<ChatHomePage> {
     }
   }
 
-  void _iniciarChat(String otroId) async {
-    // 1) Creamos el chatId ordenado para chats 1 a 1.
+  // Antes era: void _iniciarChat(String otroId) async {
+  void _iniciarChat(String otroId, {required bool isLargeScreen}) async {
+    // Nueva firma
     final nuevoChatId =
         uid.compareTo(otroId) < 0 ? '${uid}_$otroId' : '${otroId}_$uid';
 
-    // 2) Precargamos datos del otro usuario en caché si es necesario.
     await _obtenerUsuario(otroId);
 
-    // 3) Referencia al documento y obtenemos el snapshot para ver si existe.
     final DocumentReference chatDocRef = FirebaseFirestore.instance
         .collection('Chats')
         .doc(nuevoChatId);
     final DocumentSnapshot chatDocSnapshot = await chatDocRef.get();
 
     if (!chatDocSnapshot.exists) {
-      // El chat NO EXISTE: lo creamos con todos los campos iniciales,
-      // incluyendo unreadCounts para ambos usuarios a 0.
-      await chatDocRef.set(
-        {
-          'ids': [uid, otroId],
-          'isGroup': false,
-          'groupName': null,
-          'groupPhoto': null,
-          'createdBy': null,
-          'lastActivityAt': FieldValue.serverTimestamp(),
-          'lastMessage': '', // Sin mensaje inicial
-          'typing': {uid: false, otroId: false},
-          'unreadCounts': {
-            // Para un chat NUEVO, ambos empiezan con 0.
-            uid: 0,
-            otroId: 0,
-          },
-        },
-      ); // No se necesita SetOptions(merge: true) si estamos seguros que no existe.
-    } else {
-      // El chat YA EXISTE.
-      // El onTap en _chatListStream ya se encargó de hacer update({'unreadCounts.$uid': 0}).
-      // Aquí solo actualizamos campos que podrían cambiar al "reabrir" un chat, como la última actividad.
-      // NO incluimos 'unreadCounts' aquí para no sobrescribir el contador del otroId.
       await chatDocRef.set({
-        // Aseguramos que estos campos estén presentes o se "toquen"
-        'ids': [
-          uid,
-          otroId,
-        ], // Redundante si ya existe, pero no daña con merge.
-        'isGroup': false, // Redundante si ya existe.
+        'ids': [uid, otroId],
+        'isGroup': false,
+        'groupName': null,
+        'groupPhoto': null,
+        'createdBy': null,
         'lastActivityAt': FieldValue.serverTimestamp(),
-        // No tocamos lastMessage, lastMessageAt, typing, ni unreadCounts aquí.
+        'lastMessage': '',
+        'typing': {uid: false, otroId: false},
+        'unreadCounts': {uid: 0, otroId: 0},
+      });
+    } else {
+      await chatDocRef.set({
+        'ids': [uid, otroId],
+        'isGroup': false,
+        'lastActivityAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     }
 
-    // 4) Actualizamos el estado de la UI para mostrar el chat seleccionado.
     setState(() {
       filtro = '';
       _busquedaController.clear();
-      _showList = false;
+      if (!isLargeScreen) {
+        // Solo oculta la lista en pantallas pequeñas
+        _showList = false;
+      }
       chatIdSeleccionado = nuevoChatId;
-      otroUid = otroId;
+      otroUid = otroId; // Aseguramos que otroUid se actualice aquí
     });
   }
 
@@ -1498,14 +1482,15 @@ class _ChatHomePageState extends State<ChatHomePage> {
   // Panel izquierdo con header, tabs, buscador, historias y lista de chats
   Widget _buildChatList() {
     return ConstrainedBox(
-      constraints: BoxConstraints(minWidth: 200, maxWidth: 320),
+      constraints: const BoxConstraints(minWidth: 200, maxWidth: 320),
       child: Container(
         color: const Color(0xFF015C8B),
         child: DefaultTabController(
           length: 4,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ——— 1) Header “Chats” con iconos ———
+              // --- 1) Header “Chats” con iconos ---
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -1527,114 +1512,137 @@ class _ChatHomePageState extends State<ChatHomePage> {
                     ),
                     IconButton(
                       icon: const Icon(Icons.more_horiz, color: Colors.white),
+                      tooltip: "Más opciones",
                       onPressed: () {},
                     ),
                     IconButton(
                       icon: const Icon(Icons.create, color: Colors.white),
+                      tooltip: "Nuevo grupo",
                       onPressed: _mostrarDialogoCrearGrupo,
                     ),
                   ],
                 ),
               ),
 
-              // ——— 2) TabBar ———
-              TabBar(
-                indicator: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
+              // --- 2) TabBar ---
+              Theme(
+                data: Theme.of(context).copyWith(
+                  colorScheme: Theme.of(context).colorScheme.copyWith(
+                    surfaceVariant:
+                        Colors
+                            .transparent, // Para que el fondo del indicator sea transparente
+                  ),
                 ),
-                labelColor: Colors.blue,
-                unselectedLabelColor: Colors.white,
-                tabs: const [
-                  Tab(text: 'Todos'),
-                  Tab(text: 'No leídos'),
-                  Tab(text: 'Grupos'),
-                  Tab(text: 'Archivados'),
-                ],
+                child: TabBar(
+                  isScrollable: true,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.white.withOpacity(
+                    0.65,
+                  ), // MODIFICADO: Un poco más de opacidad
+                  labelStyle: const TextStyle(
+                    fontSize: 13.0, // MODIFICADO: Tamaño de fuente reducido
+                    fontWeight: FontWeight.bold, // Negrita para la seleccionada
+                  ),
+                  unselectedLabelStyle: const TextStyle(
+                    fontSize: 13.0, // MODIFICADO: Tamaño de fuente reducido
+                    fontWeight:
+                        FontWeight.w500, // Peso normal para no seleccionada
+                  ),
+                  indicator: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withOpacity(
+                      0.5,
+                    ), // MODIFICADO: Color del indicador
+                    borderRadius: BorderRadius.circular(
+                      16,
+                    ), // MODIFICADO: Radio del borde
+                  ),
+                  indicatorWeight:
+                      0, // Necesario si usas BoxDecoration para el indicador
+                  indicatorSize:
+                      TabBarIndicatorSize
+                          .tab, // El indicador cubre toda la pestaña
+                  indicatorPadding: const EdgeInsets.symmetric(
+                    vertical: 5.0,
+                    horizontal: 4.0,
+                  ), // MODIFICADO: Padding del indicador
+                  labelPadding: const EdgeInsets.symmetric(
+                    horizontal: 11.0,
+                  ), // MODIFICADO: Reducido para que quepan más pestañas
+                  tabs: const [
+                    Tab(text: 'Todos'),
+                    Tab(text: 'No leídos'),
+                    Tab(text: 'Grupos'),
+                    Tab(text: 'Archivados'),
+                  ],
+                ),
               ),
 
-              // ——— 3) Buscador ———
+              // --- 3) Buscador ---
               Container(
-                margin: const EdgeInsets.all(8),
+                margin: const EdgeInsets.fromLTRB(
+                  12,
+                  10,
+                  12,
+                  6,
+                ), // Ajustado margen inferior
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 4,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
+                  color: Theme.of(
+                    context,
+                  ).scaffoldBackgroundColor.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(25),
                 ),
                 child: TextField(
                   controller: _busquedaController,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
                   decoration: InputDecoration(
-                    hintText: 'Buscar...',
-                    prefixIcon: const Icon(Icons.search),
+                    hintText: 'Buscar chats o usuarios...',
+                    hintStyle: TextStyle(
+                      color: Colors.black.withOpacity(0.7),
+                      fontSize: 14,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      color: Colors.white.withOpacity(0.7),
+                      size: 20,
+                    ),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 12,
+                      vertical: 13,
+                      horizontal: 16,
                     ),
                   ),
                   onChanged: (texto) {
+                    // ... (tu lógica de debounce onChanged se mantiene igual) ...
                     final lower = texto.trim().toLowerCase();
-
-                    // 1. Actualizar el filtro inmediatamente para la UI (si es necesario para otros filtros visuales)
-                    //    y mostrar indicador de carga si el filtro va a tener contenido.
                     if (filtro != lower) {
-                      // Solo actualiza el estado si el filtro realmente cambió
                       setState(() {
                         filtro = lower;
                         if (filtro.isNotEmpty) {
-                          _isSearchingGlobalUsers =
-                              true; // Mostrar carga mientras esperamos el debounce
-                          _usuarios = []; // Limpiar resultados previos
+                          _isSearchingGlobalUsers = true;
+                          _usuarios = [];
                         } else {
-                          _isSearchingGlobalUsers =
-                              false; // No hay filtro, no buscar
-                          _usuarios =
-                              []; // Limpiar usuarios si el filtro se vacía
-                          // Opcionalmente, podrías recargar la lista de chats recientes aquí
+                          _isSearchingGlobalUsers = false;
+                          _usuarios = [];
                         }
                       });
                     }
-
-                    // 2. Cancelar el timer anterior si existe
-                    if (_debounceTimer?.isActive ?? false) {
+                    if (_debounceTimer?.isActive ?? false)
                       _debounceTimer!.cancel();
-                    }
-
-                    // 3. Si el filtro está vacío, no necesitamos hacer la búsqueda.
-                    //    El estado _isSearchingGlobalUsers ya se puso a false arriba.
                     if (filtro.isEmpty) {
-                      // Si quieres que al vaciar el filtro se muestren los chats existentes
-                      // en lugar de una lista vacía de usuarios, aquí no necesitas hacer nada más,
-                      // ya que _chatListStream se encargará de mostrar los chats cuando filtro es empty.
-                      // Si _usuarios se usa para otra cosa cuando filtro está vacío, ajusta según necesidad.
+                      if (_isSearchingGlobalUsers)
+                        setState(() => _isSearchingGlobalUsers = false);
                       return;
                     }
-
-                    // 4. Iniciar un nuevo timer
                     _debounceTimer = Timer(_debounceDuration, () async {
-                      // Esta parte se ejecuta DESPUÉS de que el usuario deja de teclear por _debounceDuration
                       if (filtro ==
                               _busquedaController.text.trim().toLowerCase() &&
                           mounted) {
-                        // Doble chequeo: asegúrate que el filtro no cambió mientras el Timer esperaba
-                        // y que el widget sigue montado.
-
-                        // La variable _isSearchingGlobalUsers ya debería estar en true por el setState de arriba.
-                        // Procedemos con la búsqueda:
                         try {
                           final snap =
                               await FirebaseFirestore.instance
                                   .collection('usuarios')
                                   .get();
-
                           if (!mounted) return;
-
                           setState(() {
                             _usuarios =
                                 snap.docs.where((u) {
@@ -1642,143 +1650,228 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                       (u['Nombre'] ?? '')
                                           .toString()
                                           .toLowerCase();
-                                  // filtro ya está en minúsculas
                                   return nombre.contains(filtro) && u.id != uid;
                                 }).toList();
-                            _isSearchingGlobalUsers =
-                                false; // Termina estado de carga
+                            _isSearchingGlobalUsers = false;
                           });
                         } catch (e) {
                           print("Error durante la búsqueda con debounce: $e");
-                          if (mounted) {
+                          if (mounted)
                             setState(() {
-                              _isSearchingGlobalUsers =
-                                  false; // Asegúrate de quitar el loader en caso de error
-                              _usuarios =
-                                  []; // Limpia para evitar mostrar datos incorrectos
+                              _isSearchingGlobalUsers = false;
+                              _usuarios = [];
                             });
-                          }
                         }
                       } else if (!mounted) {
-                        // Si el widget ya no está montado cuando el timer se dispara, cancela cualquier acción.
                         _debounceTimer?.cancel();
                       }
-                      // Si el filtro cambió mientras el timer esperaba, este timer particular no hace nada,
-                      // porque un nuevo timer ya habrá sido iniciado por el onChanged más reciente.
                     });
                   },
                 ),
               ),
 
-              // ——— 4) Carrusel de historias ———
-              SizedBox(
-                height: 80,
-                child: StreamBuilder<QuerySnapshot>(
-                  stream:
-                      FirebaseFirestore.instance
-                          .collection('usuarios')
-                          .snapshots(),
-                  builder: (ctx, snap) {
-                    if (!snap.hasData) return const SizedBox();
-                    final users =
-                        snap.data!.docs.where((d) => d.id != uid).toList();
-                    return ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      itemCount: users.length,
-                      itemBuilder: (_, i) {
-                        final u = users[i].data()! as Map<String, dynamic>;
-                        final foto = u['FotoPerfil'] as String? ?? '';
-                        final online = u['online'] as bool? ?? false;
-                        final nombre = u['Nombre'] as String? ?? 'Usuario';
-                        return GestureDetector(
-                          onTap: () => _iniciarChat(users[i].id),
-                          child: Container(
-                            width: 60,
-                            margin: const EdgeInsets.symmetric(horizontal: 6),
-                            child: Column(
-                              children: [
-                                Stack(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 24,
-                                      backgroundImage:
-                                          foto.isNotEmpty
-                                              ? NetworkImage(foto)
-                                              : const AssetImage(
-                                                    'assets/images/avatar1.png',
-                                                  )
-                                                  as ImageProvider,
-                                    ),
-                                    if (online)
-                                      Positioned(
-                                        right: 0,
-                                        bottom: 0,
-                                        child: Container(
-                                          width: 10,
-                                          height: 10,
-                                          decoration: BoxDecoration(
-                                            color: Colors.green,
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: Colors.white,
-                                              width: 1.5,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  nombre,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
+              // --- Título para la sección de sugerencias ---
+              Padding(
+                padding: const EdgeInsets.only(
+                  left: 16.0,
+                  top: 8.0,
+                  bottom: 2.0,
+                  right: 16.0,
+                ), // Ajustado padding
+                child: Text(
+                  'Quizás conozcas a...',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.85),
+                    fontSize: 13.5, // Ligeramente más pequeño
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
 
-              const Divider(color: Colors.white54, height: 1),
+              // --- 4) Carrusel de "Historias" (Sugerencias de Usuarios) ---
+              SizedBox(
+                height: 90, // Altura para los avatares y nombres
+                child: Scrollbar(
+                  // Scrollbar para visibilidad en desktop/web
+                  thumbVisibility:
+                      true, // O false si prefieres que aparezca al hacer scroll
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream:
+                        FirebaseFirestore.instance
+                            .collection('usuarios')
+                            .snapshots(),
+                    builder: (context, snap) {
+                      if (snap.connectionState == ConnectionState.waiting &&
+                          !snap.hasData) {
+                        return const Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white54,
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                      if (!snap.hasData || snap.data!.docs.isEmpty) {
+                        return const Center(
+                          child: Text(
+                            "No hay usuarios",
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                            ),
+                          ),
+                        );
+                      }
 
-              // ——— 5) Contenido de cada tab ———
+                      var allOtherUsers =
+                          snap.data!.docs.where((d) => d.id != uid).toList();
+                      if (allOtherUsers.isEmpty) {
+                        return const Center(
+                          child: Text(
+                            "No hay sugerencias.",
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                            ),
+                          ),
+                        );
+                      }
+
+                      allOtherUsers.shuffle();
+                      List<DocumentSnapshot> suggestedUsers =
+                          allOtherUsers.take(10).toList();
+
+                      return ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ), // Ajustado padding
+                        itemCount: suggestedUsers.length,
+                        itemBuilder: (contextItemBuilder, i) {
+                          final userDoc = suggestedUsers[i];
+                          final userData =
+                              userDoc.data()! as Map<String, dynamic>;
+                          final foto = userData['FotoPerfil'] as String? ?? '';
+                          final bool online =
+                              (userData['online'] as bool?) ?? false;
+                          final nombre =
+                              userData['Nombre'] as String? ?? 'Usuario';
+
+                          return GestureDetector(
+                            onTap: () {
+                              final screenWidth =
+                                  MediaQuery.of(contextItemBuilder).size.width;
+                              const double tabletBreakpoint = 720.0;
+                              final bool currentIsLargeScreen =
+                                  screenWidth >= tabletBreakpoint;
+                              _iniciarChat(
+                                userDoc.id,
+                                isLargeScreen: currentIsLargeScreen,
+                              );
+                            },
+                            child: Container(
+                              width: 65, // Ancho para cada item
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 4.5,
+                              ), // Margen entre items
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Stack(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 26, // Tamaño del avatar
+                                        backgroundImage:
+                                            foto.isNotEmpty
+                                                ? NetworkImage(foto)
+                                                : const AssetImage(
+                                                      'assets/images/avatar1.png',
+                                                    )
+                                                    as ImageProvider,
+                                      ),
+                                      if (online)
+                                        Positioned(
+                                          right: 0,
+                                          bottom: 0,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(1.5),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF015C8B),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Container(
+                                              width: 9,
+                                              height:
+                                                  9, // Tamaño del indicador online
+                                              decoration: BoxDecoration(
+                                                color:
+                                                    Colors.greenAccent.shade400,
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    nombre,
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ),
+              const Divider(
+                color: Colors.white30,
+                height: 1,
+                thickness: 0.5,
+                indent: 10,
+                endIndent: 10,
+              ),
+
+              // --- 5) Contenido de cada tab (Lista de Chats) ---
               Expanded(
                 child: TabBarView(
                   children: [
-                    // Todos
-                    // Pestaña Todos: Muestra no archivados, no filtra por grupo, no filtra por no leídos
                     _chatListStream(
                       filterUnread: false,
                       filterGroups: false,
                       filterArchived: false,
                     ),
-                    // Pestaña No leídos: Muestra no archivados, no filtra por grupo, SÍ filtra por no leídos
                     _chatListStream(
                       filterUnread: true,
                       filterGroups: false,
                       filterArchived: false,
                     ),
-                    // Pestaña Grupos: Muestra no archivados, SÍ filtra por grupo, no filtra por no leídos
                     _chatListStream(
                       filterUnread: false,
                       filterGroups: true,
                       filterArchived: false,
                     ),
-                    // Pestaña Archivados: Muestra SÓLO archivados, no filtra por grupo, no filtra por no leídos
                     _chatListStream(
                       filterUnread: false,
                       filterGroups: false,
                       filterArchived: true,
-                    ), // <--- NUEVA LLAMADA
+                    ),
                   ],
                 ),
               ),
@@ -1789,44 +1882,62 @@ class _ChatHomePageState extends State<ChatHomePage> {
     );
   }
 
-  /// Helper que construye la lista aplicando filtros
-  // Reemplaza TODA tu función _chatListStream con esta:
   Widget _chatListStream({
     required bool filterUnread,
     required bool filterGroups,
     required bool filterArchived,
   }) {
-    // --- CASO 1: HAY TEXTO EN EL FILTRO DE BÚSQUEDA ---
+    // --- CASO 1: HAY TEXTO EN EL FILTRO DE BÚSQUEDA GLOBAL DE USUARIOS ---
     if (filtro.isNotEmpty) {
       if (_isSearchingGlobalUsers) {
+        // Muestra Shimmer mientras se buscan usuarios globales
         return ListView.builder(
-          itemCount: 5,
+          itemCount: 7, // Un número arbitrario de shimmers
           itemBuilder: (_, __) => const ShimmerChatTile(),
         );
       } else if (_usuarios.isEmpty) {
+        // No se encontraron usuarios con el filtro actual
         return const Center(
-          child: Text('No se encontraron usuarios con ese nombre.'),
+          child: Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text(
+              'No se encontraron usuarios.',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
         );
       } else {
+        // Muestra la lista de usuarios encontrados
         return ListView.builder(
           padding: const EdgeInsets.symmetric(vertical: 4),
           itemCount: _usuarios.length,
-          itemBuilder: (_, i) {
+          itemBuilder: (contextListBuilder, i) {
+            // Contexto para MediaQuery
             final userDoc = _usuarios[i];
             final userData = userDoc.data() as Map<String, dynamic>? ?? {};
-            final nombre = userData['Nombre'] ?? 'Usuario';
+            final nombre = userData['Nombre'] ?? 'Usuario Desconocido';
+            // Intenta obtener la foto del caché, si no, usa un placeholder o nada.
             final foto = cacheUsuarios[userDoc.id]?['foto'] ?? '';
 
             return MouseRegion(
-              /* ... tu widget completo para item de usuario ... */
               cursor: SystemMouseCursors.click,
               onEnter: (_) => setState(() => hoveredUserId = userDoc.id),
               onExit: (_) => setState(() => hoveredUserId = null),
               child: Tooltip(
-                message: 'Haz clic para chatear con $nombre',
+                message: 'Chatear con $nombre',
                 waitDuration: const Duration(milliseconds: 300),
                 child: GestureDetector(
-                  onTap: () => _iniciarChat(userDoc.id),
+                  onTap: () {
+                    final screenWidth =
+                        MediaQuery.of(contextListBuilder).size.width;
+                    const double tabletBreakpoint = 720.0;
+                    final bool currentIsLargeScreen =
+                        screenWidth >= tabletBreakpoint;
+                    _iniciarChat(
+                      userDoc.id,
+                      isLargeScreen: currentIsLargeScreen,
+                    );
+                  },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 250),
                     transform:
@@ -1844,9 +1955,8 @@ class _ChatHomePageState extends State<ChatHomePage> {
                               ? LinearGradient(
                                 colors: [
                                   Theme.of(context).colorScheme.secondary,
-                                  Theme.of(
-                                    context,
-                                  ).colorScheme.primaryContainer,
+                                  Theme.of(context).colorScheme.primaryContainer
+                                      .withOpacity(0.7),
                                 ],
                               )
                               : null,
@@ -1855,7 +1965,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                               ? Theme.of(
                                 context,
                               ).colorScheme.primary.withOpacity(0.8)
-                              : null,
+                              : null, // Color base si no hay hover
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
@@ -1871,7 +1981,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
                       ],
                     ),
                     child: Row(
-                      /* ... tu Row para item de usuario ... */
                       children: [
                         CircleAvatar(
                           radius: 26,
@@ -1887,6 +1996,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
                                 nombre,
@@ -1899,14 +2009,14 @@ class _ChatHomePageState extends State<ChatHomePage> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Haz clic para iniciar conversación',
+                                'Iniciar nueva conversación',
                                 style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(color: Colors.white70),
                               ),
                             ],
                           ),
                         ),
-                        Icon(
+                        const Icon(
                           Icons.arrow_forward_ios,
                           color: Colors.white54,
                           size: 16,
@@ -1927,44 +2037,51 @@ class _ChatHomePageState extends State<ChatHomePage> {
         stream:
             FirebaseFirestore.instance
                 .collection('Chats')
-                .where('ids', arrayContains: uid)
+                .where(
+                  'ids',
+                  arrayContains: uid,
+                ) // Solo chats donde el usuario actual es miembro
                 .orderBy('lastMessageAt', descending: true)
                 .snapshots(),
-        builder: (ctx, chatSnapshot) {
-          if (chatSnapshot.connectionState == ConnectionState.waiting) {
+        builder: (contextStreamBuilder, chatSnapshot) {
+          if (chatSnapshot.connectionState == ConnectionState.waiting &&
+              !chatSnapshot.hasData) {
             return ListView.builder(
-              itemCount: 5,
+              itemCount: 7,
               itemBuilder: (_, __) => const ShimmerChatTile(),
             );
           }
 
           if (!chatSnapshot.hasData || chatSnapshot.data!.docs.isEmpty) {
+            String mensajeVacio = 'Inicia una conversación o crea un grupo';
             if (filterArchived)
-              return const Center(child: Text('No tienes chats archivados'));
-            if (filterUnread)
-              return const Center(child: Text('No tienes mensajes no leídos'));
-            if (filterGroups)
-              return const Center(child: Text('No estás en ningún grupo aún'));
-            return const Center(
-              child: Text('Inicia una conversación o crea un grupo'),
+              mensajeVacio = 'No tienes chats archivados';
+            else if (filterUnread)
+              mensajeVacio = 'No tienes mensajes no leídos';
+            else if (filterGroups)
+              mensajeVacio = 'No estás en ningún grupo aún';
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  mensajeVacio,
+                  style: const TextStyle(color: Colors.white70),
+                  textAlign: TextAlign.center,
+                ),
+              ),
             );
           }
 
           List<DocumentSnapshot> chatsExistentes = chatSnapshot.data!.docs;
-
           List<DocumentSnapshot> chatsVisibles =
               chatsExistentes.where((chatDoc) {
                 final data = chatDoc.data() as Map<String, dynamic>?;
                 if (data == null) return false;
 
-                // ========= INICIO: MODIFICACIÓN PARA OCULTAR CHATS ELIMINADOS PRIMERO =========
                 final List<String> ocultoPorLista = List<String>.from(
                   data['ocultoPara'] ?? [],
                 );
-                if (ocultoPorLista.contains(uid)) {
-                  return false; // Si el chat está oculto (eliminado para mí), no lo muestro nunca.
-                }
-                // ========= FIN: MODIFICACIÓN PARA OCULTAR CHATS ELIMINADOS =========
+                if (ocultoPorLista.contains(uid)) return false;
 
                 final List<String> archivadoPorLista = List<String>.from(
                   data['archivadoPara'] ?? [],
@@ -1972,85 +2089,119 @@ class _ChatHomePageState extends State<ChatHomePage> {
                 final bool estaArchivadoPorUsuarioActual = archivadoPorLista
                     .contains(uid);
 
-                if (filterArchived) {
-                  return estaArchivadoPorUsuarioActual; // Ya sabemos que no está en ocultoPara
-                } else {
-                  if (estaArchivadoPorUsuarioActual)
-                    return false; // Ocultar archivados de otras pestañas
-
+                if (filterArchived)
+                  return estaArchivadoPorUsuarioActual;
+                else {
+                  if (estaArchivadoPorUsuarioActual) return false;
                   final bool esUnGrupo = (data['isGroup'] as bool?) ?? false;
                   final Map<String, dynamic> unreadMap =
                       (data['unreadCounts'] as Map<String, dynamic>?) ?? {};
                   final int contadorNoLeidos = (unreadMap[uid] as int?) ?? 0;
 
-                  if (filterGroups) return esUnGrupo;
-                  if (filterUnread) return contadorNoLeidos > 0;
-                  return true;
+                  if (filterGroups && !esUnGrupo)
+                    return false; // Si filtramos por grupos y no es grupo, no mostrar
+                  if (filterUnread && contadorNoLeidos == 0)
+                    return false; // Si filtramos por no leídos y no hay, no mostrar
+                  return true; // Cumple con los filtros o no hay filtros específicos (pestaña "Todos")
                 }
               }).toList();
 
           if (chatsVisibles.isEmpty) {
-            // ... (tus mensajes de lista vacía, como los tenías) ...
+            String mensajeVacioFiltrado =
+                'No hay conversaciones para mostrar aquí';
             if (filterArchived)
-              return const Center(child: Text('No tienes chats archivados'));
-            if (filterUnread)
-              return const Center(
-                child: Text('No tienes mensajes no leídos (visibles)'),
-              );
-            if (filterGroups)
-              return const Center(child: Text('No hay grupos (visibles)'));
-            if (!filterGroups &&
-                !filterUnread &&
-                !filterArchived &&
-                chatsExistentes.isNotEmpty) {
-              return const Center(
-                child: Text('Todos tus chats están ocultos o archivados'),
-              ); // Mensaje ajustado
-            }
-            return const Center(
-              child: Text('No hay conversaciones para mostrar aquí'),
+              mensajeVacioFiltrado = 'No tienes chats archivados';
+            else if (filterUnread)
+              mensajeVacioFiltrado =
+                  'No tienes mensajes no leídos en esta vista';
+            else if (filterGroups)
+              mensajeVacioFiltrado = 'No hay grupos para mostrar en esta vista';
+            else if (chatsExistentes.isNotEmpty)
+              mensajeVacioFiltrado =
+                  'Todos tus chats están ocultos o archivados'; // Para la pestaña "Todos" si todo está filtrado por otras condiciones
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  mensajeVacioFiltrado,
+                  style: const TextStyle(color: Colors.white70),
+                  textAlign: TextAlign.center,
+                ),
+              ),
             );
           }
 
           return ListView.builder(
             padding: const EdgeInsets.symmetric(vertical: 4),
             itemCount: chatsVisibles.length,
-            itemBuilder: (ctxBuilder, idx) {
+            itemBuilder: (contextItemBuilder, idx) {
+              // Contexto para MediaQuery
               final chatDoc = chatsVisibles[idx];
-              // ... (El resto de tu itemBuilder para el ChatTile, incluyendo el PopupMenuButton dinámico,
-              //      asegúrate que las variables `estaArchivadoActual` y `estaSilenciadoActual`
-              //      se definan aquí dentro usando `chatDoc.data()` para el chat actual)
               final data = chatDoc.data()! as Map<String, dynamic>;
-              final List<String> otherIds = List<String>.from(
-                data['ids'] ?? [],
+              final List<dynamic> idsDynamic = data['ids'] ?? [];
+              final List<String> idsParticipantes = List<String>.from(
+                idsDynamic,
               );
               final bool isGroup = (data['isGroup'] as bool?) ?? false;
               final String chatId = chatDoc.id;
-              final String? other =
-                  isGroup
-                      ? null
-                      : otherIds.firstWhere(
-                        (id) => id != uid,
-                        orElse: () => '',
-                      );
-              if (!isGroup &&
-                  (other == null ||
-                      other.isEmpty ||
-                      !cacheUsuarios.containsKey(other))) {
-                return const ShimmerChatTile();
+
+              String? otherIdForChat;
+              if (!isGroup) {
+                otherIdForChat = idsParticipantes.firstWhere(
+                  (id) => id != uid,
+                  orElse: () => '',
+                );
+                if (otherIdForChat.isNotEmpty &&
+                    !cacheUsuarios.containsKey(otherIdForChat)) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _obtenerUsuario(otherIdForChat!);
+                  });
+                }
               }
+
               final String preview =
                   (data['lastMessage'] as String?)?.trim().isNotEmpty == true
-                      ? data['lastMessage']
+                      ? data['lastMessage'] as String
                       : isGroup
-                      ? '${cacheUsuarios[data['createdBy']]?['nombre'] ?? "Alguien"} ha creado el grupo'
+                      ? '${cacheUsuarios[data['createdBy']]?['nombre'] ?? "Alguien"} creó el grupo'
                       : 'Inicia la conversación';
-              final String title =
-                  isGroup
-                      ? (data['groupName'] ?? 'Grupo')
-                      : cacheUsuarios[other!]!['nombre']!;
-              final String? photoUrl =
-                  isGroup ? data['groupPhoto'] : cacheUsuarios[other!]!['foto'];
+
+              String calculatedTitle;
+              String? calculatedPhotoUrl;
+
+              if (isGroup) {
+                calculatedTitle = (data['groupName'] ?? 'Grupo').toString();
+                calculatedPhotoUrl = data['groupPhoto'] as String?;
+              } else {
+                if (otherIdForChat != null && otherIdForChat.isNotEmpty) {
+                  final cachedUserData = cacheUsuarios[otherIdForChat];
+                  if (cachedUserData != null) {
+                    calculatedTitle =
+                        cachedUserData['nombre'] ?? 'Nombre no disponible';
+                    calculatedPhotoUrl = cachedUserData['foto'] ?? '';
+                  } else {
+                    calculatedTitle =
+                        'Cargando...'; // Usuario aún no cargado en caché
+                    calculatedPhotoUrl = ''; // Sin foto mientras carga
+                  }
+                } else {
+                  calculatedTitle =
+                      'Chat Individual'; // Fallback si otherIdForChat es inválido
+                  calculatedPhotoUrl = '';
+                }
+              }
+
+              final String title = calculatedTitle;
+              final String? photoUrl = calculatedPhotoUrl;
+              // ----- FIN DE LÓGICA CORREGIDA Y DESGLOSADA -----
+
+              if (!isGroup &&
+                  (otherIdForChat == null ||
+                      otherIdForChat.isEmpty ||
+                      title == 'Cargando...')) {
+                return const ShimmerChatTile(); // Muestra shimmer si la info del otro user aún no está
+              }
+
               final String hora =
                   data['lastMessageAt'] != null
                       ? DateFormat.Hm().format(
@@ -2060,12 +2211,10 @@ class _ChatHomePageState extends State<ChatHomePage> {
               final unreadMap =
                   (data['unreadCounts'] as Map<String, dynamic>?) ?? {};
               final int unreadCount = (unreadMap[uid] as int?) ?? 0;
-
               final List<String> archivadoPorItem = List<String>.from(
                 data['archivadoPara'] ?? [],
-              ); // Renombrado para evitar colisión con parámetro de función
+              );
               final bool estaArchivadoItem = archivadoPorItem.contains(uid);
-
               final List<String> silenciadoPorItem = List<String>.from(
                 data['silenciadoPor'] ?? [],
               );
@@ -2073,32 +2222,52 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
               return ValueListenableBuilder<String?>(
                 valueListenable: hoveredChatId,
-                builder: (context, hovered, _) {
-                  final isHovered = hovered == chatId;
+                builder: (context, hoveredValue, _) {
+                  final isHovered = hoveredValue == chatId;
                   return MouseRegion(
                     onEnter: (_) => hoveredChatId.value = chatId,
                     onExit: (_) => hoveredChatId.value = null,
+                    cursor: SystemMouseCursors.click,
                     child: GestureDetector(
                       onTap: () {
-                        if (chatId.isNotEmpty && uid.isNotEmpty) {
+                        if (chatId.isNotEmpty &&
+                            uid.isNotEmpty &&
+                            !estaArchivadoItem &&
+                            unreadCount > 0) {
                           FirebaseFirestore.instance
                               .collection('Chats')
                               .doc(chatId)
                               .update({'unreadCounts.$uid': 0})
-                              .catchError((e) {
-                                print(
+                              .catchError(
+                                (e) => print(
                                   "Error al actualizar unreadCounts para $chatId: $e",
-                                );
-                              });
+                                ),
+                              );
                         }
+
+                        final screenWidth =
+                            MediaQuery.of(contextItemBuilder).size.width;
+                        const double tabletBreakpoint = 720.0;
+                        final bool currentIsLargeScreen =
+                            screenWidth >= tabletBreakpoint;
+
                         if (isGroup) {
                           setState(() {
                             chatIdSeleccionado = chatId;
-                            otroUid = null;
-                            _showList = false;
+                            otroUid =
+                                null; // Para grupos, otroUid no es relevante
+                            if (!currentIsLargeScreen) {
+                              _showList = false;
+                            }
                           });
                         } else {
-                          _iniciarChat(other!);
+                          if (otherIdForChat != null &&
+                              otherIdForChat.isNotEmpty) {
+                            _iniciarChat(
+                              otherIdForChat,
+                              isLargeScreen: currentIsLargeScreen,
+                            );
+                          }
                         }
                       },
                       child: AnimatedContainer(
@@ -2118,17 +2287,23 @@ class _ChatHomePageState extends State<ChatHomePage> {
                         decoration: BoxDecoration(
                           color:
                               isHovered
-                                  ? Colors.blue.shade800
-                                  : const Color(0xFF015C8B),
+                                  ? Theme.of(
+                                    context,
+                                  ).colorScheme.primaryContainer
+                                  : const Color(
+                                    0xFF015C8B,
+                                  ), // Ajusta colores de hover
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
                               color:
                                   isHovered
-                                      ? Colors.black.withOpacity(0.3)
-                                      : Colors.black26,
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
+                                      ? Theme.of(
+                                        context,
+                                      ).colorScheme.shadow.withOpacity(0.4)
+                                      : Colors.black26.withOpacity(0.15),
+                              blurRadius: isHovered ? 8 : 4,
+                              offset: Offset(0, isHovered ? 3 : 2),
                             ),
                           ],
                         ),
@@ -2145,7 +2320,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                           )
                                           as ImageProvider,
                             ),
-                            const SizedBox(width: 10),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2160,43 +2335,44 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                       fontSize: 16,
                                     ),
                                   ),
-                                  const SizedBox(height: 2),
+                                  const SizedBox(height: 3),
                                   Text(
                                     preview,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 12,
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.8),
+                                      fontSize: 13,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
                             Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
                                   hora,
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 10,
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.7),
+                                    fontSize: 11,
                                   ),
-                                  textAlign: TextAlign.end,
                                 ),
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 8),
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    if (unreadCount > 0 &&
-                                        !estaArchivadoItem) // Usar estaArchivadoItem y no filterArchived
+                                    if (unreadCount > 0 && !estaArchivadoItem)
                                       Container(
                                         padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2,
+                                          horizontal: 7,
+                                          vertical: 3,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: Colors.red,
+                                          color:
+                                              Theme.of(
+                                                context,
+                                              ).colorScheme.error,
                                           borderRadius: BorderRadius.circular(
                                             12,
                                           ),
@@ -2210,8 +2386,18 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                           ),
                                         ),
                                       ),
-                                    if (unreadCount > 0 && !estaArchivadoItem)
-                                      const SizedBox(width: 4),
+                                    if (estaSilenciadoItem &&
+                                        !estaArchivadoItem) // Mostrar icono de silencio si no está archivado
+                                      Padding(
+                                        padding: EdgeInsets.only(
+                                          left: unreadCount > 0 ? 4.0 : 0.0,
+                                        ), // Espacio si hay contador
+                                        child: Icon(
+                                          Icons.notifications_off,
+                                          color: Colors.white54,
+                                          size: 16,
+                                        ),
+                                      ),
                                     PopupMenuButton<String>(
                                       icon: const Icon(
                                         Icons.more_vert,
@@ -2219,23 +2405,27 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                         size: 20,
                                       ),
                                       tooltip: "Más opciones",
+                                      color:
+                                          Theme.of(context).brightness ==
+                                                  Brightness.dark
+                                              ? Colors.grey[800]
+                                              : Colors
+                                                  .white, // Ajustar color del menú
                                       onSelected: (value) {
-                                        if (value == 'archivar') {
+                                        if (value == 'archivar')
                                           _archivarChat(chatId);
-                                        } else if (value == 'desarchivar') {
+                                        else if (value == 'desarchivar')
                                           _desarchivarChat(chatId);
-                                        } else if (value == 'silenciar') {
+                                        else if (value == 'silenciar')
                                           _silenciarChat(chatId);
-                                        } else if (value == 'quitar_silencio') {
+                                        else if (value == 'quitar_silencio')
                                           _quitarSilencioChat(chatId);
-                                        } else if (value == 'eliminar') {
+                                        else if (value == 'eliminar')
                                           _confirmarEliminarChat(chatId, title);
-                                        }
                                       },
-                                      itemBuilder: (BuildContext context) {
+                                      itemBuilder: (BuildContext popupContext) {
                                         List<PopupMenuEntry<String>> items = [];
                                         if (estaArchivadoItem) {
-                                          // Usar la variable local del item
                                           items.add(
                                             const PopupMenuItem(
                                               value: 'desarchivar',
@@ -2251,11 +2441,10 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                           );
                                         }
                                         if (estaSilenciadoItem) {
-                                          // Usar la variable local del item
                                           items.add(
                                             const PopupMenuItem(
                                               value: 'quitar_silencio',
-                                              child: Text('Quitar silencio'),
+                                              child: Text('Activar sonido'),
                                             ),
                                           );
                                         } else {
@@ -2266,7 +2455,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                             ),
                                           );
                                         }
-
+                                        items.add(const PopupMenuDivider());
                                         items.add(
                                           PopupMenuItem(
                                             value: 'eliminar',
@@ -2275,7 +2464,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                               style: TextStyle(
                                                 color:
                                                     Theme.of(
-                                                      context,
+                                                      popupContext,
                                                     ).colorScheme.error,
                                               ),
                                             ),
@@ -2301,29 +2490,36 @@ class _ChatHomePageState extends State<ChatHomePage> {
       );
     }
   }
-
   // Parte de los mensajes
+
   /// 1) Header con botón atrás, avatar, nombre y última conexión
 
-  Widget _buildChatHeader() {
+  // Antes era: Widget _buildChatHeader() {
+  Widget _buildChatHeader({required bool isLargeScreen}) {
+    // Nueva firma
     return Container(
-      color: const Color(
-        0xFF048DD2,
-      ), // Considera usar Theme.of(context).colorScheme.secondary
+      color: const Color(0xFF048DD2),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed:
-                () => setState(() {
+          // ---- INICIO: Lógica condicional para el botón de Atrás ----
+          if (!isLargeScreen) // Solo muestra el botón si NO es pantalla grande
+            IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () {
+                // En pantalla pequeña, este botón siempre te lleva de vuelta a la lista.
+                setState(() {
                   _showList = true;
                   chatIdSeleccionado = null;
                   otroUid = null;
-                }),
-          ),
-          const SizedBox(width: 10),
+                });
+              },
+            ),
+          if (!isLargeScreen) // Solo muestra el SizedBox si el botón de atrás está presente
+            const SizedBox(width: 10),
+          // ---- FIN: Lógica condicional para el botón de Atrás ----
 
+          // El resto del contenido del Header
           if (chatIdSeleccionado != null)
             Expanded(
               child: StreamBuilder<DocumentSnapshot>(
@@ -2333,33 +2529,30 @@ class _ChatHomePageState extends State<ChatHomePage> {
                         .doc(chatIdSeleccionado!)
                         .snapshots(),
                 builder: (context, chatSnap) {
-                  if (chatSnap.connectionState == ConnectionState.waiting &&
-                      !chatSnap.hasData) {
-                    // Si está esperando y no hay datos previos, muestra un loader
-                    // (especialmente si otroUid es null, indicando que no es un inicio de chat 1a1 directo)
-                    if (otroUid == null) {
-                      return const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
+                  if (!chatSnap.hasData && otroUid == null) {
+                    // Si no hay datos Y no estamos iniciando un nuevo chat 1a1
+                    // En pantalla grande y sin chat seleccionado, mostrar placeholder
+                    if (isLargeScreen) {
+                      return const Text(
+                        'Selecciona un chat',
+                        style: TextStyle(color: Colors.white, fontSize: 18),
+                        overflow: TextOverflow.ellipsis,
                       );
                     }
-                    // Si hay otroUid, _buildHeaderInfoUsuario podría manejar su propio FutureBuilder
+                    // En pantalla pequeña (o si hay error cargando), un loader simple
+                    return const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    );
                   }
 
-                  // Si hay datos del chat (aunque sea de un snapshot anterior mientras se actualiza)
-                  if (chatSnap.hasData) {
+                  if (chatSnap.hasData && chatSnap.data?.data() != null) {
                     final chatData =
-                        chatSnap.data!.data() as Map<String, dynamic>?;
-                    if (chatData == null)
-                      return const Text(
-                        'Error en chat',
-                        style: TextStyle(color: Colors.white),
-                      );
-
+                        chatSnap.data!.data() as Map<String, dynamic>;
                     final bool esGrupo =
                         (chatData['isGroup'] as bool?) ?? false;
 
@@ -2371,7 +2564,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
                       final List<String> miembrosIds = List<String>.from(
                         chatData['ids'] ?? [],
                       );
-
                       return GestureDetector(
                         onTap: () {
                           _mostrarDialogoMiembrosGrupo(
@@ -2427,24 +2619,23 @@ class _ChatHomePageState extends State<ChatHomePage> {
                       final List<String> idsParticipantes = List<String>.from(
                         chatData['ids'] ?? [],
                       );
-
-                      // ----- CORRECCIÓN APLICADA AQUÍ -----
                       final Iterable<String> otrosIdsFiltrados =
                           idsParticipantes.where((id) => id != uid);
                       final String? idOtroUsuarioDelChat =
                           otrosIdsFiltrados.isNotEmpty
                               ? otrosIdsFiltrados.first
                               : null;
-                      // ----- FIN DE CORRECCIÓN -----
 
                       if (idOtroUsuarioDelChat != null) {
-                        // Si 'otroUid' (variable de estado) es diferente del que viene del stream, actualízalo.
-                        // Esto puede pasar si la selección de chat cambió y el stream aún no lo refleja del todo.
+                        // Actualizar otroUid si es diferente y estamos en un chat 1a1 ya cargado
                         if (otroUid != idOtroUsuarioDelChat) {
-                          // Es mejor no llamar a setState directamente en el builder.
-                          // La UI se actualizará con _buildHeaderInfoUsuario.
-                          // Si necesitas 'otroUid' para otras lógicas, asegúrate que se actualice
-                          // cuando 'chatIdSeleccionado' cambia.
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) {
+                              setState(() {
+                                otroUid = idOtroUsuarioDelChat;
+                              });
+                            }
+                          });
                         }
                         return _buildHeaderInfoUsuario(idOtroUsuarioDelChat);
                       } else {
@@ -2455,25 +2646,35 @@ class _ChatHomePageState extends State<ChatHomePage> {
                       }
                     }
                   } else if (otroUid != null) {
-                    // No hay datos del chat todavía, pero SÍ hay un otroUid (ej. al iniciar un nuevo chat 1a1)
+                    // Si estamos iniciando un nuevo chat 1a1 y el stream del chat aún no tiene datos
                     return _buildHeaderInfoUsuario(otroUid!);
                   }
-                  // Fallback si no hay datos del chat y no hay otroUid
-                  return const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
+
+                  // Fallback general (puede ser un loader o un placeholder si estamos en pantalla grande)
+                  return Expanded(
+                    child:
+                        (isLargeScreen && chatIdSeleccionado == null)
+                            ? const Text(
+                              'Selecciona un chat',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            )
+                            : const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            ),
                   );
                 },
               ),
             )
-          else if (otroUid !=
-              null) // Si chatIdSeleccionado es null pero otroUid existe
-            Expanded(child: _buildHeaderInfoUsuario(otroUid!))
-          else
+          else // Si chatIdSeleccionado es null (esto se mostrará en pantalla grande antes de seleccionar un chat)
             const Expanded(
               child: Text(
                 'Selecciona un chat',
@@ -2937,12 +3138,13 @@ class _ChatHomePageState extends State<ChatHomePage> {
   }
 
   /// 5) Ensambla header + indicador + mensajes + input
-  Widget _buildChatDetail() {
+  Widget _buildChatDetail({required bool isLargeScreen}) {
+    // Nueva firma
     return Expanded(
       flex: 3,
       child: Column(
         children: [
-          _buildChatHeader(),
+          _buildChatHeader(isLargeScreen: isLargeScreen), // Pasa isLargeScreen
           if (chatIdSeleccionado != null) _buildTypingIndicator(),
           Expanded(child: _buildMessagesStream()),
           if (chatIdSeleccionado != null) _buildInputBox(),
@@ -2953,16 +3155,38 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: const CustomAppBar(showBack: true),
+    final screenWidth = MediaQuery.of(context).size.width;
+    const double tabletBreakpoint = 720.0; // Puedes ajustar este valor
+    final bool isLargeScreen = screenWidth >= tabletBreakpoint;
 
-      body: Row(
-        children: [
-          if (_showList)
-            Expanded(child: _buildChatList()), // tu panel izquierdo
-          if (!_showList) _buildChatDetail(),
-        ],
-      ),
+    return Scaffold(
+      // Tu CustomAppBar se mantiene igual
+      appBar: const CustomAppBar(showBack: true),
+      body:
+          isLargeScreen
+              ? Row(
+                // Diseño para Pantalla Grande
+                children: [
+                  _buildChatList(), // El panel de lista de chats
+                  const VerticalDivider(
+                    thickness: 1,
+                    width: 1,
+                  ), // Un separador visual
+                  // El panel de detalle del chat, necesita isLargeScreen para su cabecera
+                  _buildChatDetail(isLargeScreen: true),
+                ],
+              )
+              : Row(
+                // Diseño para Pantalla Pequeña
+                // Usamos un Row y Expanded para asegurar que el widget visible ocupe todo el espacio
+                children: [
+                  if (_showList) // Si debemos mostrar la lista de chats
+                    Expanded(child: _buildChatList()),
+                  if (!_showList) // Si debemos mostrar el detalle del chat
+                    // El panel de detalle del chat, necesita isLargeScreen para su cabecera
+                    _buildChatDetail(isLargeScreen: false),
+                ],
+              ),
     );
   }
 }
