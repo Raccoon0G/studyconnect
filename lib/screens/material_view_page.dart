@@ -1095,8 +1095,15 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                 ),
 
                 const SizedBox(width: 12),
+                // Dentro de _columnaIzquierda, en el Row de botones para el autor:
                 ElevatedButton.icon(
-                  onPressed: _confirmarEliminarMaterial,
+                  // onPressed: _confirmarEliminarMaterial, // YA NO
+                  onPressed: () {
+                    // NUEVO
+                    _mostrarOpcionesEliminarMaterial(
+                      context,
+                    ); // Llamamos a la nueva función
+                  },
                   icon: const Icon(Icons.delete, color: Colors.white),
                   label:
                       esMovil
@@ -1128,20 +1135,297 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     );
   }
 
-  void _confirmarEliminarMaterial() async {
+  // void _confirmarEliminarMaterial() async {
+  //   final confirm = await showCustomDialog<bool>(
+  //     context: context,
+  //     titulo: '¿Eliminar material?',
+  //     mensaje:
+  //         'Esta acción eliminará permanentemente este material y todas sus versiones. ¿Estás seguro?',
+  //     tipo: CustomDialogType.warning,
+  //     botones: [
+  //       DialogButton<bool>(texto: 'Cancelar', value: false),
+  //       DialogButton<bool>(texto: 'Eliminar', value: true),
+  //     ],
+  //   );
+  //   if (confirm == true) {
+  //     await _eliminarMaterial();
+  //   }
+  // }
+
+  void _mostrarOpcionesEliminarMaterial(BuildContext buttonContext) {
+    // buttonContext es el context del botón
+    if (materialData == null || versionSeleccionada == null) {
+      showCustomSnackbar(
+        context: context,
+        message: 'Datos del material no cargados completamente.',
+        success: false,
+      );
+      return;
+    }
+
+    final RenderBox button = buttonContext.findRenderObject() as RenderBox;
+    final Offset offset = button.localToGlobal(Offset.zero);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bool esMovil =
+        screenWidth <= 800; // Ajusta este breakpoint si es necesario
+
+    final RelativeRect position = RelativeRect.fromLTRB(
+      esMovil
+          ? offset.dx - 100
+          : offset.dx, // Ajusta para móvil si es necesario
+      offset.dy + button.size.height,
+      esMovil
+          ? offset.dx - 100 + button.size.width
+          : offset.dx + button.size.width,
+      offset.dy + button.size.height * 2, // Un poco más de espacio vertical
+    );
+
+    showMenu<String>(
+      context: context, // Usamos el context general del State
+      position: position,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      items: <PopupMenuEntry<String>>[
+        if (versiones.length > 1) // Solo mostrar si hay más de una versión
+          PopupMenuItem<String>(
+            value: 'version',
+            child: ListTile(
+              leading: Icon(
+                Icons.file_copy_outlined,
+                color: Colors.orangeAccent,
+              ),
+              title: Text(
+                'Eliminar esta versión (${versionSeleccionada ?? ""})',
+              ),
+            ),
+          ),
+        PopupMenuItem<String>(
+          value: 'material',
+          child: ListTile(
+            leading: Icon(Icons.delete_forever, color: Colors.redAccent),
+            title: Text(
+              versiones.length <= 1
+                  ? 'Eliminar material completo'
+                  : 'Eliminar material (y todas sus versiones)',
+            ),
+          ),
+        ),
+      ],
+    ).then((String? value) {
+      if (value == null) return; // No se seleccionó nada
+
+      if (value == 'version') {
+        _confirmarEliminarSoloVersionMaterial();
+      } else if (value == 'material') {
+        // La función que ya tenías para eliminar todo el material
+        // _confirmarEliminarMaterial();
+        // Mejor llamamos a una función más específica para eliminar el material completo.
+        _confirmarEliminarMaterialCompleto();
+      }
+    });
+  }
+
+  Future<void> _confirmarEliminarSoloVersionMaterial() async {
+    if (versionSeleccionada == null) {
+      showCustomSnackbar(
+        context: context,
+        message: 'No hay una versión seleccionada para eliminar.',
+        success: false,
+      );
+      return;
+    }
+
+    final confirmar = await showCustomDialog<bool>(
+      context: context,
+      titulo: 'Eliminar Versión del Material',
+      mensaje:
+          '¿Deseas eliminar la versión seleccionada ($versionSeleccionada) de este material? Esta acción no se puede deshacer.',
+      tipo: CustomDialogType.warning,
+      botones: [
+        DialogButton(texto: 'Cancelar', value: false),
+        DialogButton(
+          texto: 'Eliminar Versión',
+          value: true,
+          textColor: Colors.redAccent,
+        ),
+      ],
+    );
+
+    if (confirmar == true) {
+      await _eliminarSoloVersionSeleccionadaMaterial();
+    }
+  }
+
+  Future<void> _eliminarSoloVersionSeleccionadaMaterial() async {
+    if (versionSeleccionada == null || materialData == null) return;
+
+    final materialDocRef = FirebaseFirestore.instance
+        .collection('materiales')
+        .doc(widget.tema)
+        .collection('Mat${widget.tema}')
+        .doc(widget.materialId);
+
+    final versionRef = materialDocRef
+        .collection('Versiones')
+        .doc(versionSeleccionada);
+
+    try {
+      // Muestra un diálogo de carga
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+
+      await versionRef.delete();
+
+      // Si la versión eliminada era la 'versionActual' del material,
+      // se debe asignar la siguiente más reciente como 'versionActual'.
+      if (materialData!['versionActual'] == versionSeleccionada) {
+        final versionesRestantesSnap =
+            await materialDocRef
+                .collection('Versiones')
+                .orderBy('Fecha', descending: true)
+                .get();
+
+        if (versionesRestantesSnap.docs.isNotEmpty) {
+          final nuevaVersionActualDoc = versionesRestantesSnap.docs.first;
+          await materialDocRef.update({
+            'versionActual': nuevaVersionActualDoc.id,
+            'FechMod':
+                nuevaVersionActualDoc['Fecha'], // Actualiza la fecha de modificación del material
+          });
+          // No es necesario setState para versionSeleccionada aquí si _cargarTodo lo maneja,
+          // pero podría ser útil para una actualización visual inmediata del dropdown.
+          // versionSeleccionada = nuevaVersionActualDoc.id;
+        } else {
+          // Si no quedan versiones, se eliminó la última.
+          // En este caso, el material principal también debería eliminarse.
+          // Opcionalmente, puedes navegar o mostrar un mensaje.
+          // Por coherencia con ExerciseViewPage, si se elimina la última versión
+          // a través de "eliminar versión", idealmente se debería eliminar el material completo.
+          // O bien, esta opción ("Eliminar esta versión") no debería estar disponible si solo queda una.
+          // El `if (versiones.length > 1)` en `showMenu` ya previene esto.
+          // Si llegamos aquí y no hay versiones restantes, es un caso que idealmente
+          // se manejaría eliminando el material completo. Por ahora, solo actualizaremos.
+          await materialDocRef
+              .delete(); // Eliminar el material si no quedan versiones
+          if (mounted) Navigator.pop(context); // Cierra diálogo de carga
+          if (mounted) Navigator.pop(context, 'eliminado_completo'); // Regresa
+          showCustomSnackbar(
+            context: context,
+            message: 'Material eliminado ya que no quedaban versiones.',
+            success: true,
+          );
+          return; // Salir temprano
+        }
+      }
+
+      if (mounted) Navigator.pop(context); // Cierra diálogo de carga
+
+      showCustomSnackbar(
+        context: context,
+        message: '✅ Versión eliminada correctamente.',
+        success: true,
+      );
+
+      await _cargarTodo(); // Recargar todos los datos
+    } catch (e) {
+      if (mounted) Navigator.pop(context); // Cierra diálogo de carga
+      print('Error al eliminar versión del material: $e');
+      _mostrarError('Error al eliminar versión', e.toString());
+    }
+  }
+
+  void _confirmarEliminarMaterialCompleto() async {
+    // Renombrada de _confirmarEliminarMaterial
     final confirm = await showCustomDialog<bool>(
       context: context,
-      titulo: '¿Eliminar material?',
+      titulo: '¿Eliminar Material Completo?',
       mensaje:
-          'Esta acción eliminará permanentemente este material y todas sus versiones. ¿Estás seguro?',
+          'Esta acción eliminará permanentemente este material y TODAS sus versiones. ¿Estás seguro?',
       tipo: CustomDialogType.warning,
       botones: [
         DialogButton<bool>(texto: 'Cancelar', value: false),
-        DialogButton<bool>(texto: 'Eliminar', value: true),
+        DialogButton<bool>(
+          texto: 'Eliminar TODO',
+          value: true,
+          textColor: Colors.red,
+        ),
       ],
     );
     if (confirm == true) {
-      await _eliminarMaterial();
+      await _ejecutarEliminacionMaterialCompleto(); // Nueva función para la acción
+    }
+  }
+
+  Future<void> _ejecutarEliminacionMaterialCompleto() async {
+    // Renombrada de _eliminarMaterial
+    if (materialData == null) return;
+
+    final materialDocRef = FirebaseFirestore.instance
+        .collection('materiales')
+        .doc(widget.tema)
+        .collection('Mat${widget.tema}')
+        .doc(widget.materialId);
+
+    try {
+      // Muestra un diálogo de carga
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+
+      // 1. Eliminar todas las versiones en la subcolección 'Versiones'
+      final versionesSnap = await materialDocRef.collection('Versiones').get();
+      for (final versionDoc in versionesSnap.docs) {
+        await versionDoc.reference.delete();
+      }
+
+      // 2. Eliminar el documento principal del material
+      await materialDocRef.delete();
+
+      // 3. Eliminar los comentarios relacionados
+      final comentariosSnap =
+          await FirebaseFirestore.instance
+              .collection('comentarios_materiales')
+              .where('materialId', isEqualTo: widget.materialId)
+              .where(
+                'tema',
+                isEqualTo: widget.tema,
+              ) // Asegúrate de filtrar por tema también si es relevante
+              .get();
+      for (final comentarioDoc in comentariosSnap.docs) {
+        await comentarioDoc.reference.delete();
+      }
+
+      // 4. Actualizar contador de materiales del autor (si tienes uno)
+      final autorId = materialData!['autorId'];
+      if (autorId != null && autorId.toString().isNotEmpty) {
+        final usuarioRef = FirebaseFirestore.instance
+            .collection('usuarios')
+            .doc(autorId);
+        // Suponiendo que tienes un campo 'materialesSubidos' o similar
+        await usuarioRef.update({
+          'materialesSubidos': FieldValue.increment(-1),
+        });
+      }
+
+      if (mounted) Navigator.pop(context); // Cierra diálogo de carga
+
+      showCustomSnackbar(
+        context: context,
+        message: 'Material completo eliminado con éxito.',
+        success: true,
+      );
+
+      // Regresa a la pantalla anterior o a la lista de materiales
+      if (mounted) Navigator.pop(context, 'eliminado_completo');
+    } catch (e) {
+      if (mounted) Navigator.pop(context); // Cierra diálogo de carga
+      print('Error al eliminar material completo: $e');
+      _mostrarError('Error al eliminar material', e.toString());
     }
   }
 
