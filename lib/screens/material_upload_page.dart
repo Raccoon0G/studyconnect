@@ -373,19 +373,28 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
 
           await reproducirSonidoExito();
 
-          await showFeedbackDialogAndSnackbar(
-            context: context,
-            titulo: '¡Nueva versión!',
-            mensaje: 'Nueva versión del material agregada exitosamente.',
-            tipo: CustomDialogType.success,
-            snackbarMessage: 'Nueva versión guardada',
-            snackbarSuccess: true,
-          );
+          if (mounted) {
+            await showFeedbackDialogAndSnackbar(
+              context: context,
+              titulo: '¡Nueva versión!',
+              mensaje: 'Nueva versión del material agregada exitosamente.',
+              tipo: CustomDialogType.success,
+              snackbarMessage: 'Nueva versión guardada',
+              snackbarSuccess: true,
+            );
+          }
 
           setState(() {
             _exitoAlSubir = true;
             _subiendo = false;
           });
+
+          Navigator.pushReplacementNamed(
+            context,
+            '/material_view', // Ruta a tu MaterialViewPage
+            arguments: {'tema': _temaSeleccionado!, 'materialId': _materialId!},
+          );
+
           return;
         } else {
           // ---- EDICIÓN NORMAL ----
@@ -429,20 +438,26 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
           );
 
           await reproducirSonidoExito();
-
-          await showFeedbackDialogAndSnackbar(
-            context: context,
-            titulo: '¡Editado!',
-            mensaje: 'El material fue editado correctamente.',
-            tipo: CustomDialogType.success,
-            snackbarMessage: 'Material editado',
-            snackbarSuccess: true,
-          );
+          if (mounted) {
+            await showFeedbackDialogAndSnackbar(
+              context: context,
+              titulo: '¡Editado!',
+              mensaje: 'El material fue editado correctamente.',
+              tipo: CustomDialogType.success,
+              snackbarMessage: 'Material editado',
+              snackbarSuccess: true,
+            );
+          }
 
           setState(() {
             _exitoAlSubir = true;
             _subiendo = false;
           });
+          Navigator.pushReplacementNamed(
+            context,
+            '/material_view', // Ruta a tu MaterialViewPage
+            arguments: {'tema': _temaSeleccionado!, 'materialId': _materialId!},
+          );
           return;
         }
       } else {
@@ -513,37 +528,39 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
         );
 
         await reproducirSonidoExito();
+        if (mounted) {
+          await showFeedbackDialogAndSnackbar(
+            context: context,
+            titulo: '¡Éxito!',
+            mensaje: 'El material se subió correctamente a la plataforma.',
+            tipo: CustomDialogType.success,
+            snackbarMessage: 'Material guardado con éxito',
+            snackbarSuccess: true,
+          );
 
-        await showFeedbackDialogAndSnackbar(
-          context: context,
-          titulo: '¡Éxito!',
-          mensaje: 'El material se subió correctamente a la plataforma.',
-          tipo: CustomDialogType.success,
-          snackbarMessage: 'Material guardado con éxito',
-          snackbarSuccess: true,
-        );
-
-        // Limpiar campos
-        setState(() {
-          _temaSeleccionado = null;
-          _subtemaController.clear();
-          _notaController.clear();
-          _archivos.clear();
-          _tituloController.clear();
-          _descripcionController.clear();
-        });
+          // Limpiar campos
+          setState(() {
+            _temaSeleccionado = null;
+            _subtemaController.clear();
+            _notaController.clear();
+            _archivos.clear();
+            _tituloController.clear();
+            _descripcionController.clear();
+          });
+        }
       }
     } catch (e) {
-      await reproducirSonidoError();
-      await showFeedbackDialogAndSnackbar(
-        context: context,
-        titulo: 'Error al subir material',
-        mensaje: e.toString(),
-        tipo: CustomDialogType.error,
-        snackbarMessage: '❌ Hubo un error al subir el material.',
-        snackbarSuccess: false,
-      );
-
+      if (mounted) {
+        await reproducirSonidoError();
+        await showFeedbackDialogAndSnackbar(
+          context: context,
+          titulo: 'Error al subir material',
+          mensaje: e.toString(),
+          tipo: CustomDialogType.error,
+          snackbarMessage: '❌ Hubo un error al subir el material.',
+          snackbarSuccess: false,
+        );
+      }
       // Tip opcional aleatorio
       final List<String> tips = [
         'Tip: Puedes añadir enlaces de YouTube y se mostrarán como miniaturas.',
@@ -566,19 +583,24 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
         tipo: CustomDialogType.info,
       );
     } finally {
-      setState(() => _subiendo = false);
+      if (mounted) {
+        setState(() => _subiendo = false);
+      }
     }
-    setState(() {
-      _exitoAlSubir = true;
-    });
 
-    // Esperar 1.5 segundos y luego restaurar
-    await Future.delayed(const Duration(milliseconds: 1500));
-
-    if (mounted) {
+    if (!(_modoEdicion || _modoNuevaVersion) && mounted) {
+      // Solo para nuevo material
       setState(() {
-        _exitoAlSubir = false;
+        _exitoAlSubir = true;
       });
+      // Esperar 1.5 segundos y luego restaurar
+      await Future.delayed(const Duration(milliseconds: 1500));
+
+      if (mounted) {
+        setState(() {
+          _exitoAlSubir = false;
+        });
+      }
     }
   }
 
