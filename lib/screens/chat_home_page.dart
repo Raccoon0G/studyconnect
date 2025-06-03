@@ -148,6 +148,47 @@ class _ChatHomePageState extends State<ChatHomePage> {
     }
   }
 
+  // Añade esta nueva función a tu _ChatHomePageState
+
+  Future<void> _desarchivarChat(String chatId) async {
+    if (chatId == null || chatId.isEmpty) {
+      print("Error: Se intentó desarchivar un chat con ID nulo o vacío.");
+      return;
+    }
+
+    final DocumentReference chatDocRef = FirebaseFirestore.instance
+        .collection('Chats')
+        .doc(chatId);
+
+    try {
+      // Usamos FieldValue.arrayRemove para quitar el uid actual de la lista 'archivadoPara'.
+      await chatDocRef.update({
+        'archivadoPara': FieldValue.arrayRemove([
+          uid,
+        ]), // uid es el ID del usuario actual
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Chat desarchivado')));
+        // No es necesario un setState para moverlo de pestaña, el StreamBuilder lo hará
+        // al detectar el cambio en los datos del chat.
+      }
+      print('Chat $chatId desarchivado para el usuario $uid');
+    } catch (e, s) {
+      print('Error al desarchivar el chat: ${e.toString()}');
+      print('Stack trace: ${s.toString()}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al desarchivar el chat: ${e.toString()}'),
+          ),
+        );
+      }
+    }
+  }
+
   // void _iniciarChat(String otroId) async {
   //   // 1) Creamos el chatId ordenado
   //   final nuevoChatId =
@@ -1620,13 +1661,14 @@ class _ChatHomePageState extends State<ChatHomePage> {
   }
 
   /// Helper que construye la lista aplicando filtros
+
   // Reemplaza TODA tu función _chatListStream con esta:
   Widget _chatListStream({
     required bool filterUnread,
     required bool filterGroups,
-    required bool filterArchived,
+    required bool filterArchived, // Parámetro para la pestaña "Archivados"
   }) {
-    // --- CASO 1: HAY TEXTO EN EL FILTRO DE BÚSQUEDA (Lógica para buscar nuevos usuarios) ---
+    // --- CASO 1: HAY TEXTO EN EL FILTRO DE BÚSQUEDA ---
     if (filtro.isNotEmpty) {
       if (_isSearchingGlobalUsers) {
         return ListView.builder(
@@ -1647,9 +1689,9 @@ class _ChatHomePageState extends State<ChatHomePage> {
             final userDoc = _usuarios[i];
             final nombre = userDoc['Nombre'] ?? 'Usuario';
             final foto = cacheUsuarios[userDoc.id]?['foto'] ?? '';
-            // TU UI PARA MOSTRAR UN USUARIO DE LA BÚSQUEDA GLOBAL (copia tu widget completo aquí)
+
+            // UI para mostrar un usuario de la búsqueda global
             return MouseRegion(
-              /* ... tu widget completo para item de usuario ... */
               cursor: SystemMouseCursors.click,
               onEnter: (_) => setState(() => hoveredUserId = userDoc.id),
               onExit: (_) => setState(() => hoveredUserId = null),
@@ -1669,7 +1711,34 @@ class _ChatHomePageState extends State<ChatHomePage> {
                       vertical: 6,
                     ),
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(/* ... tu decoración ... */),
+                    decoration: BoxDecoration(
+                      gradient:
+                          hoveredUserId == userDoc.id
+                              ? const LinearGradient(
+                                colors: [
+                                  Color(0xFF1976D2),
+                                  Color(0xFF42A5F5),
+                                ], // Considera Theme.of(context)
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              )
+                              : null,
+                      color:
+                          hoveredUserId != userDoc.id
+                              ? const Color(0xFF1565C0)
+                              : null, // Considera Theme.of(context)
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color:
+                              hoveredUserId == userDoc.id
+                                  ? Colors.blueAccent.withOpacity(0.6)
+                                  : Colors.black.withOpacity(0.2),
+                          blurRadius: hoveredUserId == userDoc.id ? 12 : 6,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
                     child: Row(
                       children: [
                         CircleAvatar(
@@ -1693,7 +1762,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                   color: Colors.white,
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                ),
+                                ), // Considera Theme.of(context)
                               ),
                               const SizedBox(height: 4),
                               const Text(
@@ -1701,7 +1770,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                 style: TextStyle(
                                   color: Colors.white70,
                                   fontSize: 12,
-                                ),
+                                ), // Considera Theme.of(context)
                               ),
                             ],
                           ),
@@ -1710,7 +1779,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                           Icons.arrow_forward_ios,
                           color: Colors.white54,
                           size: 16,
-                        ),
+                        ), // Considera Theme.of(context)
                       ],
                     ),
                   ),
@@ -1727,22 +1796,20 @@ class _ChatHomePageState extends State<ChatHomePage> {
         stream:
             FirebaseFirestore.instance
                 .collection('Chats')
-                .where(
-                  'ids',
-                  arrayContains: uid,
-                ) // Trae todos los chats donde el usuario es miembro
+                .where('ids', arrayContains: uid)
                 .orderBy('lastMessageAt', descending: true)
                 .snapshots(),
         builder: (ctx, chatSnapshot) {
-          // ... (tu lógica para ConnectionState.waiting y !chatSnapshot.hasData) ...
           if (chatSnapshot.connectionState == ConnectionState.waiting) {
-            /* ... Shimmer ... */
+            return ListView.builder(
+              itemCount: 5,
+              itemBuilder: (_, __) => const ShimmerChatTile(),
+            );
           }
+
           if (!chatSnapshot.hasData || chatSnapshot.data!.docs.isEmpty) {
-            // Si estamos en la pestaña de archivados y no hay nada, mostrar mensaje específico
             if (filterArchived)
               return const Center(child: Text('No tienes chats archivados'));
-            // Tus otros mensajes de lista vacía para las otras pestañas
             if (filterUnread)
               return const Center(child: Text('No tienes mensajes no leídos'));
             if (filterGroups)
@@ -1768,16 +1835,11 @@ class _ChatHomePageState extends State<ChatHomePage> {
                 final bool estaArchivadoPorUsuarioActual = archivadoPorLista
                     .contains(uid);
 
-                // --- LÓGICA DE FILTRADO PRINCIPAL ACTUALIZADA ---
                 if (filterArchived) {
-                  // Si estamos en la pestaña "Archivados", SÓLO mostrar los que están archivados.
                   return estaArchivadoPorUsuarioActual;
                 } else {
-                  // Si NO estamos en la pestaña "Archivados", NO mostrar los que están archivados.
-                  if (estaArchivadoPorUsuarioActual) {
-                    return false;
-                  }
-                  // Y luego aplicar los filtros de las otras pestañas (No leídos, Grupos, Todos)
+                  if (estaArchivadoPorUsuarioActual) return false;
+
                   final bool esUnGrupo = (data['isGroup'] as bool?) ?? false;
                   final Map<String, dynamic> unreadMap =
                       (data['unreadCounts'] as Map<String, dynamic>?) ?? {};
@@ -1785,13 +1847,11 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
                   if (filterGroups) return esUnGrupo;
                   if (filterUnread) return contadorNoLeidos > 0;
-                  return true; // Pestaña "Todos" (muestra todo lo no archivado)
+                  return true;
                 }
-                // --- FIN LÓGICA DE FILTRADO ---
               }).toList();
 
           if (chatsVisibles.isEmpty) {
-            // Mensajes específicos si la lista filtrada está vacía
             if (filterArchived)
               return const Center(child: Text('No tienes chats archivados'));
             if (filterUnread)
@@ -1800,14 +1860,12 @@ class _ChatHomePageState extends State<ChatHomePage> {
               );
             if (filterGroups)
               return const Center(child: Text('No hay grupos (visibles)'));
-            if (filterGroups == false &&
-                filterUnread == false &&
+            if (!filterGroups &&
+                !filterUnread &&
                 !filterArchived &&
                 chatsExistentes.isNotEmpty) {
               return const Center(
-                child: Text(
-                  'Todos tus chats están archivados o no coinciden con filtros',
-                ),
+                child: Text('Todos tus chats están archivados'),
               );
             }
             return const Center(
@@ -1815,20 +1873,18 @@ class _ChatHomePageState extends State<ChatHomePage> {
             );
           }
 
-          // Construir la lista con `chatsVisibles`
           return ListView.builder(
             padding: const EdgeInsets.symmetric(vertical: 4),
             itemCount: chatsVisibles.length,
             itemBuilder: (ctxBuilder, idx) {
               final chatDoc = chatsVisibles[idx];
-              // ... (El resto de tu itemBuilder para el ChatTile, como lo tenías antes)
-              // Asegúrate de que esta parte esté completa con tu diseño de ChatTile
               final data = chatDoc.data()! as Map<String, dynamic>;
               final List<String> otherIds = List<String>.from(
                 data['ids'] ?? [],
               );
               final bool isGroup = (data['isGroup'] as bool?) ?? false;
               final String chatId = chatDoc.id;
+
               final String? other =
                   isGroup
                       ? null
@@ -1836,12 +1892,14 @@ class _ChatHomePageState extends State<ChatHomePage> {
                         (id) => id != uid,
                         orElse: () => '',
                       );
+
               if (!isGroup &&
                   (other == null ||
                       other.isEmpty ||
                       !cacheUsuarios.containsKey(other))) {
                 return const ShimmerChatTile();
               }
+
               final String preview =
                   (data['lastMessage'] as String?)?.trim().isNotEmpty == true
                       ? data['lastMessage']
@@ -1864,8 +1922,17 @@ class _ChatHomePageState extends State<ChatHomePage> {
                   (data['unreadCounts'] as Map<String, dynamic>?) ?? {};
               final int unreadCount = (unreadMap[uid] as int?) ?? 0;
 
+              // --- INICIO: LÓGICA PARA DETERMINAR SI EL CHAT ACTUAL ESTÁ ARCHIVADO ---
+              final List<dynamic> archivadoPorDinamico =
+                  data['archivadoPara'] as List<dynamic>? ?? [];
+              final List<String> archivadoPorEsteChat =
+                  archivadoPorDinamico.map((item) => item.toString()).toList();
+              final bool estaArchivadoActual = archivadoPorEsteChat.contains(
+                uid,
+              );
+              // --- FIN: LÓGICA PARA DETERMINAR SI EL CHAT ACTUAL ESTÁ ARCHIVADO ---
+
               return ValueListenableBuilder<String?>(
-                /* ... Tu ValueListenableBuilder completo ... */
                 valueListenable: hoveredChatId,
                 builder: (context, hovered, _) {
                   final isHovered = hovered == chatId;
@@ -1913,7 +1980,9 @@ class _ChatHomePageState extends State<ChatHomePage> {
                           color:
                               isHovered
                                   ? Colors.blue.shade800
-                                  : const Color(0xFF015C8B),
+                                  : const Color(
+                                    0xFF015C8B,
+                                  ), // Considera Theme.of(context)
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
@@ -2003,7 +2072,8 @@ class _ChatHomePageState extends State<ChatHomePage> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                if (unreadCount > 0)
+                                if (unreadCount > 0 &&
+                                    !filterArchived) // No mostramos contador en la pestaña de archivados
                                   Container(
                                     margin: const EdgeInsets.only(bottom: 6),
                                     padding: const EdgeInsets.symmetric(
@@ -2027,28 +2097,55 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                   icon: const Icon(
                                     Icons.more_vert,
                                     color: Colors.white,
-                                  ),
+                                  ), // Considera Theme.of(context)
                                   onSelected: (value) {
                                     if (value == 'archivar') {
                                       _archivarChat(chatId);
+                                    } else if (value == 'desarchivar') {
+                                      _desarchivarChat(chatId);
                                     } else if (value == 'silenciar') {
-                                    } else if (value == 'eliminar') {}
+                                      print('Acción: Silenciar chat $chatId');
+                                      // TODO
+                                    } else if (value == 'eliminar') {
+                                      print('Acción: Eliminar chat $chatId');
+                                      // TODO
+                                    }
                                   },
-                                  itemBuilder:
-                                      (context) => const [
-                                        PopupMenuItem(
+                                  itemBuilder: (BuildContext context) {
+                                    List<PopupMenuEntry<String>> items = [];
+                                    // Usamos el parámetro filterArchived de la función _chatListStream
+                                    // para decidir si este chat se está mostrando en la pestaña "Archivados".
+                                    // O, como lo tenías, usando estaArchivadoActual que definimos arriba a partir de los datos del chatDoc.
+                                    // Ambas son válidas. Usar 'estaArchivadoActual' es más directo al dato.
+                                    if (estaArchivadoActual) {
+                                      items.add(
+                                        const PopupMenuItem(
+                                          value: 'desarchivar',
+                                          child: Text('Desarchivar chat'),
+                                        ),
+                                      );
+                                    } else {
+                                      items.add(
+                                        const PopupMenuItem(
                                           value: 'archivar',
                                           child: Text('Archivar chat'),
                                         ),
-                                        PopupMenuItem(
-                                          value: 'silenciar',
-                                          child: Text('Silenciar'),
-                                        ),
-                                        PopupMenuItem(
-                                          value: 'eliminar',
-                                          child: Text('Eliminar chat'),
-                                        ),
-                                      ],
+                                      );
+                                    }
+                                    items.add(
+                                      const PopupMenuItem(
+                                        value: 'silenciar',
+                                        child: Text('Silenciar'),
+                                      ),
+                                    );
+                                    items.add(
+                                      const PopupMenuItem(
+                                        value: 'eliminar',
+                                        child: Text('Eliminar chat'),
+                                      ),
+                                    );
+                                    return items;
+                                  },
                                 ),
                               ],
                             ),
@@ -2065,6 +2162,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
       );
     }
   }
+
   // Parte de los mensajes
   /// 1) Header con botón atrás, avatar, nombre y última conexión
 
