@@ -312,6 +312,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
     });
   }
 
+  // Reemplaza TODA tu función _enviarMensaje con esta:
   void _enviarMensaje() async {
     // 0. Verificaciones iniciales
     if (chatIdSeleccionado == null || mensaje.trim().isEmpty) return;
@@ -319,13 +320,14 @@ class _ChatHomePageState extends State<ChatHomePage> {
     final now = Timestamp.now();
     final String mensajeActual = mensaje.trim();
 
+    // Limpiar UI inmediatamente
     _mensajeController.clear();
     setState(() {
       mensaje = '';
     });
 
-    // 1. Añadir el nuevo mensaje
-    final DocumentReference mensajeDocRef = await FirebaseFirestore.instance
+    // 1. Añadir el nuevo mensaje a la subcolección 'Mensajes'
+    await FirebaseFirestore.instance
         .collection('Chats')
         .doc(chatIdSeleccionado)
         .collection('Mensajes')
@@ -339,7 +341,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
           'leidoPor': [uid],
         });
 
-    // 2. Actualizar el documento principal del Chat
+    // 2. Preparar la actualización del documento principal del Chat
     final DocumentReference chatDocRef = FirebaseFirestore.instance
         .collection('Chats')
         .doc(chatIdSeleccionado!);
@@ -351,7 +353,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
       'lastMessage': mensajeActual,
     };
 
-    // Variables para la lógica de notificaciones
     List<String> uidsDestinatariosNotificacion = [];
     bool esNotificacionDeGrupo = false;
     String nombreGrupoParaNotificacion = '';
@@ -359,16 +360,16 @@ class _ChatHomePageState extends State<ChatHomePage> {
     if (chatSnapshot.exists) {
       final Map<String, dynamic> chatData =
           chatSnapshot.data() as Map<String, dynamic>;
+
       final List<String> memberIds = List<String>.from(chatData['ids'] ?? []);
       Map<String, dynamic> currentUnreadCounts = Map<String, dynamic>.from(
         chatData['unreadCounts'] ?? {},
       );
-
       for (String memberId in memberIds) {
         if (memberId != uid) {
           currentUnreadCounts[memberId] =
               (currentUnreadCounts[memberId] as int? ?? 0) + 1;
-          // Añadir a destinatarios para notificación
+          // Solo añadir a destinatarios de notificación si no es el usuario actual
           if (!uidsDestinatariosNotificacion.contains(memberId)) {
             uidsDestinatariosNotificacion.add(memberId);
           }
@@ -376,46 +377,63 @@ class _ChatHomePageState extends State<ChatHomePage> {
       }
       chatUpdateData['unreadCounts'] = currentUnreadCounts;
 
-      // Determinar si es grupo para la notificación
       esNotificacionDeGrupo = (chatData['isGroup'] as bool?) ?? false;
       if (esNotificacionDeGrupo) {
         nombreGrupoParaNotificacion = chatData['groupName'] ?? 'el grupo';
+        // Los destinatarios de grupo ya se llenaron en el bucle anterior.
+      } else {
+        // Para chat 1 a 1, aseguramos que el destinatario sea el otro miembro.
+        // La lista memberIds debería tener 2 UIDs para un chat 1a1.
+        final Iterable<String> otrosIdsFiltrados = memberIds.where(
+          (id) => id != uid,
+        );
+        final String? idOtroDelChat =
+            otrosIdsFiltrados.isNotEmpty ? otrosIdsFiltrados.first : null;
+
+        if (idOtroDelChat != null) {
+          // Limpiamos y añadimos solo al otro usuario para 1a1
+          uidsDestinatariosNotificacion = [idOtroDelChat];
+        } else {
+          uidsDestinatariosNotificacion =
+              []; // Seguridad: no hay otro usuario claro
+        }
+      }
+
+      final List<dynamic> ocultoParaDinamico =
+          chatData['ocultoPara'] as List<dynamic>? ?? [];
+      final List<String> ocultoParaLista =
+          ocultoParaDinamico.map((item) => item.toString()).toList();
+
+      if (ocultoParaLista.contains(uid)) {
+        chatUpdateData['ocultoPara'] = FieldValue.arrayRemove([uid]);
+        print(
+          "Chat $chatIdSeleccionado des-ocultado para $uid porque envió un mensaje.",
+        );
       }
     } else {
-      // El documento del chat NO existe. Esto es menos común si _iniciarChat o la creación de grupos funciona bien.
-      // Creamos una estructura básica.
+      // Documento del chat NO existe (raro si _iniciarChat o creación de grupo funciona bien)
       print(
-        "Advertencia: El documento del chat '$chatIdSeleccionado' no existía. Se creará con datos básicos.",
+        "Advertencia: Enviando mensaje a un chatId '$chatIdSeleccionado' que no existe. _iniciarChat debería haberlo creado.",
       );
       if (otroUid != null && otroUid != uid) {
-        // Asumimos que es un chat 1 a 1 porque otroUid está presente
+        // Asumimos 1a1 basado en la variable de estado 'otroUid'
         chatUpdateData['ids'] = [uid, otroUid!];
         chatUpdateData['isGroup'] = false;
-        chatUpdateData['unreadCounts'] = {
-          otroUid!: 1,
-        }; // El otro usuario tiene 1 mensaje no leído
-        if (!uidsDestinatariosNotificacion.contains(otroUid!)) {
-          uidsDestinatariosNotificacion.add(otroUid!);
-        }
+        chatUpdateData['unreadCounts'] = {otroUid!: 1, uid: 0};
+        uidsDestinatariosNotificacion = [otroUid!];
         esNotificacionDeGrupo = false;
-      } else {
-        // No hay otroUid, podría ser un intento de enviar a un grupo que no existe.
-        // No podemos saber los miembros, así que unreadCounts para otros no se puede establecer aquí.
-        // 'ids' tampoco se puede determinar aquí de forma fiable para un grupo.
-        // El creador del grupo (o _iniciarChat) es responsable de la estructura inicial.
-        chatUpdateData['isGroup'] =
-            true; // Asumimos que la intención era un grupo
-        // No se pueden agregar destinatarios específicos para notificación sin la lista de miembros.
-        // Se podría enviar una notificación genérica si tuvieras un topic de FCM para "nuevos grupos" o similar.
       }
+      // No se puede determinar 'ocultoPara' aquí si el chat no existe.
     }
 
-    // Usamos .set con merge:true para crear el documento si no existe, o actualizarlo si existe.
     await chatDocRef.set(chatUpdateData, SetOptions(merge: true));
 
     // 3. Crear notificaciones
     if (nombreUsuario != null && uidsDestinatariosNotificacion.isNotEmpty) {
       for (String destinatarioId in uidsDestinatariosNotificacion) {
+        // Asegurarse de no enviar notificación al emisor si por error estuviera en la lista
+        if (destinatarioId == uid) continue;
+
         String tituloNotificacion;
         if (esNotificacionDeGrupo) {
           tituloNotificacion = '$nombreUsuario @ $nombreGrupoParaNotificacion';
@@ -433,8 +451,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                   : mensajeActual,
           referenciaId: chatIdSeleccionado!,
           uidEmisor: uid,
-          nombreEmisor:
-              nombreUsuario!, // nombreUsuario no debería ser null aquí
+          nombreEmisor: nombreUsuario!,
         );
       }
     } else if (nombreUsuario == null) {
