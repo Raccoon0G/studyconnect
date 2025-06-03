@@ -97,6 +97,57 @@ class _ChatHomePageState extends State<ChatHomePage> {
     });
   }
 
+  // Añade esta nueva función a tu _ChatHomePageState
+
+  Future<void> _archivarChat(String chatId) async {
+    if (chatId == null || chatId.isEmpty) {
+      // Comprobación de seguridad
+      print("Error: Se intentó archivar un chat con ID nulo o vacío.");
+      return;
+    }
+
+    final DocumentReference chatDocRef = FirebaseFirestore.instance
+        .collection('Chats')
+        .doc(chatId);
+
+    try {
+      // Usamos FieldValue.arrayUnion para añadir el uid actual a la lista 'archivadoPara'.
+      // arrayUnion se asegura de que el uid no se añada si ya está presente (evita duplicados).
+      await chatDocRef.update({
+        'archivadoPara': FieldValue.arrayUnion([
+          uid,
+        ]), // uid es el ID del usuario actual
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Chat archivado')));
+        // Opcional: Si el chat archivado es el que está seleccionado actualmente,
+        // podrías querer deseleccionarlo y volver a la lista.
+        if (chatIdSeleccionado == chatId) {
+          setState(() {
+            _showList = true; // Mostrar la lista de chats
+            chatIdSeleccionado = null;
+            otroUid = null;
+          });
+        }
+        // No es necesario un setState global aquí para la lista, ya que el StreamBuilder
+        // en _chatListStream se actualizará cuando modifiquemos el filtro para ocultar
+        // los chats archivados (eso lo haremos en el siguiente paso).
+      }
+      print('Chat $chatId archivado para el usuario $uid');
+    } catch (e, s) {
+      print('Error al archivar el chat: ${e.toString()}');
+      print('Stack trace: ${s.toString()}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al archivar el chat: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
   // void _iniciarChat(String otroId) async {
   //   // 1) Creamos el chatId ordenado
   //   final nuevoChatId =
@@ -183,7 +234,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
   //   });
   // }
 
-  // Reemplaza tu función _iniciarChat actual con esta versión:
   void _iniciarChat(String otroId) async {
     // 1) Creamos el chatId ordenado para chats 1 a 1.
     final nuevoChatId =
@@ -1334,7 +1384,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
       child: Container(
         color: const Color(0xFF015C8B),
         child: DefaultTabController(
-          length: 3,
+          length: 4,
           child: Column(
             children: [
               // ——— 1) Header “Chats” con iconos ———
@@ -1381,6 +1431,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                   Tab(text: 'Todos'),
                   Tab(text: 'No leídos'),
                   Tab(text: 'Grupos'),
+                  Tab(text: 'Archivados'),
                 ],
               ),
 
@@ -1534,11 +1585,30 @@ class _ChatHomePageState extends State<ChatHomePage> {
                 child: TabBarView(
                   children: [
                     // Todos
-                    _chatListStream(filterUnread: false, filterGroups: false),
-                    // No leídos
-                    _chatListStream(filterUnread: true, filterGroups: false),
-                    // Grupos (ids.length>2)
-                    _chatListStream(filterUnread: false, filterGroups: true),
+                    // Pestaña Todos: Muestra no archivados, no filtra por grupo, no filtra por no leídos
+                    _chatListStream(
+                      filterUnread: false,
+                      filterGroups: false,
+                      filterArchived: false,
+                    ),
+                    // Pestaña No leídos: Muestra no archivados, no filtra por grupo, SÍ filtra por no leídos
+                    _chatListStream(
+                      filterUnread: true,
+                      filterGroups: false,
+                      filterArchived: false,
+                    ),
+                    // Pestaña Grupos: Muestra no archivados, SÍ filtra por grupo, no filtra por no leídos
+                    _chatListStream(
+                      filterUnread: false,
+                      filterGroups: true,
+                      filterArchived: false,
+                    ),
+                    // Pestaña Archivados: Muestra SÓLO archivados, no filtra por grupo, no filtra por no leídos
+                    _chatListStream(
+                      filterUnread: false,
+                      filterGroups: false,
+                      filterArchived: true,
+                    ), // <--- NUEVA LLAMADA
                   ],
                 ),
               ),
@@ -1550,27 +1620,26 @@ class _ChatHomePageState extends State<ChatHomePage> {
   }
 
   /// Helper que construye la lista aplicando filtros
+  // Reemplaza TODA tu función _chatListStream con esta:
   Widget _chatListStream({
     required bool filterUnread,
     required bool filterGroups,
+    required bool filterArchived,
   }) {
-    // --- CASO 1: HAY TEXTO EN EL FILTRO DE BÚSQUEDA ---
+    // --- CASO 1: HAY TEXTO EN EL FILTRO DE BÚSQUEDA (Lógica para buscar nuevos usuarios) ---
     if (filtro.isNotEmpty) {
       if (_isSearchingGlobalUsers) {
-        // Muestra shimmers para la lista de usuarios mientras carga
         return ListView.builder(
-          itemCount: 5, // O el número de shimmers que prefieras
+          itemCount: 5,
           itemBuilder:
-              (_, __) =>
-                  const ShimmerChatTile(), // Puedes crear un ShimmerUserTile() si quieres diferenciarlo
+              (_, __) => const ShimmerChatTile(), // O un ShimmerUserTile
         );
       } else if (_usuarios.isEmpty) {
-        // La búsqueda terminó pero no se encontraron usuarios
         return const Center(
           child: Text('No se encontraron usuarios con ese nombre.'),
         );
       } else {
-        // La búsqueda terminó y SÍ hay usuarios para mostrar
+        // Construir lista de _usuarios (resultados de búsqueda global)
         return ListView.builder(
           padding: const EdgeInsets.symmetric(vertical: 4),
           itemCount: _usuarios.length,
@@ -1578,9 +1647,9 @@ class _ChatHomePageState extends State<ChatHomePage> {
             final userDoc = _usuarios[i];
             final nombre = userDoc['Nombre'] ?? 'Usuario';
             final foto = cacheUsuarios[userDoc.id]?['foto'] ?? '';
-
-            // TU UI PARA MOSTRAR UN USUARIO DE LA BÚSQUEDA GLOBAL (esta parte ya la tenías bien)
+            // TU UI PARA MOSTRAR UN USUARIO DE LA BÚSQUEDA GLOBAL (copia tu widget completo aquí)
             return MouseRegion(
+              /* ... tu widget completo para item de usuario ... */
               cursor: SystemMouseCursors.click,
               onEnter: (_) => setState(() => hoveredUserId = userDoc.id),
               onExit: (_) => setState(() => hoveredUserId = null),
@@ -1588,10 +1657,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                 message: 'Haz clic para chatear con $nombre',
                 waitDuration: const Duration(milliseconds: 300),
                 child: GestureDetector(
-                  onTap:
-                      () => _iniciarChat(
-                        userDoc.id,
-                      ), // _iniciarChat ya maneja la creación
+                  onTap: () => _iniciarChat(userDoc.id),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 250),
                     transform:
@@ -1603,31 +1669,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                       vertical: 6,
                     ),
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      gradient:
-                          hoveredUserId == userDoc.id
-                              ? const LinearGradient(
-                                colors: [Color(0xFF1976D2), Color(0xFF42A5F5)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              )
-                              : null,
-                      color:
-                          hoveredUserId != userDoc.id
-                              ? const Color(0xFF1565C0)
-                              : null,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color:
-                              hoveredUserId == userDoc.id
-                                  ? Colors.blueAccent.withOpacity(0.6)
-                                  : Colors.black.withOpacity(0.2),
-                          blurRadius: hoveredUserId == userDoc.id ? 12 : 6,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
+                    decoration: BoxDecoration(/* ... tu decoración ... */),
                     child: Row(
                       children: [
                         CircleAvatar(
@@ -1685,18 +1727,22 @@ class _ChatHomePageState extends State<ChatHomePage> {
         stream:
             FirebaseFirestore.instance
                 .collection('Chats')
-                .where('ids', arrayContains: uid)
+                .where(
+                  'ids',
+                  arrayContains: uid,
+                ) // Trae todos los chats donde el usuario es miembro
                 .orderBy('lastMessageAt', descending: true)
                 .snapshots(),
         builder: (ctx, chatSnapshot) {
+          // ... (tu lógica para ConnectionState.waiting y !chatSnapshot.hasData) ...
           if (chatSnapshot.connectionState == ConnectionState.waiting) {
-            return ListView.builder(
-              itemCount: 5,
-              itemBuilder: (_, __) => const ShimmerChatTile(),
-            );
+            /* ... Shimmer ... */
           }
-
           if (!chatSnapshot.hasData || chatSnapshot.data!.docs.isEmpty) {
+            // Si estamos en la pestaña de archivados y no hay nada, mostrar mensaje específico
+            if (filterArchived)
+              return const Center(child: Text('No tienes chats archivados'));
+            // Tus otros mensajes de lista vacía para las otras pestañas
             if (filterUnread)
               return const Center(child: Text('No tienes mensajes no leídos'));
             if (filterGroups)
@@ -1707,40 +1753,82 @@ class _ChatHomePageState extends State<ChatHomePage> {
           }
 
           List<DocumentSnapshot> chatsExistentes = chatSnapshot.data!.docs;
-          List<DocumentSnapshot> chatsFiltradosPorPestana =
+
+          List<DocumentSnapshot> chatsVisibles =
               chatsExistentes.where((chatDoc) {
                 final data = chatDoc.data() as Map<String, dynamic>?;
                 if (data == null) return false;
-                final bool esUnGrupo = (data['isGroup'] as bool?) ?? false;
-                final Map<String, dynamic> unreadMap =
-                    (data['unreadCounts'] as Map<String, dynamic>?) ?? {};
-                final int contadorNoLeidos = (unreadMap[uid] as int?) ?? 0;
 
-                if (filterGroups) return esUnGrupo;
-                if (filterUnread) return contadorNoLeidos > 0;
-                return true; // Pestaña "Todos"
+                final List<dynamic> archivadoPorListaDinamica =
+                    data['archivadoPara'] as List<dynamic>? ?? [];
+                final List<String> archivadoPorLista =
+                    archivadoPorListaDinamica
+                        .map((item) => item.toString())
+                        .toList();
+                final bool estaArchivadoPorUsuarioActual = archivadoPorLista
+                    .contains(uid);
+
+                // --- LÓGICA DE FILTRADO PRINCIPAL ACTUALIZADA ---
+                if (filterArchived) {
+                  // Si estamos en la pestaña "Archivados", SÓLO mostrar los que están archivados.
+                  return estaArchivadoPorUsuarioActual;
+                } else {
+                  // Si NO estamos en la pestaña "Archivados", NO mostrar los que están archivados.
+                  if (estaArchivadoPorUsuarioActual) {
+                    return false;
+                  }
+                  // Y luego aplicar los filtros de las otras pestañas (No leídos, Grupos, Todos)
+                  final bool esUnGrupo = (data['isGroup'] as bool?) ?? false;
+                  final Map<String, dynamic> unreadMap =
+                      (data['unreadCounts'] as Map<String, dynamic>?) ?? {};
+                  final int contadorNoLeidos = (unreadMap[uid] as int?) ?? 0;
+
+                  if (filterGroups) return esUnGrupo;
+                  if (filterUnread) return contadorNoLeidos > 0;
+                  return true; // Pestaña "Todos" (muestra todo lo no archivado)
+                }
+                // --- FIN LÓGICA DE FILTRADO ---
               }).toList();
 
-          if (chatsFiltradosPorPestana.isEmpty) {
+          if (chatsVisibles.isEmpty) {
+            // Mensajes específicos si la lista filtrada está vacía
+            if (filterArchived)
+              return const Center(child: Text('No tienes chats archivados'));
             if (filterUnread)
-              return const Center(child: Text('No tienes mensajes no leídos'));
+              return const Center(
+                child: Text('No tienes mensajes no leídos (visibles)'),
+              );
             if (filterGroups)
-              return const Center(child: Text('No hay grupos que coincidan'));
-            return const Center(child: Text('No hay conversaciones aquí.'));
+              return const Center(child: Text('No hay grupos (visibles)'));
+            if (filterGroups == false &&
+                filterUnread == false &&
+                !filterArchived &&
+                chatsExistentes.isNotEmpty) {
+              return const Center(
+                child: Text(
+                  'Todos tus chats están archivados o no coinciden con filtros',
+                ),
+              );
+            }
+            return const Center(
+              child: Text('No hay conversaciones para mostrar aquí'),
+            );
           }
 
+          // Construir la lista con `chatsVisibles`
           return ListView.builder(
             padding: const EdgeInsets.symmetric(vertical: 4),
-            itemCount: chatsFiltradosPorPestana.length,
+            itemCount: chatsVisibles.length,
             itemBuilder: (ctxBuilder, idx) {
-              final chatDoc = chatsFiltradosPorPestana[idx];
+              final chatDoc = chatsVisibles[idx];
+              // ... (El resto de tu itemBuilder para el ChatTile, como lo tenías antes)
+              // Asegúrate de que esta parte esté completa con tu diseño de ChatTile
               final data = chatDoc.data()! as Map<String, dynamic>;
               final List<String> otherIds = List<String>.from(
                 data['ids'] ?? [],
               );
               final bool isGroup = (data['isGroup'] as bool?) ?? false;
               final String chatId = chatDoc.id;
-
               final String? other =
                   isGroup
                       ? null
@@ -1748,42 +1836,36 @@ class _ChatHomePageState extends State<ChatHomePage> {
                         (id) => id != uid,
                         orElse: () => '',
                       );
-
               if (!isGroup &&
                   (other == null ||
                       other.isEmpty ||
                       !cacheUsuarios.containsKey(other))) {
                 return const ShimmerChatTile();
               }
-
               final String preview =
                   (data['lastMessage'] as String?)?.trim().isNotEmpty == true
                       ? data['lastMessage']
                       : isGroup
                       ? '${cacheUsuarios[data['createdBy']]?['nombre'] ?? "Alguien"} ha creado el grupo'
                       : 'Inicia la conversación';
-
               final String title =
                   isGroup
                       ? (data['groupName'] ?? 'Grupo (${otherIds.length})')
                       : cacheUsuarios[other!]!['nombre']!;
-
               final String? photoUrl =
                   isGroup ? data['groupPhoto'] : cacheUsuarios[other!]!['foto'];
-
               final String hora =
                   data['lastMessageAt'] != null
                       ? DateFormat.Hm().format(
                         (data['lastMessageAt'] as Timestamp).toDate(),
                       )
                       : '';
-
               final unreadMap =
                   (data['unreadCounts'] as Map<String, dynamic>?) ?? {};
               final int unreadCount = (unreadMap[uid] as int?) ?? 0;
 
-              // TU UI PARA MOSTRAR UN CHAT EXISTENTE (esta parte ya la tenías bien)
               return ValueListenableBuilder<String?>(
+                /* ... Tu ValueListenableBuilder completo ... */
                 valueListenable: hoveredChatId,
                 builder: (context, hovered, _) {
                   final isHovered = hovered == chatId;
@@ -1948,6 +2030,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                   ),
                                   onSelected: (value) {
                                     if (value == 'archivar') {
+                                      _archivarChat(chatId);
                                     } else if (value == 'silenciar') {
                                     } else if (value == 'eliminar') {}
                                   },
@@ -1982,7 +2065,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
       );
     }
   }
-
   // Parte de los mensajes
   /// 1) Header con botón atrás, avatar, nombre y última conexión
 
