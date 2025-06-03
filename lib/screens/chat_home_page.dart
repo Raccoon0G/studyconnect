@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:html' as html;
 
@@ -38,6 +39,8 @@ class _ChatHomePageState extends State<ChatHomePage> {
   bool _showList = true;
   bool _isTyping = false;
   bool _isSearchingGlobalUsers = false;
+  Timer? _debounceTimer; // Variable para el debounce
+  final Duration _debounceDuration = const Duration(milliseconds: 350);
 
   @override
   void initState() {
@@ -45,6 +48,17 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
     _cargarUsuarios();
     _obtenerNombreUsuario();
+  }
+
+  @override
+  void dispose() {
+    _mensajeController.dispose();
+    _busquedaController.dispose();
+    _scrollController.dispose();
+    hoveredChatId.dispose();
+    _groupNameController.dispose();
+    _debounceTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _obtenerNombreUsuario() async {
@@ -1564,42 +1578,94 @@ class _ChatHomePageState extends State<ChatHomePage> {
                       horizontal: 12,
                     ),
                   ),
-                  onChanged: (texto) async {
+                  onChanged: (texto) {
                     final lower = texto.trim().toLowerCase();
-                    setState(() {
-                      filtro = lower;
-                      if (filtro.isNotEmpty) {
-                        _isSearchingGlobalUsers =
-                            true; // <--- INICIA ESTADO DE CARGA
-                        _usuarios =
-                            []; // Limpia resultados anteriores para evitar mostrar datos viejos mientras carga
-                      } else {
-                        _isSearchingGlobalUsers =
-                            false; // No hay filtro, no estamos buscando usuarios globales
-                        // Considera si _usuarios debe volver a su estado inicial (todos los usuarios)
-                        // o si se vacía. Si se vacía, la lista de chats existentes se mostrará.
-                        // Por ahora, la dejaremos así, _cargarUsuarios() la llena inicialmente.
-                      }
-                    });
-                    if (filtro.isNotEmpty) {
-                      final snap =
-                          await FirebaseFirestore.instance
-                              .collection('usuarios')
-                              .get();
-                      if (!mounted)
-                        return; // Comprobar si el widget sigue montado
+
+                    // 1. Actualizar el filtro inmediatamente para la UI (si es necesario para otros filtros visuales)
+                    //    y mostrar indicador de carga si el filtro va a tener contenido.
+                    if (filtro != lower) {
+                      // Solo actualiza el estado si el filtro realmente cambió
                       setState(() {
-                        _usuarios =
-                            snap.docs.where((u) {
-                              final nombre =
-                                  (u['Nombre'] ?? '').toString().toLowerCase();
-                              // Asegúrate que 'filtro' ya esté en minúsculas aquí (lo está por 'lower')
-                              return nombre.contains(filtro) && u.id != uid;
-                            }).toList();
-                        _isSearchingGlobalUsers =
-                            false; // <--- TERMINA ESTADO DE CARGA
+                        filtro = lower;
+                        if (filtro.isNotEmpty) {
+                          _isSearchingGlobalUsers =
+                              true; // Mostrar carga mientras esperamos el debounce
+                          _usuarios = []; // Limpiar resultados previos
+                        } else {
+                          _isSearchingGlobalUsers =
+                              false; // No hay filtro, no buscar
+                          _usuarios =
+                              []; // Limpiar usuarios si el filtro se vacía
+                          // Opcionalmente, podrías recargar la lista de chats recientes aquí
+                        }
                       });
                     }
+
+                    // 2. Cancelar el timer anterior si existe
+                    if (_debounceTimer?.isActive ?? false) {
+                      _debounceTimer!.cancel();
+                    }
+
+                    // 3. Si el filtro está vacío, no necesitamos hacer la búsqueda.
+                    //    El estado _isSearchingGlobalUsers ya se puso a false arriba.
+                    if (filtro.isEmpty) {
+                      // Si quieres que al vaciar el filtro se muestren los chats existentes
+                      // en lugar de una lista vacía de usuarios, aquí no necesitas hacer nada más,
+                      // ya que _chatListStream se encargará de mostrar los chats cuando filtro es empty.
+                      // Si _usuarios se usa para otra cosa cuando filtro está vacío, ajusta según necesidad.
+                      return;
+                    }
+
+                    // 4. Iniciar un nuevo timer
+                    _debounceTimer = Timer(_debounceDuration, () async {
+                      // Esta parte se ejecuta DESPUÉS de que el usuario deja de teclear por _debounceDuration
+                      if (filtro ==
+                              _busquedaController.text.trim().toLowerCase() &&
+                          mounted) {
+                        // Doble chequeo: asegúrate que el filtro no cambió mientras el Timer esperaba
+                        // y que el widget sigue montado.
+
+                        // La variable _isSearchingGlobalUsers ya debería estar en true por el setState de arriba.
+                        // Procedemos con la búsqueda:
+                        try {
+                          final snap =
+                              await FirebaseFirestore.instance
+                                  .collection('usuarios')
+                                  .get();
+
+                          if (!mounted) return;
+
+                          setState(() {
+                            _usuarios =
+                                snap.docs.where((u) {
+                                  final nombre =
+                                      (u['Nombre'] ?? '')
+                                          .toString()
+                                          .toLowerCase();
+                                  // filtro ya está en minúsculas
+                                  return nombre.contains(filtro) && u.id != uid;
+                                }).toList();
+                            _isSearchingGlobalUsers =
+                                false; // Termina estado de carga
+                          });
+                        } catch (e) {
+                          print("Error durante la búsqueda con debounce: $e");
+                          if (mounted) {
+                            setState(() {
+                              _isSearchingGlobalUsers =
+                                  false; // Asegúrate de quitar el loader en caso de error
+                              _usuarios =
+                                  []; // Limpia para evitar mostrar datos incorrectos
+                            });
+                          }
+                        }
+                      } else if (!mounted) {
+                        // Si el widget ya no está montado cuando el timer se dispara, cancela cualquier acción.
+                        _debounceTimer?.cancel();
+                      }
+                      // Si el filtro cambió mientras el timer esperaba, este timer particular no hace nada,
+                      // porque un nuevo timer ya habrá sido iniciado por el onChanged más reciente.
+                    });
                   },
                 ),
               ),
