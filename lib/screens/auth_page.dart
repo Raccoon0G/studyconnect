@@ -334,7 +334,7 @@ class _LoginPageState extends State<LoginPage>
                             ),
                             const SizedBox(height: 26),
                             Image.asset(
-                              'assets/images/logo.png',
+                              'assets/images/logo.webp',
                               height: 80,
                               fit: BoxFit.contain,
                             ),

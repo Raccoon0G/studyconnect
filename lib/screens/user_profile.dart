@@ -91,7 +91,7 @@ class UserProfilePage extends StatelessWidget {
                                     'http',
                                   )
                               ? NetworkImage(data['FotoPerfil'])
-                              : const AssetImage('assets/images/avatar1.png')
+                              : const AssetImage('assets/images/avatar1.webp')
                                   as ImageProvider,
                     ),
 

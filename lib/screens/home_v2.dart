@@ -440,7 +440,7 @@ class _HomePageState extends State<HomePage> {
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
             child: Image.asset(
-              'assets/images/alumno.jpg',
+              'assets/images/alumno.webp',
               height: 200,
               width: double.infinity,
               fit: BoxFit.cover,
@@ -687,9 +687,9 @@ class _HomePageState extends State<HomePage> {
                   final foto = data['foto'];
 
                   final defaultAvatars = [
-                    'assets/images/avatar1.png',
-                    'assets/images/avatar2.png',
-                    'assets/images/avatar3.png',
+                    'assets/images/avatar1.webp',
+                    'assets/images/avatar2.webp',
+                    'assets/images/avatar3.webp',
                   ];
 
                   final ImageProvider avatar =

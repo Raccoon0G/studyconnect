@@ -281,7 +281,7 @@ class _RegisterPageState extends State<RegisterPage> {
                             const SizedBox(height: 26),
                             Center(
                               child: Image.asset(
-                                'assets/images/logo.png',
+                                'assets/images/logo.webp',
                                 height: 80,
                                 fit: BoxFit.contain,
                               ),

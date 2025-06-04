@@ -12,22 +12,22 @@ class ContentPage extends StatelessWidget {
     {
       'clave': 'FnAlg',
       'titulo': 'Funciones algebraicas y trascendentes',
-      'imagen': 'funciones.png',
+      'imagen': 'funciones.webp',
     },
     {
       'clave': 'Lim',
       'titulo': 'Límites de funciones y Continuidad',
-      'imagen': 'limites.png',
+      'imagen': 'limites.webp',
     },
     {
       'clave': 'Der',
       'titulo': 'Derivada y optimización',
-      'imagen': 'derivadas3.png',
+      'imagen': 'derivadas3.webp',
     },
     {
       'clave': 'TecInteg',
       'titulo': 'Técnicas de integración',
-      'imagen': 'tecnicas2.png',
+      'imagen': 'tecnicas2.webp',
     },
   ];
 
@@ -113,22 +113,22 @@ class ContentPage extends StatelessWidget {
                   CardTema(
                     titulo: 'Funciones algebraicas y trascendentes',
                     clave: 'FnAlg',
-                    imagen: 'funciones.png',
+                    imagen: 'funciones.webp',
                   ),
                   CardTema(
                     titulo: 'Límites de funciones y Continuidad',
                     clave: 'Lim',
-                    imagen: 'limites3.png',
+                    imagen: 'limites3.webp',
                   ),
                   CardTema(
                     titulo: 'Derivada y optimización',
                     clave: 'Der',
-                    imagen: 'derivadas5.png',
+                    imagen: 'derivadas5.webp',
                   ),
                   CardTema(
                     titulo: 'Técnicas de integración',
                     clave: 'TecInteg',
-                    imagen: 'tecnicas2.png',
+                    imagen: 'tecnicas2.webp',
                   ),
                 ],
               ),

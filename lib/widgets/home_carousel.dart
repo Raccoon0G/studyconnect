@@ -16,31 +16,31 @@ class _HomeCarouselState extends State<HomeCarousel> {
 
   final List<_CarouselItem> _items = const [
     _CarouselItem(
-      image: 'assets/images/slide_calculo.png',
+      image: 'assets/images/slide_calculo.webp',
       title: 'Dominio de Cálculo',
       description:
           'Participa, aprende y sube en el ranking resolviendo ejercicios de cálculo. ¡Convierte el aprendizaje en un juego y supera tus propios límites!',
     ),
     _CarouselItem(
-      image: 'assets/images/slide_colaborativo.png',
+      image: 'assets/images/slide_colaborativo.webp',
       title: 'Colaboración en tiempo real',
       description:
           'Interactúa con otros estudiantes y tutores, comparte dudas y resuelve problemas en grupo desde cualquier lugar',
     ),
     _CarouselItem(
-      image: 'assets/images/slide_gamificacion.png',
+      image: 'assets/images/slide_gamificacion.webp',
       title: 'Motívate y gana recompensas',
       description:
           'Suma puntos, sube de nivel y recibe reconocimientos por tu participación en el sistema y en el ranking general',
     ),
     _CarouselItem(
-      image: 'assets/images/slide_compartir.png',
+      image: 'assets/images/slide_compartir.webp',
       title: 'Comparte en Facebook',
       description:
           'Publica tus ejercicios y logros fácilmente en Facebook para motivar a más estudiantes a aprender contigo',
     ),
     _CarouselItem(
-      image: 'assets/images/slide_escom.png',
+      image: 'assets/images/slide_escom.webp',
       title: 'Desarrollado en ESCOM-IPN',
       description:
           'Un proyecto innovador creado por estudiantes para estudiantes, integrando tecnología y educación de calidad',
@@ -164,7 +164,7 @@ class _HomeCarouselState extends State<HomeCarousel> {
             top: 18,
             left: 24,
             child: Image.asset(
-              'assets/images/IPN-Logo.png',
+              'assets/images/IPN-Logo.webp',
               width: 72,
               height: 72,
               fit: BoxFit.contain,
@@ -179,7 +179,7 @@ class _HomeCarouselState extends State<HomeCarousel> {
             top: 18,
             right: 24,
             child: Image.asset(
-              'assets/images/escudoESCOM.png',
+              'assets/images/escudoESCOM.webp',
               width: 72,
               height: 72,
               fit: BoxFit.contain,

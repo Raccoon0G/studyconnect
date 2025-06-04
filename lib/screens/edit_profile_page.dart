@@ -1,13 +1,29 @@
-import 'dart:io';
-import 'dart:html' as html;
-import 'dart:typed_data';
+import 'dart:io'; // Para File (móvil)
+import 'dart:typed_data'; // Para Uint8List
+import 'package:flutter/foundation.dart' show kIsWeb; // Para kIsWeb
+
+// Importaciones de Firebase
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+
+// Flutter y UI
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:study_connect/widgets/widgets.dart' show CustomAppBar;
+
+// Selectores de Imágenes
+import 'package:image_picker/image_picker.dart'; // Para móvil/otras plataformas
+import 'dart:html' as html; // Para web
+
+// Tus importaciones (asegúrate que la ruta sea correcta)
+import 'package:study_connect/widgets/widgets.dart'; // CUSTOM APP BAR
+import 'package:study_connect/models/models.dart'; // Importamos  clase Usuario
+
+// --- CONSTANTES ---
+const String routeUserProfile = '/user_profile';
+const String routeHome = '/';
+const String usersCollection = 'usuarios';
+const String profilePhotosStoragePath = 'fotos_perfil';
 
 class EditProfilePage extends StatefulWidget {
   const EditProfilePage({super.key});
@@ -17,7 +33,11 @@ class EditProfilePage extends StatefulWidget {
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
-  final user = FirebaseAuth.instance.currentUser;
+  final _formKey = GlobalKey<FormState>();
+  final User? firebaseAuthUser = FirebaseAuth.instance.currentUser;
+
+  Usuario? _usuarioActual;
+  Usuario? _usuarioOriginalParaComparar;
 
   final TextEditingController nameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
@@ -25,135 +45,330 @@ class _EditProfilePageState extends State<EditProfilePage> {
   final TextEditingController roleController = TextEditingController();
   final TextEditingController bioController = TextEditingController();
 
-  String photoUrl = '';
-  //File? newProfileImage;
-  Uint8List? newProfileImageBytes; // Compatible con Flutter Web
-
-  bool modoOscuro = true;
-  bool notificaciones = true;
-  bool perfilVisible = true;
+  Uint8List? _newProfileImageBytes;
 
   bool isLoading = true;
-  bool correoVerificado = false;
+  bool isSaving = false;
+  bool _hasUnsavedChanges = false;
+  bool _isAttemptingPop = false;
 
   @override
   void initState() {
     super.initState();
-    cargarDatos();
-  }
-
-  Future<void> cargarDatos() async {
-    if (user == null) return;
-
-    final doc =
-        await FirebaseFirestore.instance
-            .collection('usuarios')
-            .doc(user!.uid)
-            .get();
-
-    if (doc.exists) {
-      final data = doc.data()!;
-      nameController.text = data['Nombre'] ?? '';
-      emailController.text = data['Correo'] ?? user!.email ?? '';
-      phoneController.text = data['Telefono'] ?? '';
-      roleController.text = data['rol'] ?? '';
-      bioController.text = data['Acerca de mi'] ?? '';
-      photoUrl = data['FotoPerfil'] ?? '';
-      modoOscuro = data['Config']?['ModoOscuro'] ?? true;
-      notificaciones = data['Config']?['Notificaciones'] ?? true;
-      perfilVisible = data['Config']?['PerfilVisible'] ?? true;
-      correoVerificado = user!.emailVerified;
-    }
-
-    setState(() => isLoading = false);
-  }
-
-  Future<void> seleccionarImagen() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-
-    if (pickedFile != null) {
-      final bytes = await pickedFile.readAsBytes();
-      setState(() => newProfileImageBytes = bytes);
-    }
-  }
-
-  // Future<String> subirImagen(File imageFile) async {
-  //   try {
-  //     // Crear referencia única para la imagen
-  //     final ref = FirebaseStorage.instance
-  //         .ref()
-  //         .child('fotos_perfil')
-  //         .child('${user!.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg');
-
-  //     // Subir archivo a Firebase Storage
-  //     final uploadTask = await ref.putFile(imageFile);
-
-  //     // Obtener y retornar la URL de descarga
-  //     return await uploadTask.ref.getDownloadURL();
-  //   } catch (e) {
-  //     debugPrint('Error al subir imagen: $e');
-  //     rethrow;
-  //   }
-  // }
-  Future<String> subirImagen(Uint8List imageBytes) async {
-    try {
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('fotos_perfil')
-          .child(user!.uid)
-          .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
-
-      final uploadTask = await ref.putData(imageBytes);
-      return await uploadTask.ref.getDownloadURL();
-    } catch (e) {
-      debugPrint('Error al subir imagen: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> _seleccionarYSubirImagen(BuildContext context) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final uploadInput = html.FileUploadInputElement()..accept = 'image/*';
-    uploadInput.click();
-
-    uploadInput.onChange.listen((e) async {
-      final file = uploadInput.files?.first;
-      if (file == null) return;
-
-      final reader = html.FileReader();
-
-      reader.readAsArrayBuffer(file);
-
-      reader.onLoadEnd.listen((e) async {
-        final data = reader.result as Uint8List;
-        final ref = FirebaseStorage.instance
-            .ref()
-            .child('fotos_perfil')
-            .child(user.uid)
-            .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
-
-        await ref.putData(data);
-        final url = await ref.getDownloadURL();
-
-        await FirebaseFirestore.instance
-            .collection('usuarios')
-            .doc(user.uid)
-            .update({'FotoPerfil': url});
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Foto de perfil actualizada')),
-        );
-
-        // Recargar la pantalla
-        Navigator.pushReplacementNamed(context, '/user_profile');
-      });
+    _cargarDatosUsuario().then((_) {
+      // Solo añadir listeners si los datos se cargaron y _usuarioActual no es null
+      if (_usuarioActual != null) {
+        _addListenersToDetectChanges();
+      }
     });
   }
 
-  Future<void> guardarCambios() async {
+  void _addListenersToDetectChanges() {
+    nameController.addListener(_checkForUnsavedChanges);
+    phoneController.addListener(_checkForUnsavedChanges);
+    roleController.addListener(_checkForUnsavedChanges);
+    bioController.addListener(_checkForUnsavedChanges);
+  }
+
+  void _removeListeners() {
+    nameController.removeListener(_checkForUnsavedChanges);
+    phoneController.removeListener(_checkForUnsavedChanges);
+    roleController.removeListener(_checkForUnsavedChanges);
+    bioController.removeListener(_checkForUnsavedChanges);
+  }
+
+  void _checkForUnsavedChanges() {
+    if (_usuarioOriginalParaComparar == null || _usuarioActual == null) return;
+    bool changed = false;
+    if (nameController.text.trim() != _usuarioOriginalParaComparar!.nombre)
+      changed = true;
+    if ((phoneController.text.trim().isEmpty
+            ? null
+            : phoneController.text.trim()) !=
+        _usuarioOriginalParaComparar!.telefono)
+      changed = true;
+    if ((roleController.text.trim().isEmpty
+            ? null
+            : roleController.text.trim()) !=
+        _usuarioOriginalParaComparar!.rol)
+      changed = true;
+    if ((bioController.text.trim().isEmpty
+            ? null
+            : bioController.text.trim()) !=
+        _usuarioOriginalParaComparar!.acercaDeMi)
+      changed = true;
+    if (_newProfileImageBytes != null) changed = true;
+    if (_usuarioActual!.fotoPerfilUrl !=
+        _usuarioOriginalParaComparar!.fotoPerfilUrl)
+      changed = true;
+
+    if (_usuarioActual!.config['ModoOscuro'] !=
+        _usuarioOriginalParaComparar!.config['ModoOscuro'])
+      changed = true;
+    if (_usuarioActual!.config['Notificaciones'] !=
+        _usuarioOriginalParaComparar!.config['Notificaciones'])
+      changed = true;
+    if (_usuarioActual!.config['PerfilVisible'] !=
+        _usuarioOriginalParaComparar!.config['PerfilVisible'])
+      changed = true;
+
+    if (mounted && _hasUnsavedChanges != changed) {
+      setState(() {
+        _hasUnsavedChanges = changed;
+      });
+    }
+  }
+
+  Future<bool> _showExitConfirmDialog() async {
+    _checkForUnsavedChanges();
+    if (_hasUnsavedChanges) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder:
+            (context) => AlertDialog(
+              title: const Text('Cambios sin guardar'),
+              content: const Text(
+                'Tienes cambios sin guardar. ¿Estás seguro de que quieres salir?',
+              ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancelar'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Salir'),
+                ),
+              ],
+            ),
+      );
+      return confirm ?? false;
+    }
+    return true;
+  }
+
+  @override
+  void dispose() {
+    _removeListeners();
+    nameController.dispose();
+    emailController.dispose();
+    phoneController.dispose();
+    roleController.dispose();
+    bioController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _cargarDatosUsuario() async {
+    setState(() => isLoading = true);
+    if (firebaseAuthUser == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Usuario no autenticado.')),
+        );
+        setState(() => isLoading = false);
+      }
+      return;
+    }
+
+    try {
+      final docSnap =
+          await FirebaseFirestore.instance
+              .collection(usersCollection)
+              .doc(firebaseAuthUser!.uid)
+              .get();
+
+      if (docSnap.exists && mounted) {
+        _usuarioActual = Usuario.fromFirestore(docSnap);
+        // Crear una copia profunda para _usuarioOriginalParaComparar
+        _usuarioOriginalParaComparar = Usuario(
+          id: _usuarioActual!.id,
+          nombre: _usuarioActual!.nombre,
+          correo: _usuarioActual!.correo,
+          telefono: _usuarioActual!.telefono,
+          rol: _usuarioActual!.rol,
+          acercaDeMi: _usuarioActual!.acercaDeMi,
+          fotoPerfilUrl: _usuarioActual!.fotoPerfilUrl,
+          config: Map<String, bool>.from(
+            _usuarioActual!.config,
+          ), // Copia del mapa
+        );
+
+        nameController.text = _usuarioActual!.nombre;
+        emailController.text = _usuarioActual!.correo;
+        phoneController.text = _usuarioActual!.telefono ?? '';
+        roleController.text = _usuarioActual!.rol ?? '';
+        bioController.text = _usuarioActual!.acercaDeMi ?? '';
+      } else if (mounted) {
+        // Si el documento no existe, crear un perfil base para _usuarioActual
+        _usuarioActual = Usuario(
+          id: firebaseAuthUser!.uid,
+          nombre: firebaseAuthUser!.displayName ?? '',
+          correo: firebaseAuthUser!.email ?? '',
+          fotoPerfilUrl: firebaseAuthUser!.photoURL,
+          // config se inicializará con los valores por defecto del constructor de Usuario
+        );
+
+        // CORRECCIÓN: Inicializar _usuarioOriginalParaComparar directamente con los mismos datos base
+        _usuarioOriginalParaComparar = Usuario(
+          id: _usuarioActual!.id, // Usar el id de _usuarioActual
+          nombre: _usuarioActual!.nombre,
+          correo: _usuarioActual!.correo,
+          fotoPerfilUrl: _usuarioActual!.fotoPerfilUrl,
+          config: Map<String, bool>.from(
+            _usuarioActual!.config,
+          ), // Copia profunda del mapa de config
+        );
+
+        // Poblar controladores
+        nameController.text = _usuarioActual!.nombre;
+        emailController.text = _usuarioActual!.correo;
+        phoneController.text = ''; // Campos opcionales pueden empezar vacíos
+        roleController.text = '';
+        bioController.text = '';
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Perfil no encontrado, se muestran datos base.'),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error al cargar datos del usuario: $e');
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al cargar perfil: ${e.toString()}')),
+        );
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> _seleccionarImagen() async {
+    if (isSaving) return;
+    try {
+      if (kIsWeb) {
+        final uploadInput =
+            html.FileUploadInputElement()
+              ..accept = 'image/*,image/jpeg,image/png,image/webp';
+        uploadInput.click();
+        uploadInput.onChange.listen((e) {
+          final files = uploadInput.files;
+          if (files != null && files.isNotEmpty) {
+            final file = files.first;
+            if (file.size > 5 * 1024 * 1024) {
+              if (mounted)
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Imagen muy grande (max 5MB).')),
+                );
+              return;
+            }
+            final reader = html.FileReader();
+            reader.readAsArrayBuffer(file);
+            reader.onLoadEnd.listen((event) {
+              if (mounted)
+                setState(() {
+                  _newProfileImageBytes = reader.result as Uint8List?;
+                  _checkForUnsavedChanges();
+                });
+            });
+          }
+        });
+      } else {
+        final picker = ImagePicker();
+        final pickedFile = await picker.pickImage(
+          source: ImageSource.gallery,
+          imageQuality: 70,
+          maxHeight: 1024,
+          maxWidth: 1024,
+        );
+        if (pickedFile != null && mounted) {
+          final bytes = await pickedFile.readAsBytes();
+          if (bytes.lengthInBytes > 5 * 1024 * 1024) {
+            if (mounted)
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Imagen muy grande (max 5MB).')),
+              );
+            return;
+          }
+          setState(() {
+            _newProfileImageBytes = bytes;
+            _checkForUnsavedChanges();
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al seleccionar imagen: ${e.toString()}'),
+          ),
+        );
+      debugPrint("Error al seleccionar imagen: $e");
+    }
+  }
+
+  Future<void> _quitarFotoPerfil() async {
+    if (_usuarioActual == null || isSaving) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Quitar foto de perfil'),
+            content: const Text(
+              '¿Estás seguro de que quieres quitar tu foto de perfil actual?',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancelar'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Quitar'),
+              ),
+            ],
+          ),
+    );
+    if (confirm == true && mounted) {
+      setState(() {
+        _usuarioActual!.fotoPerfilUrl = null;
+        _newProfileImageBytes = null;
+        _checkForUnsavedChanges();
+      });
+    }
+  }
+
+  Future<String?> _subirNuevaImagenSiExiste() async {
+    if (firebaseAuthUser == null) return _usuarioActual?.fotoPerfilUrl;
+    if (_newProfileImageBytes == null && _usuarioActual?.fotoPerfilUrl != null)
+      return _usuarioActual!
+          .fotoPerfilUrl; // Mantiene foto si no hay nueva Y había una antes
+    if (_newProfileImageBytes == null && _usuarioActual?.fotoPerfilUrl == null)
+      return null; // Se quitó y no hay nueva
+
+    try {
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child(profilePhotosStoragePath)
+          .child(firebaseAuthUser!.uid)
+          .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
+      final metadata = SettableMetadata(contentType: 'image/jpeg');
+      final uploadTask = await ref.putData(_newProfileImageBytes!, metadata);
+      return await uploadTask.ref.getDownloadURL();
+    } catch (e) {
+      debugPrint('Error al subir imagen: $e');
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al subir imagen: ${e.toString()}')),
+        );
+      return _usuarioActual?.fotoPerfilUrl;
+    }
+  }
+
+  Future<void> _guardarCambios() async {
+    if (firebaseAuthUser == null || _usuarioActual == null) return;
+    if (!_formKey.currentState!.validate()) return;
+
     final confirm = await showDialog<bool>(
       context: context,
       builder:
@@ -172,103 +387,93 @@ class _EditProfilePageState extends State<EditProfilePage> {
             ],
           ),
     );
-
     if (confirm != true) return;
 
-    showDialog(
-      barrierDismissible: false,
-      context: context,
-      builder:
-          (_) => const AlertDialog(
-            content: SizedBox(
-              height: 80,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Guardando cambios...'),
-                ],
-              ),
-            ),
-          ),
-    );
+    setState(() => isSaving = true);
 
     try {
-      String finalPhotoUrl = photoUrl;
-      // if (newProfileImage != null) {
-      //   finalPhotoUrl = await subirImagen(newProfileImage!);
-      // }
+      final String? nuevaFotoUrl = await _subirNuevaImagenSiExiste();
 
-      if (newProfileImageBytes != null) {
-        finalPhotoUrl = await subirImagen(newProfileImageBytes!);
-      }
+      _usuarioActual!.nombre = nameController.text.trim();
+      _usuarioActual!.telefono =
+          phoneController.text.trim().isEmpty
+              ? null
+              : phoneController.text.trim();
+      _usuarioActual!.rol =
+          roleController.text.trim().isEmpty
+              ? null
+              : roleController.text.trim();
+      _usuarioActual!.acercaDeMi =
+          bioController.text.trim().isEmpty ? null : bioController.text.trim();
+      _usuarioActual!.fotoPerfilUrl = nuevaFotoUrl;
 
       await FirebaseFirestore.instance
-          .collection('usuarios')
-          .doc(user!.uid)
-          .set({
-            'Nombre': nameController.text,
-            'Correo': emailController.text,
-            'Telefono': phoneController.text,
-            'rol': roleController.text,
-            'Acerca de mi': bioController.text,
-            'FotoPerfil': finalPhotoUrl,
-            'id': user!.uid,
-            'Config': {
-              'ModoOscuro': modoOscuro,
-              'Notificaciones': notificaciones,
-              'PerfilVisible': perfilVisible,
-            },
-          }, SetOptions(merge: true));
+          .collection(usersCollection)
+          .doc(_usuarioActual!.id)
+          .set(_usuarioActual!.toMap(), SetOptions(merge: true));
 
-      Navigator.pop(context); // quitar loader
+      if (mounted) {
+        _newProfileImageBytes = null;
+        // Recargar _usuarioOriginalParaComparar desde Firestore para reflejar los cambios guardados
+        final updatedDocSnap =
+            await FirebaseFirestore.instance
+                .collection(usersCollection)
+                .doc(_usuarioActual!.id)
+                .get();
+        if (updatedDocSnap.exists) {
+          _usuarioOriginalParaComparar = Usuario.fromFirestore(updatedDocSnap);
+        }
+        setState(() {
+          // setState para reconstruir la UI si es necesario después de actualizar _usuarioOriginalParaComparar
+          _hasUnsavedChanges = false;
+        });
 
-      await showDialog(
-        context: context,
-        builder:
-            (_) => AlertDialog(
-              title: const Text("Cambios guardados"),
-              content: const Text("Tu perfil se ha actualizado correctamente."),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Aceptar"),
-                ),
-              ],
-            ),
-      );
-
-      Navigator.pushReplacementNamed(context, '/');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Perfil actualizado correctamente')),
+        );
+        Navigator.pushReplacementNamed(context, routeUserProfile);
+      }
     } catch (e) {
-      Navigator.pop(context); // quitar loader en caso de error
       debugPrint('ERROR al guardar cambios: $e');
-
-      await showDialog(
-        context: context,
-        builder:
-            (_) => AlertDialog(
-              title: const Text("Error"),
-              content: Text("Error al guardar cambios: $e"),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Aceptar"),
-                ),
-              ],
-            ),
-      );
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al guardar cambios: ${e.toString()}')),
+        );
+    } finally {
+      if (mounted) setState(() => isSaving = false);
     }
   }
 
-  Future<void> enviarCambioContrasena() async {
+  Future<void> _reenviarEmailVerificacion() async {
+    if (firebaseAuthUser == null || isSaving) return;
+    setState(() => isSaving = true);
+    try {
+      await firebaseAuthUser?.sendEmailVerification();
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Correo de verificación enviado.')),
+        );
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al enviar correo: ${e.toString()}')),
+        );
+    } finally {
+      if (mounted) setState(() => isSaving = false);
+    }
+  }
+
+  Future<void> _enviarCambioContrasena() async {
+    if (firebaseAuthUser == null || firebaseAuthUser!.email == null || isSaving)
+      return;
+
     final confirm = await showDialog<bool>(
       context: context,
       builder:
           (_) => AlertDialog(
             title: const Text("¿Cambiar contraseña?"),
-            content: const Text(
-              "Te enviaremos un correo para restablecer tu contraseña. ¿Deseas continuar?",
+            content: Text(
+              "Te enviaremos un correo a ${firebaseAuthUser!.email} para restablecer tu contraseña. ¿Deseas continuar?",
             ),
             actions: [
               TextButton(
@@ -282,30 +487,37 @@ class _EditProfilePageState extends State<EditProfilePage> {
             ],
           ),
     );
+    if (confirm != true) return;
 
-    if (confirm != true || user == null) return;
-
-    await FirebaseAuth.instance.sendPasswordResetEmail(email: user!.email!);
-
-    await showDialog(
-      context: context,
-      builder:
-          (_) => AlertDialog(
-            title: const Text("Correo enviado"),
-            content: const Text(
-              "Hemos enviado un enlace para restablecer tu contraseña.",
+    setState(() => isSaving = true);
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(
+        email: firebaseAuthUser!.email!,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Correo de restablecimiento enviado a ${firebaseAuthUser!.email!}',
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text("Aceptar"),
-              ),
-            ],
           ),
-    );
+        );
+        Navigator.pushReplacementNamed(context, routeUserProfile);
+      }
+    } catch (e) {
+      debugPrint("Error al enviar correo de restablecimiento: $e");
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al enviar correo: ${e.toString()}')),
+        );
+    } finally {
+      if (mounted) setState(() => isSaving = false);
+    }
   }
 
-  Future<void> eliminarCuenta() async {
+  Future<void> _eliminarCuenta() async {
+    if (firebaseAuthUser == null || _usuarioActual == null || isSaving) return;
+
     final confirmarEliminacion = await showDialog<bool>(
       context: context,
       builder:
@@ -321,13 +533,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text("Aceptar"),
+                child: const Text(
+                  "Eliminar",
+                  style: TextStyle(color: Colors.red),
+                ),
               ),
             ],
           ),
     );
-
-    if (confirmarEliminacion != true || user == null) return;
+    if (confirmarEliminacion != true) return;
 
     final eliminarAportaciones = await showDialog<bool>(
       context: context,
@@ -344,284 +558,565 @@ class _EditProfilePageState extends State<EditProfilePage> {
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text("Sí"),
+                child: const Text("Sí, eliminar todo"),
               ),
             ],
           ),
     );
 
-    if (eliminarAportaciones == true) {
-      await _eliminarAportacionesUsuario(user!.uid);
-    }
-
+    setState(() => isSaving = true);
     try {
+      if (eliminarAportaciones == true) {
+        await _eliminarAportacionesUsuario(_usuarioActual!.id);
+      }
       await FirebaseFirestore.instance
-          .collection('usuarios')
-          .doc(user!.uid)
+          .collection(usersCollection)
+          .doc(_usuarioActual!.id)
           .delete();
-      await user!.delete();
-    } catch (e) {
-      // Reautenticación puede ser requerida
-    }
+      await firebaseAuthUser!.delete();
 
-    await showDialog(
-      context: context,
-      builder:
-          (_) => AlertDialog(
-            title: const Text("Cuenta eliminada"),
-            content: const Text("Tu cuenta ha sido eliminada correctamente."),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text("Aceptar"),
-              ),
-            ],
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cuenta eliminada correctamente.')),
+        );
+        Navigator.pushNamedAndRemoveUntil(context, routeHome, (route) => false);
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        String mensajeError = "Error al eliminar cuenta.";
+        if (e.code == 'requires-recent-login') {
+          mensajeError =
+              "Esta operación es sensible y requiere autenticación reciente. Por favor, cierra sesión y vuelve a iniciarla antes de eliminar tu cuenta.";
+        } else {
+          mensajeError = "Error: ${e.message ?? e.code}";
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(mensajeError),
+            duration: const Duration(seconds: 6),
           ),
-    );
-
-    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+        );
+      }
+    } catch (e) {
+      debugPrint('Error al eliminar cuenta: $e');
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Error desconocido al eliminar cuenta: ${e.toString()}',
+            ),
+          ),
+        );
+    } finally {
+      if (mounted) setState(() => isSaving = false);
+    }
   }
 
   Future<void> _eliminarAportacionesUsuario(String uid) async {
     final categorias = ['FnAlg', 'Lim', 'Der', 'TecInteg'];
     final firestore = FirebaseFirestore.instance;
-
-    for (final cat in categorias) {
-      final ejerRef = firestore
-          .collection('calculo')
-          .doc(cat)
-          .collection('Ejer$cat');
-
-      final query = await ejerRef.where('AutorId', isEqualTo: uid).get();
-
-      for (final doc in query.docs) {
-        await doc.reference.delete();
+    WriteBatch batch = firestore.batch();
+    try {
+      for (final cat in categorias) {
+        final ejerQuery =
+            await firestore
+                .collection('calculo')
+                .doc(cat)
+                .collection('Ejer$cat')
+                .where('AutorId', isEqualTo: uid)
+                .get();
+        for (final doc in ejerQuery.docs) {
+          batch.delete(doc.reference);
+        }
       }
-    }
-
-    final matsRef = firestore.collection('Materiales');
-    final matsQuery = await matsRef.where('AutorId', isEqualTo: uid).get();
-    for (final doc in matsQuery.docs) {
-      await doc.reference.delete();
+      final matsQuery =
+          await firestore
+              .collection('Materiales')
+              .where('AutorId', isEqualTo: uid)
+              .get();
+      for (final doc in matsQuery.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+    } catch (e) {
+      debugPrint("Error al eliminar aportaciones: $e");
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Error al eliminar algunas aportaciones."),
+          ),
+        );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF036799),
-      appBar: const CustomAppBar(showBack: true),
-      body:
-          isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : Center(
-                child: Container(
-                  width: 450,
-                  margin: const EdgeInsets.all(20),
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
+    final theme = Theme.of(context);
+    final bool emailEstaVerificado = firebaseAuthUser?.emailVerified ?? false;
+    bool canPopScopePop = !_hasUnsavedChanges;
+
+    return PopScope(
+      canPop: canPopScopePop,
+      onPopInvoked: (bool didPop) async {
+        if (didPop) return;
+        if (_isAttemptingPop) return;
+
+        setState(() => _isAttemptingPop = true);
+        final bool shouldPop = await _showExitConfirmDialog();
+        if (shouldPop && mounted) {
+          Navigator.pop(context);
+        }
+        if (mounted) setState(() => _isAttemptingPop = false);
+      },
+      child: Scaffold(
+        backgroundColor: theme.colorScheme.surface,
+        appBar: CustomAppBar(
+          // Usando tu CustomAppBar modificado
+          showBack: true,
+          titleContent:
+              _hasUnsavedChanges
+                  ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Editar Perfil',
+                        style: TextStyle(
+                          color: theme.colorScheme.onPrimary,
+                          fontSize: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.edit_notifications_outlined,
+                        size: 20,
+                        color: Colors.amberAccent,
+                      ),
+                    ],
+                  )
+                  : Text(
+                    'Editar Perfil',
+                    style: TextStyle(
+                      color: theme.colorScheme.onPrimary,
+                      fontSize: 20,
+                    ),
                   ),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      children: [
-                        Stack(
-                          alignment: Alignment.bottomRight,
-                          children: [
-                            // CircleAvatar(
-                            //   radius: 50,
-                            //   backgroundImage:
-                            //       newProfileImage != null
-                            //           ? FileImage(newProfileImage!)
-                            //           : (photoUrl.isNotEmpty
-                            //               ? NetworkImage(photoUrl)
-                            //               : const AssetImage(
-                            //                     'assets/images/avatar1.png',
-                            //                   )
-                            //                   as ImageProvider),
-                            // ),
-                            // CircleAvatar(
-                            //   radius: 50,
-                            //   backgroundImage:
-                            //       newProfileImageBytes != null
-                            //           ? MemoryImage(newProfileImageBytes!)
-                            //           : (photoUrl.isNotEmpty
-                            //               ? NetworkImage(photoUrl)
-                            //               : const AssetImage(
-                            //                     'assets/images/avatar1.png',
-                            //                   )
-                            //                   as ImageProvider),
-                            // ),
-                            GestureDetector(
-                              onTap: () => _seleccionarYSubirImagen(context),
-                              child: Stack(
-                                alignment: Alignment.bottomRight,
-                                children: [
-                                  CircleAvatar(
-                                    radius: 50,
-                                    backgroundImage:
-                                        newProfileImageBytes != null
-                                            ? MemoryImage(newProfileImageBytes!)
-                                            : (photoUrl.isNotEmpty
-                                                    ? NetworkImage(photoUrl)
-                                                    : const AssetImage(
-                                                      'assets/images/avatar1.png',
-                                                    ))
-                                                as ImageProvider,
-                                  ),
-                                  const CircleAvatar(
-                                    radius: 14,
-                                    backgroundColor: Colors.white,
-                                    child: Icon(
-                                      Icons.edit,
-                                      size: 16,
-                                      color: Colors.black,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.blue),
-                              onPressed: seleccionarImagen,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        _inputField('Nombre completo', nameController),
-                        const SizedBox(height: 12),
-
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _inputField(
-                                'Correo institucional',
-                                emailController,
-                                readOnly: true,
-                              ),
-                            ),
-                            if (correoVerificado)
-                              const Padding(
-                                padding: EdgeInsets.only(left: 8),
-                                child: Icon(
-                                  Icons.verified,
-                                  color: Colors.green,
-                                ),
-                              ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        TextField(
-                          controller: phoneController,
-                          keyboardType: TextInputType.number,
-                          maxLength: 10,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                          decoration: const InputDecoration(
-                            labelText: 'Teléfono (opcional)',
-                            border: OutlineInputBorder(),
-                            counterText: '',
-                          ),
-                        ),
-
-                        const SizedBox(height: 12),
-                        _inputField('Carrera o Rol', roleController),
-                        const SizedBox(height: 12),
-                        _inputField('Sobre mí', bioController, maxLines: 3),
-                        const SizedBox(height: 16),
-                        SwitchListTile(
-                          value: modoOscuro,
-                          title: const Text('Modo Oscuro'),
-                          onChanged: (val) => setState(() => modoOscuro = val),
-                        ),
-                        SwitchListTile(
-                          value: notificaciones,
-                          title: const Text('Notificaciones'),
-                          onChanged:
-                              (val) => setState(() => notificaciones = val),
-                        ),
-                        SwitchListTile(
-                          value: perfilVisible,
-                          title: const Text('Perfil Visible'),
-                          onChanged:
-                              (val) => setState(() => perfilVisible = val),
-                        ),
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: guardarCambios,
-                                icon: const Icon(Icons.save),
-                                label: const Text('Guardar cambios'),
-                                style: ElevatedButton.styleFrom(
-                                  minimumSize: const Size.fromHeight(45),
-                                  backgroundColor: const Color(0xFF048DD2),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: enviarCambioContrasena,
-                                icon: const Icon(Icons.lock_reset),
-                                label: const Text("Cambiar contraseña"),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.orange,
-                                  side: const BorderSide(color: Colors.orange),
-                                  minimumSize: const Size.fromHeight(45),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: eliminarCuenta,
-                                icon: const Icon(Icons.delete_forever),
-                                label: const Text("Eliminar cuenta"),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.red,
-                                  side: const BorderSide(color: Colors.red),
-                                  minimumSize: const Size.fromHeight(45),
-                                ),
-                              ),
-                            ),
-                          ],
+        ),
+        body:
+            isLoading || _usuarioActual == null
+                ? Center(
+                  child: CircularProgressIndicator(
+                    color: theme.colorScheme.primary,
+                  ),
+                )
+                : Center(
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 550),
+                    margin: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 20,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.canvasColor,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: theme.shadowColor.withOpacity(0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
+                    child: SingleChildScrollView(
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Tooltip(
+                                  message: "Cambiar foto de perfil",
+                                  child: GestureDetector(
+                                    onTap: isSaving ? null : _seleccionarImagen,
+                                    child: Stack(
+                                      alignment: Alignment.bottomRight,
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 60,
+                                          backgroundColor:
+                                              theme.colorScheme.surfaceVariant,
+                                          backgroundImage:
+                                              _newProfileImageBytes != null
+                                                  ? MemoryImage(
+                                                    _newProfileImageBytes!,
+                                                  )
+                                                  : (_usuarioActual!.fotoPerfilUrl !=
+                                                                  null &&
+                                                              _usuarioActual!
+                                                                  .fotoPerfilUrl!
+                                                                  .isNotEmpty
+                                                          ? NetworkImage(
+                                                            _usuarioActual!
+                                                                .fotoPerfilUrl!,
+                                                          )
+                                                          : null)
+                                                      as ImageProvider?,
+                                          child:
+                                              (_newProfileImageBytes == null &&
+                                                      (_usuarioActual!
+                                                                  .fotoPerfilUrl ==
+                                                              null ||
+                                                          _usuarioActual!
+                                                              .fotoPerfilUrl!
+                                                              .isEmpty))
+                                                  ? Icon(
+                                                    Icons.add_a_photo_outlined,
+                                                    size: 50,
+                                                    color:
+                                                        theme
+                                                            .colorScheme
+                                                            .onSurfaceVariant,
+                                                  )
+                                                  : null,
+                                        ),
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            color: theme.colorScheme.primary,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: theme.canvasColor,
+                                              width: 2,
+                                            ),
+                                          ),
+                                          padding: const EdgeInsets.all(6),
+                                          child: Icon(
+                                            Icons.edit,
+                                            size: 20,
+                                            color: theme.colorScheme.onPrimary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                // Botón para quitar foto solo si hay una foto actual Y no hay una nueva imagen en bytes seleccionada
+                                if (_usuarioActual!.fotoPerfilUrl != null &&
+                                    _usuarioActual!.fotoPerfilUrl!.isNotEmpty &&
+                                    _newProfileImageBytes == null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      left: 8.0,
+                                      bottom: 0,
+                                    ),
+                                    child: IconButton(
+                                      icon: Icon(
+                                        Icons.delete_outline,
+                                        color: theme.colorScheme.error,
+                                        size: 28,
+                                      ),
+                                      tooltip: 'Quitar foto de perfil',
+                                      onPressed:
+                                          isSaving ? null : _quitarFotoPerfil,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 24),
+                            TextFormField(
+                              controller: nameController,
+                              enabled: !isSaving,
+                              decoration: const InputDecoration(
+                                labelText: 'Nombre completo *',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.person_outline),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.trim().isEmpty)
+                                  return 'El nombre completo es obligatorio';
+                                if (value.trim().length < 3)
+                                  return 'El nombre debe tener al menos 3 caracteres';
+                                return null;
+                              },
+                              textInputAction: TextInputAction.next,
+                              autovalidateMode:
+                                  AutovalidateMode.onUserInteraction,
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: emailController,
+                                    readOnly: true,
+                                    enabled: !isSaving,
+                                    decoration: InputDecoration(
+                                      labelText: 'Correo institucional',
+                                      border: const OutlineInputBorder(),
+                                      prefixIcon: const Icon(
+                                        Icons.email_outlined,
+                                      ),
+                                      filled: true,
+                                      fillColor: theme.colorScheme.onSurface
+                                          .withOpacity(0.05),
+                                    ),
+                                  ),
+                                ),
+                                if (emailEstaVerificado)
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 8),
+                                    child: Tooltip(
+                                      message: "Correo verificado",
+                                      child: Icon(
+                                        Icons.verified_user_rounded,
+                                        color: Colors.green.shade600,
+                                        size: 28,
+                                      ),
+                                    ),
+                                  ),
+                                if (!emailEstaVerificado &&
+                                    firebaseAuthUser != null)
+                                  Padding(
+                                    // Añadido Padding para mejor espaciado
+                                    padding: const EdgeInsets.only(left: 4.0),
+                                    child: TextButton(
+                                      onPressed:
+                                          isSaving
+                                              ? null
+                                              : _reenviarEmailVerificacion,
+                                      child: const Text(
+                                        "Reenviar email",
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: phoneController,
+                              enabled: !isSaving,
+                              keyboardType: TextInputType.phone,
+                              maxLength: 10,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                              decoration: const InputDecoration(
+                                labelText: 'Teléfono',
+                                hintText: 'Opcional',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.phone_outlined),
+                                counterText: '',
+                              ),
+                              textInputAction: TextInputAction.next,
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: roleController,
+                              enabled: !isSaving,
+                              decoration: const InputDecoration(
+                                labelText: 'Carrera o Rol',
+                                hintText: 'Ej: Ing. en Sistemas',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.school_outlined),
+                              ),
+                              textInputAction: TextInputAction.next,
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: bioController,
+                              enabled: !isSaving,
+                              maxLines: 3,
+                              maxLength: 200,
+                              decoration: const InputDecoration(
+                                labelText: 'Sobre mí',
+                                hintText: 'Cuéntanos algo sobre ti (opcional)',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.info_outline),
+                              ),
+                              textInputAction: TextInputAction.done,
+                            ),
+                            const SizedBox(height: 16),
+                            _buildSectionTitle("Configuración", theme),
+                            SwitchListTile.adaptive(
+                              value:
+                                  _usuarioActual!.config['ModoOscuro'] ?? true,
+                              title: Text(
+                                'Modo Oscuro',
+                                style: TextStyle(
+                                  color: theme.colorScheme.onSurface,
+                                ),
+                              ),
+                              onChanged:
+                                  isSaving
+                                      ? null
+                                      : (val) {
+                                        setState(
+                                          () =>
+                                              _usuarioActual!
+                                                      .config['ModoOscuro'] =
+                                                  val,
+                                        );
+                                        _checkForUnsavedChanges();
+                                      },
+                              secondary: Icon(
+                                Icons.brightness_6_outlined,
+                                color: theme.colorScheme.secondary,
+                              ),
+                              activeColor: theme.colorScheme.primary,
+                            ),
+                            SwitchListTile.adaptive(
+                              value:
+                                  _usuarioActual!.config['Notificaciones'] ??
+                                  true,
+                              title: Text(
+                                'Notificaciones',
+                                style: TextStyle(
+                                  color: theme.colorScheme.onSurface,
+                                ),
+                              ),
+                              onChanged:
+                                  isSaving
+                                      ? null
+                                      : (val) {
+                                        setState(
+                                          () =>
+                                              _usuarioActual!
+                                                      .config['Notificaciones'] =
+                                                  val,
+                                        );
+                                        _checkForUnsavedChanges();
+                                      },
+                              secondary: Icon(
+                                Icons.notifications_active_outlined,
+                                color: theme.colorScheme.secondary,
+                              ),
+                              activeColor: theme.colorScheme.primary,
+                            ),
+                            SwitchListTile.adaptive(
+                              value:
+                                  _usuarioActual!.config['PerfilVisible'] ??
+                                  true,
+                              title: Text(
+                                'Perfil Visible Públicamente',
+                                style: TextStyle(
+                                  color: theme.colorScheme.onSurface,
+                                ),
+                              ),
+                              onChanged:
+                                  isSaving
+                                      ? null
+                                      : (val) {
+                                        setState(
+                                          () =>
+                                              _usuarioActual!
+                                                      .config['PerfilVisible'] =
+                                                  val,
+                                        );
+                                        _checkForUnsavedChanges();
+                                      },
+                              secondary: Icon(
+                                Icons.visibility_outlined,
+                                color: theme.colorScheme.secondary,
+                              ),
+                              activeColor: theme.colorScheme.primary,
+                            ),
+                            const SizedBox(height: 24),
+                            ElevatedButton.icon(
+                              onPressed:
+                                  isSaving || !_hasUnsavedChanges
+                                      ? null
+                                      : _guardarCambios,
+                              icon:
+                                  isSaving
+                                      ? SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 3,
+                                          color: theme.colorScheme.onPrimary,
+                                        ),
+                                      )
+                                      : const Icon(Icons.save_alt_outlined),
+                              label: Text(
+                                isSaving ? 'Guardando...' : 'Guardar Cambios',
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(50),
+                                backgroundColor: theme.colorScheme.primary,
+                                foregroundColor: theme.colorScheme.onPrimary,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                textStyle: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            _buildSectionTitle("Seguridad", theme),
+                            OutlinedButton.icon(
+                              onPressed:
+                                  isSaving ? null : _enviarCambioContrasena,
+                              icon: const Icon(Icons.lock_reset_outlined),
+                              label: const Text("Cambiar contraseña"),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: theme.colorScheme.secondary,
+                                side: BorderSide(
+                                  color: theme.colorScheme.secondary,
+                                  width: 1.5,
+                                ),
+                                minimumSize: const Size.fromHeight(50),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                textStyle: const TextStyle(fontSize: 16),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed: isSaving ? null : _eliminarCuenta,
+                              icon: const Icon(Icons.delete_forever_outlined),
+                              label: const Text("Eliminar cuenta"),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: theme.colorScheme.error,
+                                side: BorderSide(
+                                  color: theme.colorScheme.error,
+                                  width: 1.5,
+                                ),
+                                minimumSize: const Size.fromHeight(50),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                textStyle: const TextStyle(fontSize: 16),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+      ),
     );
   }
 
-  Widget _inputField(
-    String label,
-    TextEditingController controller, {
-    bool readOnly = false,
-    int maxLines = 1,
-  }) {
-    return TextField(
-      controller: controller,
-      readOnly: readOnly,
-      maxLines: maxLines,
-      decoration: InputDecoration(
-        labelText: label,
-        border: const OutlineInputBorder(),
+  Widget _buildSectionTitle(String title, ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16.0, bottom: 8.0),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.primary,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }

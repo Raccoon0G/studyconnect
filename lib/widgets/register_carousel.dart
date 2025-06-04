@@ -59,28 +59,28 @@ class _RegisterCarouselState extends State<RegisterCarousel> {
 
   final List<_CarouselItem> _items = const [
     _CarouselItem(
-      image: 'assets/images/slide1.png',
+      image: 'assets/images/slide1.webp',
       title: 'Aprende colaborando',
       description:
           'Comparte y resuelve ejercicios junto con otros estudiantes.',
     ),
     _CarouselItem(
-      image: 'assets/images/slide2.png',
+      image: 'assets/images/slide2.webp',
       title: 'Explora contenido visual',
       description: 'Consulta soluciones paso a paso renderizadas con LaTeX.',
     ),
     _CarouselItem(
-      image: 'assets/images/slide3.png',
+      image: 'assets/images/slide3.webp',
       title: 'Gana reconocimiento',
       description: 'Sube tus ejercicios y obtén puntos en el ranking.',
     ),
     _CarouselItem(
-      image: 'assets/images/slide4.png',
+      image: 'assets/images/slide4.webp',
       title: 'Mejora tu rendimiento',
       description: 'Practica y supera tus propios registros académicos.',
     ),
     _CarouselItem(
-      image: 'assets/images/slide5.png',
+      image: 'assets/images/slide5.webp',
       title: 'Conecta con estudiantes',
       description: 'Forma parte de la comunidad y comparte conocimientos.',
     ),
