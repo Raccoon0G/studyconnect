@@ -1503,125 +1503,163 @@ class _ChatHomePageState extends State<ChatHomePage> {
     );
   }
 
-  void _mostrarDialogoMiembrosGrupo(
+  // Debes tener estas funciones definidas DENTRO de tu clase _ChatHomePageState
+
+  // --- Para cambiar imagen del grupo ---
+  Future<void> _seleccionarYActualizarImagenGrupo(
     String groupId,
     String groupName,
-    String? groupPhotoUrl,
-    List<String> memberIds, // Lista de IDs de los miembros actuales
+    BuildContext originalContext,
+  ) async {
+    Uint8List? nuevaImagenBytes;
+    String? fileName;
+
+    // Para web
+    if (kIsWeb) {
+      final html.FileUploadInputElement input =
+          html.FileUploadInputElement()..accept = 'image/*';
+      input.click();
+      final completer = Completer<Map<String, dynamic>?>();
+      input.onChange.listen((event) {
+        final file = input.files?.first;
+        if (file != null) {
+          final reader = html.FileReader();
+          reader.readAsArrayBuffer(file);
+          reader.onLoadEnd.listen((event) {
+            completer.complete({
+              'bytes': reader.result as Uint8List?,
+              'name': file.name,
+            });
+          });
+        } else {
+          completer.complete(null);
+        }
+      });
+      final result = await completer.future;
+      if (result != null) {
+        nuevaImagenBytes = result['bytes'];
+        fileName = result['name'];
+      }
+    } else {
+      // Para móvil (si lo implementas)
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
+      );
+      if (result != null && result.files.single.bytes != null) {
+        nuevaImagenBytes = result.files.single.bytes;
+        fileName = result.files.single.name;
+      }
+    }
+
+    if (nuevaImagenBytes != null && fileName != null) {
+      if (!mounted) return;
+      final scaffoldMessenger = ScaffoldMessenger.of(originalContext);
+
+      try {
+        final String nuevaFotoUrl = await subirImagenGrupo(
+          nuevaImagenBytes,
+          groupId,
+        ); // Reutiliza tu función
+        String mensajeSistema =
+            (nombreUsuario ?? 'Alguien') + ' actualizó la imagen del grupo.';
+
+        await FirebaseFirestore.instance
+            .collection('Chats')
+            .doc(groupId)
+            .update({
+              'groupPhoto': nuevaFotoUrl,
+              'lastMessage': mensajeSistema,
+              'lastMessageAt': Timestamp.now(),
+            });
+        FirebaseFirestore.instance
+            .collection('Chats')
+            .doc(groupId)
+            .collection('Mensajes')
+            .add({
+              'AutorID': 'sistema',
+              'Contenido': mensajeSistema,
+              'Fecha': Timestamp.now(),
+              'tipo': 'sistema_info_actualizada',
+            });
+
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(content: Text('Imagen del grupo actualizada.')),
+        );
+      } catch (e) {
+        print("Error al actualizar imagen del grupo: $e");
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('Error al actualizar imagen: ${e.toString()}'),
+          ),
+        );
+      }
+    }
+  }
+
+  // --- Para editar el nombre del grupo ---
+  void _mostrarDialogoEditarNombreGrupo(
+    String groupId,
+    String nombreActual,
+    String nombreUsuarioActual,
   ) {
+    final TextEditingController _nombreController = TextEditingController(
+      text: nombreActual,
+    );
     showDialog(
       context: context,
-      builder: (BuildContext contextDialog) {
-        // Renombrado para evitar conflicto con el context principal
+      builder: (BuildContext alertContext) {
         return AlertDialog(
-          titlePadding: const EdgeInsets.all(0),
-          title: Container(
-            padding: const EdgeInsets.fromLTRB(16, 8, 8, 8), // Ajustar padding
-            color: Theme.of(contextDialog).colorScheme.primary,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  // Fila para avatar y nombre
-                  children: [
-                    CircleAvatar(
-                      radius: 18, // Un poco más pequeño para que quepa el botón
-                      backgroundImage:
-                          (groupPhotoUrl != null && groupPhotoUrl.isNotEmpty)
-                              ? NetworkImage(groupPhotoUrl)
-                              : const AssetImage(
-                                    'assets/images/avatar_grupo_default.png',
-                                  )
-                                  as ImageProvider,
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      groupName,
-                      style: Theme.of(
-                        contextDialog,
-                      ).textTheme.titleMedium?.copyWith(
-                        color: Theme.of(contextDialog).colorScheme.onPrimary,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-                // --- BOTÓN AÑADIDO PARA AÑADIR PARTICIPANTES ---
-                IconButton(
-                  icon: Icon(
-                    Icons.person_add_alt_1,
-                    color: Theme.of(contextDialog).colorScheme.onPrimary,
-                  ),
-                  tooltip: 'Añadir participante',
-                  onPressed: () {
-                    Navigator.of(
-                      contextDialog,
-                    ).pop(); // Cierra el diálogo de miembros actual
-                    _mostrarDialogoSeleccionarNuevosMiembros(
-                      groupId,
-                      memberIds,
-                    ); // Llama al nuevo diálogo
-                  },
-                ),
-                // --- FIN DEL BOTÓN AÑADIDO ---
-              ],
+          title: const Text('Editar nombre del grupo'),
+          content: TextField(
+            controller: _nombreController,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: 'Nuevo nombre del grupo',
             ),
-          ),
-          contentPadding: const EdgeInsets.fromLTRB(
-            8,
-            16,
-            8,
-            0,
-          ), // Ajustar padding
-          content: SizedBox(
-            width: double.maxFinite,
-            height: MediaQuery.of(contextDialog).size.height * 0.4,
-            child: ListView.builder(
-              itemCount: memberIds.length,
-              itemBuilder: (BuildContext contextItem, int index) {
-                final memberId = memberIds[index];
-                final userInfo = cacheUsuarios[memberId];
-                final String nombreMiembro = userInfo?['nombre'] ?? memberId;
-                final String? fotoMiembroUrl = userInfo?['foto'];
-
-                if (userInfo == null && mounted) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted && !cacheUsuarios.containsKey(memberId)) {
-                      _obtenerUsuario(memberId);
-                    }
-                  });
-                }
-
-                return ListTile(
-                  leading: CircleAvatar(
-                    radius: 18,
-                    backgroundImage:
-                        (fotoMiembroUrl != null && fotoMiembroUrl.isNotEmpty)
-                            ? NetworkImage(fotoMiembroUrl)
-                            : const AssetImage('assets/images/avatar1.png')
-                                as ImageProvider,
-                  ),
-                  title: Text(nombreMiembro),
-                );
-              },
-            ),
+            textCapitalization: TextCapitalization.sentences,
           ),
           actions: [
             TextButton(
-              // Botón Salir del Grupo (ya lo tenías)
-              style: TextButton.styleFrom(
-                foregroundColor: Theme.of(contextDialog).colorScheme.error,
-              ),
-              child: const Text('Salir del grupo'),
-              onPressed: () {
-                Navigator.of(contextDialog).pop();
-                _confirmarSalirDelGrupo(groupId, groupName);
-              },
+              onPressed: () => Navigator.of(alertContext).pop(),
+              child: const Text('Cancelar'),
             ),
-            TextButton(
-              child: const Text('Cerrar'),
-              onPressed: () {
-                Navigator.of(contextDialog).pop();
+            ElevatedButton(
+              child: const Text('Guardar'),
+              onPressed: () async {
+                final nuevoNombre = _nombreController.text.trim();
+                if (nuevoNombre.isNotEmpty && nuevoNombre != nombreActual) {
+                  final String mensajeSistema =
+                      '$nombreUsuarioActual cambió el nombre del grupo a "$nuevoNombre".';
+                  await FirebaseFirestore.instance
+                      .collection('Chats')
+                      .doc(groupId)
+                      .update({
+                        'groupName': nuevoNombre,
+                        'lastMessage': mensajeSistema,
+                        'lastMessageAt': Timestamp.now(),
+                      });
+                  FirebaseFirestore.instance
+                      .collection('Chats')
+                      .doc(groupId)
+                      .collection('Mensajes')
+                      .add({
+                        'AutorID': 'sistema',
+                        'Contenido': mensajeSistema,
+                        'Fecha': Timestamp.now(),
+                        'tipo': 'sistema_info_actualizada',
+                      });
+                  if (mounted) Navigator.of(alertContext).pop();
+                } else if (nuevoNombre == nombreActual) {
+                  if (mounted) Navigator.of(alertContext).pop();
+                } else {
+                  if (mounted)
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("El nombre no puede estar vacío."),
+                      ),
+                    );
+                }
               },
             ),
           ],
@@ -1629,6 +1667,1064 @@ class _ChatHomePageState extends State<ChatHomePage> {
       },
     );
   }
+
+  // --- Para editar la descripción del grupo ---
+  void _mostrarDialogoEditarDescripcionGrupo(
+    String groupId,
+    String descActual,
+    String nombreUsuarioActual,
+  ) {
+    final TextEditingController _descController = TextEditingController(
+      text: descActual,
+    );
+    showDialog(
+      context: context,
+      builder: (BuildContext alertContext) {
+        return AlertDialog(
+          title: const Text('Editar descripción del grupo'),
+          content: TextField(
+            controller: _descController,
+            autofocus: true,
+            maxLines: null,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              hintText: 'Descripción del grupo (opcional)',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(alertContext).pop(),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              child: const Text('Guardar'),
+              onPressed: () async {
+                final nuevaDesc = _descController.text.trim();
+                final String mensajeSistema =
+                    '$nombreUsuarioActual actualizó la descripción del grupo.';
+                await FirebaseFirestore.instance
+                    .collection('Chats')
+                    .doc(groupId)
+                    .update({
+                      'groupDescription': nuevaDesc,
+                      'lastMessage':
+                          nuevaDesc.isNotEmpty
+                              ? mensajeSistema
+                              : '$nombreUsuarioActual eliminó la descripción del grupo.',
+                      'lastMessageAt': Timestamp.now(),
+                    });
+                FirebaseFirestore.instance
+                    .collection('Chats')
+                    .doc(groupId)
+                    .collection('Mensajes')
+                    .add({
+                      'AutorID': 'sistema',
+                      'Contenido':
+                          nuevaDesc.isNotEmpty
+                              ? mensajeSistema
+                              : '$nombreUsuarioActual eliminó la descripción del grupo.',
+                      'Fecha': Timestamp.now(),
+                      'tipo': 'sistema_info_actualizada',
+                    });
+                if (mounted) Navigator.of(alertContext).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _confirmarEliminarMiembro(
+    BuildContext parentDialogContext,
+    String groupId,
+    String miembroIdAEliminar,
+    String nombreMiembro,
+    String nombreGrupo,
+  ) {
+    showDialog(
+      context: context, // Usa el context principal de la página
+      builder: (BuildContext confirmDialogContext) {
+        return AlertDialog(
+          title: Text('Eliminar a $nombreMiembro'),
+          content: Text(
+            '¿Estás seguro de que quieres eliminar a "$nombreMiembro" del grupo "$nombreGrupo"? Esta acción no se puede deshacer.',
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancelar'),
+              onPressed: () {
+                Navigator.of(confirmDialogContext).pop();
+              },
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
+              child: const Text('Eliminar Miembro'),
+              onPressed: () {
+                Navigator.of(confirmDialogContext).pop();
+                _ejecutarEliminarMiembro(
+                  groupId,
+                  miembroIdAEliminar,
+                  nombreMiembro,
+                  nombreGrupo,
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _ejecutarEliminarMiembro(
+    String groupId,
+    String miembroIdAEliminar,
+    String nombreMiembroEliminado,
+    String nombreDelGrupo,
+  ) async {
+    if (uid == miembroIdAEliminar) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No puedes eliminarte a ti mismo. Usa "Salir del grupo".',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    final DocumentReference chatDocRef = FirebaseFirestore.instance
+        .collection('Chats')
+        .doc(groupId);
+
+    try {
+      WriteBatch batch = FirebaseFirestore.instance.batch();
+      batch.update(chatDocRef, {
+        'ids': FieldValue.arrayRemove([miembroIdAEliminar]),
+        'admins': FieldValue.arrayRemove([
+          miembroIdAEliminar,
+        ]), // También quitarlo de admins si estaba
+        'unreadCounts.$miembroIdAEliminar': FieldValue.delete(),
+        'typing.$miembroIdAEliminar': FieldValue.delete(),
+      });
+      await batch.commit();
+
+      final String nombreEjecutor = nombreUsuario ?? "El creador";
+      final String mensajeSistema =
+          '$nombreEjecutor ha eliminado a $nombreMiembroEliminado del grupo.';
+      final Timestamp ahora = Timestamp.now();
+
+      await FirebaseFirestore.instance
+          .collection('Chats')
+          .doc(groupId)
+          .collection('Mensajes')
+          .add({
+            'AutorID': 'sistema',
+            'Contenido': mensajeSistema,
+            'Fecha': ahora,
+            'tipo': 'sistema_miembro_eliminado',
+          });
+      await chatDocRef.update({
+        'lastMessage': mensajeSistema,
+        'lastMessageAt': ahora,
+      });
+
+      if (nombreUsuario != null) {
+        await NotificationService.crearNotificacion(
+          uidDestino: miembroIdAEliminar,
+          tipo: 'eliminado_de_grupo',
+          titulo: 'Has sido eliminado de un grupo',
+          contenido:
+              '$nombreUsuario te ha eliminado del grupo "$nombreDelGrupo".',
+          referenciaId: groupId,
+          uidEmisor: uid,
+          nombreEmisor: nombreUsuario!,
+        );
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '$nombreMiembroEliminado ha sido eliminado del grupo.',
+            ),
+          ),
+        );
+      }
+    } catch (e, s) {
+      print('Error al eliminar miembro del grupo: $e \nStack: $s');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al eliminar miembro: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  Future<void> _actualizarRolAdmin(
+    String groupId,
+    String miembroId,
+    bool hacerAdmin,
+    String nombreMiembro,
+    String groupName,
+  ) async {
+    final DocumentReference chatDocRef = FirebaseFirestore.instance
+        .collection('Chats')
+        .doc(groupId);
+    final String accionNombre =
+        hacerAdmin ? "nombrado administrador" : "removido como administrador";
+
+    try {
+      final groupDoc = await chatDocRef.get();
+      final groupData = groupDoc.data() as Map<String, dynamic>?;
+
+      if (!hacerAdmin &&
+          groupData != null &&
+          groupData['createdBy'] == miembroId) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'El creador original del grupo no puede ser removido como administrador.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
+      await chatDocRef.update({
+        'admins':
+            hacerAdmin
+                ? FieldValue.arrayUnion([miembroId])
+                : FieldValue.arrayRemove([miembroId]),
+      });
+
+      final String nombreEjecutor = nombreUsuario ?? "El creador";
+      final String mensajeSistema =
+          "$nombreEjecutor ha $accionNombre a $nombreMiembro.";
+      final Timestamp ahora = Timestamp.now();
+
+      FirebaseFirestore.instance
+          .collection('Chats')
+          .doc(groupId)
+          .collection('Mensajes')
+          .add({
+            'AutorID': 'sistema',
+            'Contenido': mensajeSistema,
+            'Fecha': ahora,
+            'tipo': 'sistema_rol_actualizado',
+          });
+      await chatDocRef.update({
+        'lastMessage': mensajeSistema,
+        'lastMessageAt': ahora,
+      });
+
+      if (nombreUsuario != null) {
+        await NotificationService.crearNotificacion(
+          uidDestino: miembroId,
+          tipo: hacerAdmin ? 'promovido_admin' : 'removido_admin',
+          titulo:
+              hacerAdmin
+                  ? 'Ahora eres administrador'
+                  : 'Ya no eres administrador',
+          contenido:
+              '$nombreUsuario te ha $accionNombre en el grupo "$groupName".',
+          referenciaId: groupId,
+          uidEmisor: uid,
+          nombreEmisor: nombreUsuario!,
+        );
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$nombreMiembro ha sido $accionNombre.')),
+        );
+      }
+    } catch (e) {
+      print("Error al actualizar rol de admin: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al actualizar rol: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  // --- Función para editar el nombre del grupo ---
+  // void _mostrarDialogoEditarNombreGrupo(
+  //   String groupId,
+  //   String nombreActual,
+  //   String nombreUsuarioActual,
+  // ) {
+  //   final TextEditingController _nombreController = TextEditingController(
+  //     text: nombreActual,
+  //   );
+  //   showDialog(
+  //     context: context,
+  //     builder: (BuildContext alertContext) {
+  //       return AlertDialog(
+  //         title: const Text('Editar nombre del grupo'),
+  //         content: TextField(
+  //           controller: _nombreController,
+  //           autofocus: true,
+  //           decoration: const InputDecoration(
+  //             hintText: 'Nuevo nombre del grupo',
+  //           ),
+  //           textCapitalization: TextCapitalization.sentences,
+  //         ),
+  //         actions: [
+  //           TextButton(
+  //             onPressed: () => Navigator.of(alertContext).pop(),
+  //             child: const Text('Cancelar'),
+  //           ),
+  //           ElevatedButton(
+  //             child: const Text('Guardar'),
+  //             onPressed: () async {
+  //               final nuevoNombre = _nombreController.text.trim();
+  //               if (nuevoNombre.isNotEmpty && nuevoNombre != nombreActual) {
+  //                 final String mensajeSistema =
+  //                     '$nombreUsuarioActual cambió el nombre del grupo a "$nuevoNombre".';
+  //                 await FirebaseFirestore.instance
+  //                     .collection('Chats')
+  //                     .doc(groupId)
+  //                     .update({
+  //                       'groupName': nuevoNombre,
+  //                       'lastMessage': mensajeSistema,
+  //                       'lastMessageAt': Timestamp.now(),
+  //                     });
+  //                 FirebaseFirestore.instance
+  //                     .collection('Chats')
+  //                     .doc(groupId)
+  //                     .collection('Mensajes')
+  //                     .add({
+  //                       'AutorID': 'sistema',
+  //                       'Contenido': mensajeSistema,
+  //                       'Fecha': Timestamp.now(),
+  //                       'tipo': 'sistema_info_actualizada',
+  //                     });
+  //                 if (mounted) Navigator.of(alertContext).pop();
+  //               } else if (nuevoNombre == nombreActual) {
+  //                 if (mounted) Navigator.of(alertContext).pop();
+  //               } else {
+  //                 if (mounted)
+  //                   ScaffoldMessenger.of(context).showSnackBar(
+  //                     const SnackBar(
+  //                       content: Text("El nombre no puede estar vacío."),
+  //                     ),
+  //                   );
+  //               }
+  //             },
+  //           ),
+  //         ],
+  //       );
+  //     },
+  //   );
+  // }
+
+  // // --- Función para editar la descripción del grupo ---
+  // void _mostrarDialogoEditarDescripcionGrupo(
+  //   String groupId,
+  //   String descActual,
+  //   String nombreUsuarioActual,
+  // ) {
+  //   final TextEditingController _descController = TextEditingController(
+  //     text: descActual,
+  //   );
+  //   showDialog(
+  //     context: context,
+  //     builder: (BuildContext alertContext) {
+  //       return AlertDialog(
+  //         title: const Text('Editar descripción del grupo'),
+  //         content: TextField(
+  //           controller: _descController,
+  //           autofocus: true,
+  //           maxLines: null,
+  //           textCapitalization: TextCapitalization.sentences,
+  //           decoration: const InputDecoration(
+  //             hintText: 'Descripción del grupo (opcional)',
+  //           ),
+  //         ),
+  //         actions: [
+  //           TextButton(
+  //             onPressed: () => Navigator.of(alertContext).pop(),
+  //             child: const Text('Cancelar'),
+  //           ),
+  //           ElevatedButton(
+  //             child: const Text('Guardar'),
+  //             onPressed: () async {
+  //               final nuevaDesc = _descController.text.trim();
+  //               final String mensajeSistema =
+  //                   '$nombreUsuarioActual actualizó la descripción del grupo.';
+  //               await FirebaseFirestore.instance
+  //                   .collection('Chats')
+  //                   .doc(groupId)
+  //                   .update({
+  //                     'groupDescription': nuevaDesc,
+  //                     'lastMessage':
+  //                         nuevaDesc.isNotEmpty
+  //                             ? mensajeSistema
+  //                             : '$nombreUsuarioActual eliminó la descripción del grupo.',
+  //                     'lastMessageAt': Timestamp.now(),
+  //                   });
+  //               FirebaseFirestore.instance
+  //                   .collection('Chats')
+  //                   .doc(groupId)
+  //                   .collection('Mensajes')
+  //                   .add({
+  //                     'AutorID': 'sistema',
+  //                     'Contenido':
+  //                         nuevaDesc.isNotEmpty
+  //                             ? mensajeSistema
+  //                             : '$nombreUsuarioActual eliminó la descripción del grupo.',
+  //                     'Fecha': Timestamp.now(),
+  //                     'tipo': 'sistema_info_actualizada',
+  //                   });
+  //               if (mounted) Navigator.of(alertContext).pop();
+  //             },
+  //           ),
+  //         ],
+  //       );
+  //     },
+  //   );
+  // }
+
+  void _mostrarDialogoMiembrosGrupo(
+    String groupId,
+    String initialGroupName,
+    String? initialGroupPhotoUrl,
+    List<String>
+    initialMemberIds, // Puede ser útil para mostrar algo mientras carga el stream
+    String? groupCreatorId,
+  ) {
+    showDialog(
+      context: context, // Usar el contexto principal para el showDialog
+      barrierDismissible: true, // Permitir cerrar tocando fuera
+      builder: (BuildContext contextDialog) {
+        // Contexto específico para este AlertDialog
+        return AlertDialog(
+          titlePadding: const EdgeInsets.all(0),
+          // El título ahora usa un StreamBuilder para reflejar cambios en nombre/foto del grupo en tiempo real
+          title: StreamBuilder<DocumentSnapshot>(
+            stream:
+                FirebaseFirestore.instance
+                    .collection('Chats')
+                    .doc(groupId)
+                    .snapshots(),
+            builder: (contextTitleStream, groupSnapshotTitle) {
+              // Valores por defecto o iniciales
+              String currentTitle = initialGroupName;
+              String? currentPhoto = initialGroupPhotoUrl;
+              bool userIsCreator =
+                  uid ==
+                  groupCreatorId; // Usar el groupCreatorId pasado para la lógica inicial del título
+              bool userIsAdmin = false;
+
+              if (groupSnapshotTitle.hasData &&
+                  groupSnapshotTitle.data!.exists) {
+                final data =
+                    groupSnapshotTitle.data!.data() as Map<String, dynamic>;
+                currentTitle = data['groupName'] ?? initialGroupName;
+                currentPhoto = data['groupPhoto'] as String?;
+                final List<String> adminsFromSnapshot = List<String>.from(
+                  data['admins'] ?? [],
+                );
+                userIsAdmin = adminsFromSnapshot.contains(uid);
+              }
+
+              final bool canEditBasicInfo = userIsCreator || userIsAdmin;
+
+              return Container(
+                padding: const EdgeInsets.fromLTRB(
+                  16,
+                  12,
+                  8,
+                  12,
+                ), // Padding ajustado
+                color: Theme.of(contextDialog).colorScheme.primary,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              CircleAvatar(
+                                radius: 40, // Radio ligeramente mayor
+                                backgroundImage:
+                                    (currentPhoto != null &&
+                                            currentPhoto.isNotEmpty)
+                                        ? NetworkImage(currentPhoto)
+                                        : const AssetImage(
+                                              'assets/images/avatar_grupo_default.png',
+                                            )
+                                            as ImageProvider,
+                                backgroundColor: Colors.grey.shade300,
+                              ),
+                              if (canEditBasicInfo)
+                                Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.55),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: IconButton(
+                                    iconSize: 18,
+                                    padding: EdgeInsets.zero,
+                                    icon: const Icon(
+                                      Icons.camera_alt,
+                                      color: Colors.white,
+                                    ),
+                                    tooltip: 'Cambiar imagen del grupo',
+                                    // Usar 'context' (el de la página) para el SnackBar de _seleccionarYActualizarImagenGrupo
+                                    onPressed:
+                                        () =>
+                                            _seleccionarYActualizarImagenGrupo(
+                                              groupId,
+                                              currentTitle,
+                                              context,
+                                            ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: InkWell(
+                              onTap:
+                                  canEditBasicInfo
+                                      ? () {
+                                        _mostrarDialogoEditarNombreGrupo(
+                                          groupId,
+                                          currentTitle,
+                                          nombreUsuario ?? 'Usuario',
+                                        );
+                                      }
+                                      : null,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      currentTitle,
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 17,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (canEditBasicInfo)
+                                    const SizedBox(width: 6),
+                                  if (canEditBasicInfo)
+                                    Icon(
+                                      Icons.edit,
+                                      color: Colors.white70,
+                                      size: 18,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (canEditBasicInfo) // Solo creador o admin pueden añadir participantes
+                      IconButton(
+                        icon: Icon(Icons.person_add_alt_1, color: Colors.white),
+                        tooltip: 'Añadir participante',
+                        onPressed: () {
+                          // Obtenemos los miembros actuales directamente del snapshot si está disponible
+                          // o hacemos una nueva llamada si es necesario (más seguro)
+                          FirebaseFirestore.instance
+                              .collection('Chats')
+                              .doc(groupId)
+                              .get()
+                              .then((doc) {
+                                if (doc.exists) {
+                                  final currentGroupDocData =
+                                      doc.data() as Map<String, dynamic>;
+                                  final List<String> membersNow =
+                                      List<String>.from(
+                                        currentGroupDocData['ids'] ?? [],
+                                      );
+                                  // No cerramos este diálogo, el de seleccionar miembros se superpondrá.
+                                  _mostrarDialogoSeleccionarNuevosMiembros(
+                                    groupId,
+                                    membersNow,
+                                  );
+                                }
+                              })
+                              .catchError(
+                                (e) => print(
+                                  "Error obteniendo miembros actuales para añadir: $e",
+                                ),
+                              );
+                        },
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
+          content: SizedBox(
+            width: 380, // Ligeramente más ancho
+            height:
+                MediaQuery.of(contextDialog).size.height *
+                0.55, // Un poco más de altura
+            child: StreamBuilder<DocumentSnapshot>(
+              stream:
+                  FirebaseFirestore.instance
+                      .collection('Chats')
+                      .doc(groupId)
+                      .snapshots(),
+              builder: (contextContentStream, groupSnapshotContent) {
+                if (!groupSnapshotContent.hasData ||
+                    !groupSnapshotContent.data!.exists) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final groupData =
+                    groupSnapshotContent.data!.data() as Map<String, dynamic>;
+                final String? actualCreatorId =
+                    groupData['createdBy'] as String?;
+                final List<String> currentMemberIds = List<String>.from(
+                  groupData['ids'] ?? [],
+                );
+                final List<String> currentAdminIds = List<String>.from(
+                  groupData['admins'] ?? [],
+                );
+                final String groupDesc = groupData['groupDescription'] ?? '';
+                final String currentGroupNameForActions =
+                    groupData['groupName'] ?? initialGroupName;
+
+                final bool esUsuarioActualElCreador = uid == actualCreatorId;
+                final bool esUsuarioActualAdmin = currentAdminIds.contains(uid);
+
+                final bool puedeGestionarInfoGrupo =
+                    esUsuarioActualElCreador || esUsuarioActualAdmin;
+                final bool puedeGestionarListaAdmins =
+                    esUsuarioActualElCreador; // Solo el creador gestiona admins
+
+                if (currentMemberIds.isEmpty)
+                  return const Center(
+                    child: Text("Este grupo no tiene miembros."),
+                  );
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 4.0,
+                        vertical: 0,
+                      ),
+                      dense: true,
+                      title: const Text(
+                        "Descripción",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                      subtitle: Text(
+                        groupDesc.isNotEmpty ? groupDesc : "Sin descripción.",
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing:
+                          puedeGestionarInfoGrupo
+                              ? IconButton(
+                                icon: Icon(
+                                  Icons.edit_note,
+                                  size: 22,
+                                  color:
+                                      Theme.of(
+                                        contextContentStream,
+                                      ).colorScheme.secondary,
+                                ),
+                                tooltip: "Editar descripción",
+                                onPressed:
+                                    () => _mostrarDialogoEditarDescripcionGrupo(
+                                      groupId,
+                                      groupDesc,
+                                      nombreUsuario ?? 'Usuario',
+                                    ),
+                              )
+                              : null,
+                    ),
+                    const Divider(height: 1),
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        left: 4.0,
+                        top: 10.0,
+                        bottom: 4.0,
+                      ),
+                      child: Text(
+                        "${currentMemberIds.length} Participante(s)",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Theme.of(contextContentStream).hintColor,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: currentMemberIds.length,
+                        itemBuilder: (BuildContext contextItem, int index) {
+                          final memberIdToList = currentMemberIds[index];
+                          final userInfo = cacheUsuarios[memberIdToList];
+                          final String nombreMiembro =
+                              userInfo?['nombre'] ?? memberIdToList;
+                          final String? fotoMiembroUrl = userInfo?['foto'];
+
+                          if (userInfo == null &&
+                              mounted &&
+                              !cacheUsuarios.containsKey(memberIdToList)) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted &&
+                                  !cacheUsuarios.containsKey(memberIdToList))
+                                _obtenerUsuario(memberIdToList);
+                            });
+                          }
+
+                          final bool esEsteMiembroElCreador =
+                              memberIdToList == actualCreatorId;
+                          final bool esEsteMiembroAdmin = currentAdminIds
+                              .contains(memberIdToList);
+
+                          // Definir permisos para acciones sobre *este* miembro
+                          bool puedeEliminarAEsteMiembro = false;
+                          if (esUsuarioActualElCreador &&
+                              memberIdToList != uid) {
+                            // El creador puede eliminar a cualquiera menos a sí mismo
+                            puedeEliminarAEsteMiembro = true;
+                          } else if (esUsuarioActualAdmin &&
+                              !esEsteMiembroElCreador &&
+                              !esEsteMiembroAdmin &&
+                              memberIdToList != uid) {
+                            // Un admin puede eliminar a un miembro normal (que no sea el creador ni otro admin, ni a sí mismo)
+                            puedeEliminarAEsteMiembro = true;
+                          }
+
+                          final bool puedeCambiarRolAdminAEsteMiembro =
+                              puedeGestionarListaAdmins &&
+                              memberIdToList != uid &&
+                              !esEsteMiembroElCreador;
+
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 4.0,
+                              vertical: 0,
+                            ),
+                            leading: CircleAvatar(
+                              radius: 20,
+                              backgroundImage:
+                                  (fotoMiembroUrl != null &&
+                                          fotoMiembroUrl.isNotEmpty)
+                                      ? NetworkImage(fotoMiembroUrl)
+                                      : const AssetImage(
+                                            'assets/images/avatar1.png',
+                                          )
+                                          as ImageProvider,
+                            ),
+                            title: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    nombreMiembro,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (esEsteMiembroElCreador)
+                                  Text(
+                                    " (Creador)",
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontStyle: FontStyle.italic,
+                                      color:
+                                          Theme.of(
+                                            contextDialog,
+                                          ).colorScheme.primary,
+                                    ),
+                                  ),
+                                if (esEsteMiembroAdmin &&
+                                    !esEsteMiembroElCreador)
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 4.0),
+                                    child: Icon(
+                                      Icons.shield,
+                                      size: 15,
+                                      color:
+                                          Theme.of(
+                                            contextDialog,
+                                          ).colorScheme.secondary,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (puedeEliminarAEsteMiembro)
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.remove_circle_outline,
+                                      color:
+                                          Theme.of(
+                                            contextDialog,
+                                          ).colorScheme.error,
+                                      size: 20,
+                                    ),
+                                    tooltip: 'Eliminar a $nombreMiembro',
+                                    onPressed:
+                                        () => _confirmarEliminarMiembro(
+                                          contextDialog,
+                                          groupId,
+                                          memberIdToList,
+                                          nombreMiembro,
+                                          currentGroupNameForActions,
+                                        ),
+                                  ),
+                                if (puedeCambiarRolAdminAEsteMiembro)
+                                  PopupMenuButton<String>(
+                                    icon: Icon(
+                                      Icons.admin_panel_settings_outlined,
+                                      size: 20,
+                                    ),
+                                    tooltip: "Gestionar rol de admin",
+                                    onSelected: (value) {
+                                      if (value == 'hacer_admin')
+                                        _actualizarRolAdmin(
+                                          groupId,
+                                          memberIdToList,
+                                          true,
+                                          nombreMiembro,
+                                          currentGroupNameForActions,
+                                        );
+                                      else if (value == 'quitar_admin')
+                                        _actualizarRolAdmin(
+                                          groupId,
+                                          memberIdToList,
+                                          false,
+                                          nombreMiembro,
+                                          currentGroupNameForActions,
+                                        );
+                                    },
+                                    itemBuilder:
+                                        (_) => [
+                                          if (!esEsteMiembroAdmin)
+                                            const PopupMenuItem(
+                                              value: 'hacer_admin',
+                                              child: Text(
+                                                'Hacer administrador',
+                                              ),
+                                            ),
+                                          if (esEsteMiembroAdmin)
+                                            const PopupMenuItem(
+                                              value: 'quitar_admin',
+                                              child: Text('Quitar como admin'),
+                                            ),
+                                        ],
+                                  ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          actionsAlignment: MainAxisAlignment.spaceEvenly,
+          actions: <Widget>[
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(contextDialog).colorScheme.error,
+              ),
+              child: const Text('Salir del grupo'),
+              onPressed: () {
+                Navigator.of(contextDialog).pop();
+                _confirmarSalirDelGrupo(
+                  groupId,
+                  initialGroupName,
+                ); // Usar initialGroupName para el diálogo de confirmación
+              },
+            ),
+            TextButton(
+              child: const Text('Cerrar'),
+              onPressed: () => Navigator.of(contextDialog).pop(),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // void _confirmarEliminarMiembro(
+  //   BuildContext parentDialogContext, // Contexto del diálogo de miembros
+  //   String groupId,
+  //   String miembroIdAEliminar,
+  //   String nombreMiembro,
+  //   String nombreGrupo,
+  // ) {
+  //   showDialog(
+  //     context:
+  //         context, // Usar el context principal de la página para este diálogo de confirmación
+  //     builder: (BuildContext confirmDialogContext) {
+  //       return AlertDialog(
+  //         title: Text('Eliminar a $nombreMiembro'),
+  //         content: Text(
+  //           '¿Estás seguro de que quieres eliminar a "$nombreMiembro" del grupo "$nombreGrupo"? Esta acción no se puede deshacer.',
+  //         ),
+  //         actions: <Widget>[
+  //           TextButton(
+  //             child: const Text('Cancelar'),
+  //             onPressed: () {
+  //               Navigator.of(
+  //                 confirmDialogContext,
+  //               ).pop(); // Cierra solo el diálogo de confirmación
+  //             },
+  //           ),
+  //           TextButton(
+  //             style: TextButton.styleFrom(
+  //               foregroundColor: Theme.of(context).colorScheme.error,
+  //             ),
+  //             child: const Text('Eliminar Miembro'),
+  //             onPressed: () {
+  //               Navigator.of(
+  //                 confirmDialogContext,
+  //               ).pop(); // Cierra el diálogo de confirmación
+  //               _ejecutarEliminarMiembro(
+  //                 groupId,
+  //                 miembroIdAEliminar,
+  //                 nombreMiembro,
+  //                 nombreGrupo,
+  //               );
+  //               // El diálogo de miembros se actualizará gracias al StreamBuilder
+  //             },
+  //           ),
+  //         ],
+  //       );
+  //     },
+  //   );
+  // }
+
+  // Future<void> _ejecutarEliminarMiembro(
+  //   String groupId,
+  //   String miembroIdAEliminar,
+  //   String nombreMiembroEliminado, // Para el mensaje del sistema
+  //   String nombreDelGrupo, // Para la notificación
+  // ) async {
+  //   // Doble verificación: el creador no debería poder eliminarse a sí mismo aquí.
+  //   if (uid == miembroIdAEliminar) {
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(
+  //           content: Text(
+  //             'No puedes eliminarte a ti mismo usando esta opción. Usa "Salir del grupo".',
+  //           ),
+  //         ),
+  //       );
+  //     }
+  //     return;
+  //   }
+
+  //   final DocumentReference chatDocRef = FirebaseFirestore.instance
+  //       .collection('Chats')
+  //       .doc(groupId);
+
+  //   try {
+  //     WriteBatch batch = FirebaseFirestore.instance.batch();
+
+  //     // 1. Quitar el UID del miembro de la lista 'ids'
+  //     batch.update(chatDocRef, {
+  //       'ids': FieldValue.arrayRemove([miembroIdAEliminar]),
+  //     });
+
+  //     // 2. Quitar las entradas del miembro de 'unreadCounts' y 'typing'
+  //     batch.update(chatDocRef, {
+  //       'unreadCounts.$miembroIdAEliminar': FieldValue.delete(),
+  //       'typing.$miembroIdAEliminar': FieldValue.delete(),
+  //     });
+
+  //     await batch.commit(); // Ejecutar todas las operaciones atómicamente
+
+  //     // 3. (Opcional pero recomendado) Enviar un mensaje al sistema en el chat
+  //     // Asegúrate de que 'nombreUsuario' (el nombre del creador que realiza la acción) esté cargado.
+  //     final String nombreCreadorActual = nombreUsuario ?? "El creador";
+  //     final String mensajeSistema =
+  //         '$nombreCreadorActual ha eliminado a $nombreMiembroEliminado del grupo.';
+  //     final Timestamp ahora = Timestamp.now();
+
+  //     await FirebaseFirestore.instance
+  //         .collection('Chats')
+  //         .doc(groupId)
+  //         .collection('Mensajes')
+  //         .add({
+  //           'AutorID':
+  //               'sistema', // Un ID especial para identificar mensajes del sistema
+  //           'Contenido': mensajeSistema,
+  //           'Fecha': ahora,
+  //           'tipo':
+  //               'sistema_miembro_eliminado', // Un tipo específico para estos mensajes
+  //           // Puedes añadir otros campos que necesites para los mensajes del sistema
+  //         });
+
+  //     // Actualizar la información 'lastMessage' del chat principal
+  //     await chatDocRef.update({
+  //       'lastMessage': mensajeSistema,
+  //       'lastMessageAt': ahora,
+  //     });
+
+  //     // 4. (Opcional) Enviar una notificación al usuario eliminado
+  //     if (nombreUsuario != null) {
+  //       // nombreUsuario es el del que ejecuta la acción (el creador)
+  //       await NotificationService.crearNotificacion(
+  //         uidDestino: miembroIdAEliminar,
+  //         tipo: 'eliminado_de_grupo', // Un tipo de notificación específico
+  //         titulo: 'Has sido eliminado de un grupo',
+  //         contenido:
+  //             '$nombreUsuario te ha eliminado del grupo "$nombreDelGrupo".',
+  //         referenciaId: groupId,
+  //         uidEmisor: uid, // El creador
+  //         nombreEmisor: nombreUsuario!,
+  //       );
+  //     }
+
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(
+  //           content: Text(
+  //             '$nombreMiembroEliminado ha sido eliminado del grupo.',
+  //           ),
+  //         ),
+  //       );
+  //       // El StreamBuilder en _mostrarDialogoMiembrosGrupo se encargará de actualizar la lista.
+  //     }
+  //     print(
+  //       'Miembro $miembroIdAEliminar eliminado del grupo $groupId por el creador $uid.',
+  //     );
+  //   } catch (e, s) {
+  //     print('Error al eliminar miembro del grupo: ${e.toString()}');
+  //     print('Stack trace: ${s.toString()}');
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(content: Text('Error al eliminar miembro: ${e.toString()}')),
+  //       );
+  //     }
+  //   }
+  // }
 
   // Método que abre el diálogo de creación de grupo
   void _mostrarDialogoCrearGrupo() {
@@ -1867,6 +2963,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                 .doc(chatId)
                                 .set({
                                   'ids': [uid, ..._selected],
+                                  'admins': [uid],
                                   'isGroup': true,
                                   'groupName': _groupNameController.text.trim(),
                                   'groupPhoto': urlImagen,
@@ -2995,16 +4092,20 @@ class _ChatHomePageState extends State<ChatHomePage> {
                           chatData['groupName'] ?? 'Grupo';
                       final String? fotoGrupoUrl =
                           chatData['groupPhoto'] as String?;
+                      final String? groupCreatorId =
+                          chatData['createdBy'] as String?;
                       final List<String> miembrosIds = List<String>.from(
                         chatData['ids'] ?? [],
                       );
+
                       return GestureDetector(
                         onTap: () {
                           _mostrarDialogoMiembrosGrupo(
                             chatIdSeleccionado!,
                             nombreGrupo,
                             fotoGrupoUrl,
-                            miembrosIds,
+                            miembrosIds, // Puedes mantenerla como lista inicial si la usas antes del StreamBuilder
+                            groupCreatorId, // << ¡Importante pasar esto!
                           );
                         },
                         child: Row(
