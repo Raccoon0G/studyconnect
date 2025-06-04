@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:study_connect/models/usuario_model.dart';
-import 'package:study_connect/widgets/custom_app_bar.dart';
+import 'package:study_connect/models/models.dart';
+import 'package:study_connect/widgets/widgets.dart';
 
 class UserProfilePage extends StatefulWidget {
   const UserProfilePage({super.key});
