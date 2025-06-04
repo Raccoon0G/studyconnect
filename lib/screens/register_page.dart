@@ -139,7 +139,7 @@ class _RegisterPageState extends State<RegisterPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
-      appBar: const CustomAppBar(showBack: true),
+      appBar: const CustomAppBar(showBack: true, showMainTitleOnly: true),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final bool esPantallaGrande = constraints.maxWidth >= 900;

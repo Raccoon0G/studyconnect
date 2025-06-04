@@ -16,8 +16,8 @@ import 'package:image_picker/image_picker.dart'; // Para móvil/otras plataforma
 import 'dart:html' as html; // Para web
 
 // Tus importaciones (asegúrate que la ruta sea correcta)
-import 'package:study_connect/widgets/widgets.dart'; // CUSTOM APP BAR
-import 'package:study_connect/models/models.dart'; // Importamos  clase Usuario
+import 'package:study_connect/widgets/custom_app_bar.dart'; // TU CUSTOM APP BAR MODIFICADO
+import 'package:study_connect/models/usuario_model.dart'; // Importa tu clase Usuario
 
 // --- CONSTANTES ---
 const String routeUserProfile = '/user_profile';
@@ -50,13 +50,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
   bool isLoading = true;
   bool isSaving = false;
   bool _hasUnsavedChanges = false;
-  bool _isAttemptingPop = false;
 
   @override
   void initState() {
     super.initState();
     _cargarDatosUsuario().then((_) {
-      // Solo añadir listeners si los datos se cargaron y _usuarioActual no es null
       if (_usuarioActual != null) {
         _addListenersToDetectChanges();
       }
@@ -119,10 +117,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
-  Future<bool> _showExitConfirmDialog() async {
+  Future<bool> _handlePopNavigation() async {
     _checkForUnsavedChanges();
     if (_hasUnsavedChanges) {
-      final confirm = await showDialog<bool>(
+      final bool? shouldPop = await showDialog<bool>(
         context: context,
         builder:
             (context) => AlertDialog(
@@ -142,7 +140,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
               ],
             ),
       );
-      return confirm ?? false;
+      return shouldPop ?? false;
     }
     return true;
   }
@@ -179,7 +177,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
       if (docSnap.exists && mounted) {
         _usuarioActual = Usuario.fromFirestore(docSnap);
-        // Crear una copia profunda para _usuarioOriginalParaComparar
         _usuarioOriginalParaComparar = Usuario(
           id: _usuarioActual!.id,
           nombre: _usuarioActual!.nombre,
@@ -188,9 +185,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
           rol: _usuarioActual!.rol,
           acercaDeMi: _usuarioActual!.acercaDeMi,
           fotoPerfilUrl: _usuarioActual!.fotoPerfilUrl,
-          config: Map<String, bool>.from(
-            _usuarioActual!.config,
-          ), // Copia del mapa
+          config: Map<String, bool>.from(_usuarioActual!.config),
         );
 
         nameController.text = _usuarioActual!.nombre;
@@ -199,33 +194,24 @@ class _EditProfilePageState extends State<EditProfilePage> {
         roleController.text = _usuarioActual!.rol ?? '';
         bioController.text = _usuarioActual!.acercaDeMi ?? '';
       } else if (mounted) {
-        // Si el documento no existe, crear un perfil base para _usuarioActual
         _usuarioActual = Usuario(
           id: firebaseAuthUser!.uid,
           nombre: firebaseAuthUser!.displayName ?? '',
           correo: firebaseAuthUser!.email ?? '',
           fotoPerfilUrl: firebaseAuthUser!.photoURL,
-          // config se inicializará con los valores por defecto del constructor de Usuario
         );
-
-        // CORRECCIÓN: Inicializar _usuarioOriginalParaComparar directamente con los mismos datos base
         _usuarioOriginalParaComparar = Usuario(
-          id: _usuarioActual!.id, // Usar el id de _usuarioActual
+          id: _usuarioActual!.id,
           nombre: _usuarioActual!.nombre,
           correo: _usuarioActual!.correo,
           fotoPerfilUrl: _usuarioActual!.fotoPerfilUrl,
-          config: Map<String, bool>.from(
-            _usuarioActual!.config,
-          ), // Copia profunda del mapa de config
+          config: Map<String, bool>.from(_usuarioActual!.config),
         );
-
-        // Poblar controladores
         nameController.text = _usuarioActual!.nombre;
         emailController.text = _usuarioActual!.correo;
-        phoneController.text = ''; // Campos opcionales pueden empezar vacíos
+        phoneController.text = '';
         roleController.text = '';
         bioController.text = '';
-
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Perfil no encontrado, se muestran datos base.'),
@@ -341,10 +327,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
   Future<String?> _subirNuevaImagenSiExiste() async {
     if (firebaseAuthUser == null) return _usuarioActual?.fotoPerfilUrl;
     if (_newProfileImageBytes == null && _usuarioActual?.fotoPerfilUrl != null)
-      return _usuarioActual!
-          .fotoPerfilUrl; // Mantiene foto si no hay nueva Y había una antes
+      return _usuarioActual!.fotoPerfilUrl;
     if (_newProfileImageBytes == null && _usuarioActual?.fotoPerfilUrl == null)
-      return null; // Se quitó y no hay nueva
+      return null;
 
     try {
       final ref = FirebaseStorage.instance
@@ -414,7 +399,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
       if (mounted) {
         _newProfileImageBytes = null;
-        // Recargar _usuarioOriginalParaComparar desde Firestore para reflejar los cambios guardados
         final updatedDocSnap =
             await FirebaseFirestore.instance
                 .collection(usersCollection)
@@ -424,7 +408,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
           _usuarioOriginalParaComparar = Usuario.fromFirestore(updatedDocSnap);
         }
         setState(() {
-          // setState para reconstruir la UI si es necesario después de actualizar _usuarioOriginalParaComparar
           _hasUnsavedChanges = false;
         });
 
@@ -653,27 +636,28 @@ class _EditProfilePageState extends State<EditProfilePage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final bool emailEstaVerificado = firebaseAuthUser?.emailVerified ?? false;
-    bool canPopScopePop = !_hasUnsavedChanges;
 
     return PopScope(
-      canPop: canPopScopePop,
-      onPopInvoked: (bool didPop) async {
-        if (didPop) return;
-        if (_isAttemptingPop) return;
-
-        setState(() => _isAttemptingPop = true);
-        final bool shouldPop = await _showExitConfirmDialog();
-        if (shouldPop && mounted) {
-          Navigator.pop(context);
+      canPop: false, // Siempre interceptar
+      // USANDO onPopInvokedWithResult SEGÚN SUGERENCIA DEL LINTER
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (didPop) {
+          return;
         }
-        if (mounted) setState(() => _isAttemptingPop = false);
+        _handlePopNavigation().then((bool shouldPop) {
+          if (shouldPop && mounted) {
+            Navigator.of(context).pop();
+          }
+        });
       },
       child: Scaffold(
         backgroundColor: theme.colorScheme.surface,
         appBar: CustomAppBar(
-          // Usando tu CustomAppBar modificado
           showBack: true,
-          titleContent:
+          // AHORA USAMOS titleWidget en lugar de titleContent (si así lo modificaste en CustomAppBar)
+          // o titleText si CustomAppBar espera un String.
+          // Asumiendo que CustomAppBar usa titleWidget:
+          titleWidget:
               _hasUnsavedChanges
                   ? Row(
                     mainAxisSize: MainAxisSize.min,
@@ -747,7 +731,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                         CircleAvatar(
                                           radius: 60,
                                           backgroundColor:
-                                              theme.colorScheme.surfaceVariant,
+                                              theme
+                                                  .colorScheme
+                                                  .surfaceContainerHighest,
                                           backgroundImage:
                                               _newProfileImageBytes != null
                                                   ? MemoryImage(
@@ -802,7 +788,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                     ),
                                   ),
                                 ),
-                                // Botón para quitar foto solo si hay una foto actual Y no hay una nueva imagen en bytes seleccionada
                                 if (_usuarioActual!.fotoPerfilUrl != null &&
                                     _usuarioActual!.fotoPerfilUrl!.isNotEmpty &&
                                     _newProfileImageBytes == null)
@@ -880,7 +865,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                 if (!emailEstaVerificado &&
                                     firebaseAuthUser != null)
                                   Padding(
-                                    // Añadido Padding para mejor espaciado
                                     padding: const EdgeInsets.only(left: 4.0),
                                     child: TextButton(
                                       onPressed:
