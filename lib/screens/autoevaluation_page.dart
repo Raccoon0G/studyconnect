@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../services/services.dart'; // Asegúrate que estos imports sean correctos
-import '../widgets/widgets.dart'; // Asegúrate que estos imports sean correctos
+import '../services/services.dart';
+import '../widgets/widgets.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../utils/utils.dart'; // Asegúrate que estos imports sean correctos
+import '../utils/utils.dart';
 import 'package:confetti/confetti.dart';
 import 'package:audioplayers/audioplayers.dart';
-import 'dart:math'; // Para la función min()
+import 'dart:math';
 
 // Colores de acento
 const Color colorPrimarioAutoevaluacion = Color(0xFF7E57C2);
@@ -38,12 +38,12 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
 
   List<String> temasSeleccionados = [];
   Map<String, List<Map<String, dynamic>>> preguntasPorTema = {};
-  String? temaSeleccionado; // Almacenará el nombre completo del tema activo
+  String? temaSeleccionado;
   Map<int, String> respuestasUsuario = {};
   bool yaCalificado = false;
   int puntaje = 0;
   bool cargando = false;
-  // bool mostrarBotonGenerarNuevas = false; // No se usa directamente, se infiere del contexto
+  bool mostrarBotonGenerarNuevas = false;
   final FirebaseFirestore firestore = FirebaseFirestore.instance;
   final EvaluacionService evaluacionService = EvaluacionService();
 
@@ -51,12 +51,13 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
   late ConfettiController _confettiLeftController;
   late ConfettiController _confettiRightController;
   late ConfettiController _confettiBottomController;
+  bool yaSeNotificoIA = false;
+  bool envioExitoso = false;
 
   final AudioPlayer _audioPlayer = AudioPlayer();
   User? user;
   int cantidadPreguntas = 25;
-  Map<String, int> totalPreguntasPorTema =
-      {}; // Clave: Nombre completo del tema
+  Map<String, int> totalPreguntasPorTema = {};
 
   @override
   void initState() {
@@ -134,8 +135,10 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
       puntaje = 0;
       preguntasPorTema.clear();
       temaSeleccionado = null;
+      mostrarBotonGenerarNuevas = false;
     });
     Map<String, List<Map<String, dynamic>>> nuevasPreguntasPorTema = {};
+    bool activarGenerarNuevasLocal = false;
 
     for (String temaNombreCompleto in temasNombresCompletos) {
       try {
@@ -190,6 +193,19 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
           }
         }
 
+        final repetidas =
+            seleccionadas
+                .where((p) => preguntasAnteriores.contains(p['id']))
+                .length;
+        final limiteRepetidas = cantidadPreguntas ~/ 10;
+        if (repetidas >= limiteRepetidas &&
+            seleccionadas.length == cantidadPreguntas) {
+          print(
+            "⚠️ Alta cantidad de repetidas para $temaNombreCompleto: $repetidas de $cantidadPreguntas",
+          );
+          activarGenerarNuevasLocal = true;
+        }
+
         final preguntasMapeadas =
             seleccionadas
                 .map(
@@ -205,15 +221,17 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
 
         nuevasPreguntasPorTema[temaNombreCompleto] = preguntasMapeadas;
 
-        await firestore.collection('evaluaciones_realizadas').add({
-          'uid_usuario': user!.uid,
-          'nombre_usuario': await _obtenerNombreDesdeUsuarios(user!.uid),
-          'tema': temaNombreCompleto,
-          'preguntas_ids': seleccionadas.map((p) => p['id']).toList(),
-          'respuestas_usuario': {},
-          'calificacion': 0,
-          'fecha_realizacion': FieldValue.serverTimestamp(),
-        });
+        if (seleccionadas.isNotEmpty) {
+          await firestore.collection('evaluaciones_realizadas').add({
+            'uid_usuario': user!.uid,
+            'nombre_usuario': await _obtenerNombreDesdeUsuarios(user!.uid),
+            'tema': temaNombreCompleto,
+            'preguntas_ids': seleccionadas.map((p) => p['id']).toList(),
+            'respuestas_usuario': {},
+            'calificacion': 0,
+            'fecha_realizacion': FieldValue.serverTimestamp(),
+          });
+        }
       } catch (e) {
         debugPrint("Error obteniendo preguntas para $temaNombreCompleto: $e");
         _mostrarError(
@@ -227,6 +245,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
         if (nuevasPreguntasPorTema.isNotEmpty) {
           temaSeleccionado = nuevasPreguntasPorTema.keys.first;
         }
+        mostrarBotonGenerarNuevas = activarGenerarNuevasLocal;
         cargando = false;
       });
     }
@@ -258,9 +277,10 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
       final String temaNombreCompleto = data['tema'] ?? 'Sin tema';
 
       final calificacionRaw = data['calificacion'] ?? 0;
-      final preguntasCount = (data['preguntas_ids'] as List?)?.length ?? 0;
+      final preguntasCount = (data['preguntas_ids'] as List?)?.length ?? 1;
       final calificacionFinal =
-          (preguntasCount > 0 ? (calificacionRaw / preguntasCount) : 0.0) * 10;
+          ((preguntasCount > 0 ? calificacionRaw / preguntasCount : 0) * 10)
+              .clamp(0.0, 10.0);
 
       final rawFecha = data['fecha_realizacion'];
       String fechaFormateada = 'Sin fecha';
@@ -275,7 +295,10 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
         'tema': temaNombreCompleto,
         'calificacion': calificacionFinal.toStringAsFixed(1),
         'fecha': fechaFormateada,
-        'preguntas': preguntasCount,
+        'preguntas':
+            preguntasCount == 1 && (data['preguntas_ids'] as List?) == null
+                ? 0
+                : preguntasCount,
         'respuestas_usuario': Map<String, dynamic>.from(
           data['respuestas_usuario'] ?? {},
         ),
@@ -296,7 +319,6 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
           await firestore
               .collection('preguntas_por_tema')
               .where(FieldPath.documentId, whereIn: ids)
-              // .where('tema', isEqualTo: temaNombreCompletoContexto) // Descomentar si tus preguntas tienen un campo 'tema' y quieres filtrar por él
               .get();
 
       detalles =
@@ -478,10 +500,12 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
       contenido:
           "Tus respuestas y calificación han sido guardadas exitosamente.",
     );
-    setState(() {
-      yaCalificado = true;
-      puntaje = score;
-    });
+    if (mounted) {
+      setState(() {
+        yaCalificado = true;
+        puntaje = score;
+      });
+    }
 
     final calificacionFinal =
         (preguntas.isNotEmpty ? (score / preguntas.length) : 0.0) * 10;
@@ -541,6 +565,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
       puntaje = 0;
       temasSeleccionados.clear();
       temaSeleccionado = null;
+      mostrarBotonGenerarNuevas = false;
     });
   }
 
@@ -550,6 +575,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
       elevation: 3,
       margin: const EdgeInsets.only(bottom: 20, left: 4, right: 4),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: theme.cardColor,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -671,7 +697,9 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
               label: const Text("Generar Evaluación"),
             ),
             const SizedBox(height: 12),
-            if (temasSeleccionados.length == 1)
+            if (temasSeleccionados.length == 1 && mostrarBotonGenerarNuevas)
+              _avisoGenerarNuevas(),
+            if (temasSeleccionados.length == 1 && !mostrarBotonGenerarNuevas)
               _buildBotonGenerarConIAEstilizado(
                 context,
                 temasSeleccionados.first,
@@ -960,7 +988,71 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
     );
   }
 
-  // DIÁLOGO DE DETALLES DE EVALUACIÓN PASADA (RESTAURADO A TU DISEÑO ORIGINAL)
+  Widget _avisoGenerarNuevas() {
+    return Column(
+      children: [
+        const Center(
+          child: Text(
+            "Se han encontrado preguntas repetidas. ¿Deseas generar nuevas preguntas con IA?",
+            style: TextStyle(color: Colors.red),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Center(
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.amber,
+              foregroundColor: Colors.black,
+            ),
+            icon: const Icon(Icons.bolt),
+            label: const Text("Generar con IA (Make)"),
+            onPressed: () async {
+              if (user == null) {
+                _mostrarDialogoLogin("Debes iniciar sesión.");
+                return;
+              }
+              if (temasSeleccionados.length != 1) {
+                _mostrarError("Selecciona solo un tema para usar IA.");
+                return;
+              }
+              final temaParaIA = temasSeleccionados.first;
+
+              setState(() {
+                cargando = true;
+                yaSeNotificoIA = false;
+                envioExitoso = false;
+              });
+
+              final notificado = await evaluacionService
+                  .notificarGeneracionPreguntas(_claveTema(temaParaIA));
+
+              if (!mounted) return;
+              setState(() {
+                cargando = false;
+                yaSeNotificoIA = notificado;
+                envioExitoso = notificado;
+              });
+
+              if (notificado) {
+                await showCustomDialog(
+                  context: context,
+                  titulo: "Preguntas generadas con IA",
+                  mensaje:
+                      "Se enviaron correctamente a Make para que se generen nuevas preguntas.",
+                  tipo: CustomDialogType.success,
+                );
+              } else {
+                _mostrarError("No se pudo notificar a Make.");
+              }
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  // DIÁLOGO DE DETALLES DE EVALUACIÓN PASADA (AJUSTADO AL DISEÑO ORIGINAL CON EMOJIS)
   Future<void> _mostrarDialogoDetallesEvaluacion(
     BuildContext context,
     String temaEvaluacion,
@@ -1044,8 +1136,8 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                                   SingleChildScrollView(
                                     scrollDirection: Axis.horizontal,
                                     child: CustomLatexText(
-                                      contenido: preguntaTexto,
-                                      fontSize: 18,
+                                      contenido: "🧠 $preguntaTexto",
+                                      fontSize: 16,
                                       prepararLatex: prepararLaTeX,
                                     ),
                                   ),
@@ -1062,7 +1154,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                                         child: CustomLatexText(
                                           contenido:
                                               "${opcion.key}) ${opcion.value}",
-                                          fontSize: 16,
+                                          fontSize: 14,
                                           prepararLatex: prepararLaTeX,
                                         ),
                                       ),
@@ -1079,7 +1171,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                                     child: CustomLatexText(
                                       contenido:
                                           "✅ Respuesta correcta: $correcta) ${opciones[correcta] ?? ''}",
-                                      fontSize: 18,
+                                      fontSize: 14,
                                       prepararLatex: prepararLaTeX,
                                       color:
                                           Colors
@@ -1093,7 +1185,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                                     child: CustomLatexText(
                                       contenido:
                                           "${esCorrecta ? '✅' : (respuestaUsuario != null && respuestaUsuario.isNotEmpty ? '❌' : '📝')} Tu respuesta: ${respuestaUsuario != null && opciones.containsKey(respuestaUsuario) ? '$respuestaUsuario) ${opciones[respuestaUsuario]}' : (respuestaUsuario == null || respuestaUsuario.isEmpty ? 'No respondida' : respuestaUsuario)}",
-                                      fontSize: 18,
+                                      fontSize: 14,
                                       prepararLatex: prepararLaTeX,
                                       color:
                                           esCorrecta
@@ -1181,15 +1273,14 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                                     items:
                                         preguntasPorTema.keys
                                             .map(
-                                              (temaNombreCompleto) =>
-                                                  DropdownMenuItem(
-                                                    value: temaNombreCompleto,
-                                                    child: Text(
-                                                      temaNombreCompleto,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
+                                              (temaNombre) => DropdownMenuItem(
+                                                value: temaNombre,
+                                                child: Text(
+                                                  temaNombre,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
                                             )
                                             .toList(),
                                     onChanged: (nuevoTema) {
@@ -1256,7 +1347,6 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                                       });
                                     }
                                   },
-                                  // readOnly: yaCalificado, // Si tu CustomLatexQuestionCard no tiene 'readOnly', coméntalo
                                   mostrarCorrecta: yaCalificado,
                                   respuestaCorrecta:
                                       pregunta["respuesta_correcta"] ??
@@ -1288,22 +1378,53 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
                               ),
                               onPressed:
                                   yaCalificado
-                                      ? () {
-                                        setState(() {
-                                          _volverASeleccion();
-                                        });
-                                      }
+                                      ? _volverASeleccion // BOTÓN PRINCIPAL AHORA ES "NUEVA EVALUACIÓN"
                                       : (respuestasUsuario.length ==
                                               preguntasDelTemaActual.length
                                           ? _calificar
                                           : null),
-                              // CORREGIDO: Para que coincida con tu imagen image_34b076.png
                               child: Text(
                                 yaCalificado
                                     ? "Nueva Evaluación"
                                     : "Calificar Evaluación",
                               ),
                             ),
+
+                          // --- BOTÓN ADICIONAL "REINTENTAR EVALUACIÓN ACTUAL" ---
+                          if (yaCalificado &&
+                              preguntasDelTemaActual.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              icon: const Icon(Icons.refresh),
+                              label: const Text("Reintentar Evaluación Actual"),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: colorPrimarioAutoevaluacion,
+                                side: BorderSide(
+                                  color: colorPrimarioAutoevaluacion
+                                      .withOpacity(0.7),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                textStyle: GoogleFonts.poppins(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(25),
+                                ),
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  respuestasUsuario.clear();
+                                  yaCalificado = false;
+                                  puntaje = 0;
+                                });
+                              },
+                            ),
+                          ],
+
+                          // --- FIN BOTÓN ADICIONAL ---
                           if (yaCalificado) ...[
                             const SizedBox(height: 24),
                             CustomScoreCard(
