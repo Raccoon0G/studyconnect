@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../services/services.dart';
-import '../widgets/widgets.dart';
+import '../services/services.dart'; // Asumo que aquí está EvaluacionService y NotificationService
+import '../widgets/widgets.dart'; // Asumo CustomAppBar, CustomLatexQuestionCard, CustomScoreCard, showCustomDialog
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../utils/utils.dart';
+import '../utils/utils.dart'; // Asumo que aquí está prepararLaTeX y CustomDialogType
 import 'package:confetti/confetti.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'dart:math'; // Para min() y max() en paginación
+
+// Colores (los usaremos como acentos)
+const Color azulSecundario = Color(0xFF1976D2);
+const Color moradoPrimario = Color(0xFF7E57C2);
+const Color colorBotonPrimario = moradoPrimario;
+const Color colorBotonSecundario = azulSecundario;
 
 class AutoevaluationPage extends StatefulWidget {
   const AutoevaluationPage({super.key});
@@ -17,33 +24,45 @@ class AutoevaluationPage extends StatefulWidget {
 
 class _AutoevaluationPageState extends State<AutoevaluationPage> {
   final List<String> temasDisponibles = [
+    // Estos son los nombres completos para mostrar en UI
     "Funciones algebraicas y trascendentes",
     "Límites de funciones y continuidad",
     "Derivada y optimización",
     "Técnicas de integración",
   ];
 
-  List<String> temasSeleccionados = [];
-  Map<String, List<Map<String, dynamic>>> preguntasPorTema = {};
-  String? temaSeleccionado;
+  // Mapeo de nombres completos a claves para Firestore (si es diferente o para consistencia)
+  final Map<String, String> mapTemaToClave = {
+    "Funciones algebraicas y trascendentes": "FnAlg",
+    "Límites de funciones y continuidad": "Lim",
+    "Derivada y optimización": "Der",
+    "Técnicas de integración": "TecInteg",
+  };
+
+  // Mapeo de claves a nombres completos (inverso para _nombreTema)
+  // Se generará a partir de mapTemaToClave o puedes definirlo como _nombreTema lo hace
+
+  List<String> temasSeleccionados =
+      []; // Almacena los nombres completos de los temas seleccionados
+  Map<String, List<Map<String, dynamic>>> preguntasPorTema =
+      {}; // Clave: Nombre completo del tema
+  String?
+  temaSeleccionado; // Tema activo (nombre completo) una vez generada la evaluación
   Map<int, String> respuestasUsuario = {};
   bool yaCalificado = false;
   int puntaje = 0;
   bool cargando = false;
-  bool mostrarBotonGenerarNuevas = false;
   final FirebaseFirestore firestore = FirebaseFirestore.instance;
   final EvaluacionService evaluacionService = EvaluacionService();
+
   late ConfettiController _confettiController;
   late ConfettiController _confettiLeftController;
   late ConfettiController _confettiRightController;
   late ConfettiController _confettiBottomController;
-  bool yaSeNotificoIA = false;
-  bool envioExitoso = false;
 
   final AudioPlayer _audioPlayer = AudioPlayer();
-
   User? user;
-  int cantidadPreguntas = 25; // Default
+  int cantidadPreguntas = 25;
 
   @override
   void initState() {
@@ -61,7 +80,6 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
     _confettiBottomController = ConfettiController(
       duration: const Duration(seconds: 2),
     );
-
     cargarTotalesPorTema();
   }
 
@@ -75,22 +93,75 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
     super.dispose();
   }
 
-  Map<String, int> totalPreguntasPorTema = {};
+  Map<String, int> totalPreguntasPorTema =
+      {}; // Clave: Nombre completo del tema
 
-  Future<void> cargarTotalesPorTema() async {
-    for (final tema in temasDisponibles) {
-      final snapshot =
-          await firestore
-              .collection('preguntas_por_tema')
-              .where('tema', isEqualTo: tema)
-              .get();
-
-      totalPreguntasPorTema[tema] = snapshot.size;
+  //=============== MÉTODO FALTANTE AÑADIDO AQUÍ ===============//
+  String _nombreTema(String clave) {
+    // Convierte clave Firestore a nombre legible
+    // Este es el inverso de mapTemaToClave, o puedes usar una estructura similar
+    switch (clave) {
+      case 'FnAlg':
+        return 'Funciones algebraicas y trascendentes';
+      case 'Lim':
+        return 'Límites de funciones y continuidad';
+      case 'Der':
+        return 'Derivada y optimización';
+      case 'TecInteg':
+        return 'Técnicas de integración';
+      // También manejar el caso inverso si recibes el nombre completo y necesitas la clave
+      case "Funciones algebraicas y trascendentes":
+        return "Funciones algebraicas y trascendentes";
+      case "Límites de funciones y continuidad":
+        return "Límites de funciones y continuidad";
+      case "Derivada y optimización":
+        return "Derivada y optimización";
+      case "Técnicas de integración":
+        return "Técnicas de integración";
+      default:
+        return clave;
     }
-    setState(() {}); // Actualiza UI
   }
 
-  Future<void> obtenerPreguntas(List<String> temas) async {
+  String _claveTema(String nombreCompleto) {
+    // Convierte nombre legible a clave Firestore
+    return mapTemaToClave[nombreCompleto] ??
+        nombreCompleto; // Fallback a nombreCompleto si no se encuentra
+  }
+
+  Future<void> cargarTotalesPorTema() async {
+    Map<String, int> conteoLocal = {};
+    for (final temaNombreCompleto in temasDisponibles) {
+      // Iterar sobre nombres completos
+      final claveTema = _claveTema(
+        temaNombreCompleto,
+      ); // Obtener la clave para Firestore
+      try {
+        final snapshot =
+            await firestore
+                .collection('preguntas_por_tema')
+                .where(
+                  'tema',
+                  isEqualTo: claveTema,
+                ) // Usar la clave del tema para la consulta
+                .count()
+                .get();
+        conteoLocal[temaNombreCompleto] = snapshot.count ?? 0;
+      } catch (e) {
+        debugPrint(
+          "Error cargando totales para $claveTema ($temaNombreCompleto): $e",
+        );
+        conteoLocal[temaNombreCompleto] = 0;
+      }
+    }
+    if (mounted) {
+      setState(() {
+        totalPreguntasPorTema = conteoLocal;
+      });
+    }
+  }
+
+  Future<void> obtenerPreguntas(List<String> temasNombresCompletos) async {
     if (user == null) {
       _mostrarError("Debes iniciar sesión para generar evaluaciones.");
       return;
@@ -106,212 +177,107 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
     });
 
     Map<String, List<Map<String, dynamic>>> nuevasPreguntasPorTema = {};
-    bool activarGenerarNuevas = false;
 
-    for (String tema in temas) {
-      final snapshot =
-          await firestore
-              .collection('preguntas_por_tema')
-              .where('tema', isEqualTo: tema)
-              .get();
+    for (String temaNombreCompleto in temasNombresCompletos) {
+      final claveTema = _claveTema(
+        temaNombreCompleto,
+      ); // Usar clave para la consulta
+      try {
+        final snapshot =
+            await firestore
+                .collection('preguntas_por_tema')
+                .where('tema', isEqualTo: claveTema)
+                .get();
+        List<Map<String, dynamic>> todas =
+            snapshot.docs.map((doc) {
+              final data = doc.data();
+              data['id'] = doc.id;
+              return data;
+            }).toList();
+        todas.shuffle();
 
-      List<Map<String, dynamic>> todas =
-          snapshot.docs.map((doc) {
-            final data = doc.data();
-            data['id'] = doc.id;
-            return data;
-          }).toList();
+        final lastEval =
+            await firestore
+                .collection('evaluaciones_realizadas')
+                .where('uid_usuario', isEqualTo: user?.uid)
+                .where('tema', isEqualTo: claveTema) // Usar claveTema
+                .orderBy('fecha_realizacion', descending: true)
+                .limit(1)
+                .get();
 
-      // Shuffle aleatorio (esto mejora aleatoriedad)
-      todas.shuffle();
+        List<String> preguntasAnteriores = [];
+        if (lastEval.docs.isNotEmpty) {
+          preguntasAnteriores = List<String>.from(
+            lastEval.docs.first['preguntas_ids'] ?? [],
+          );
+        }
 
-      // Revisión del historial
-      final lastEval =
-          await firestore
-              .collection('evaluaciones_realizadas')
-              .where('uid_usuario', isEqualTo: user?.uid)
-              .where('tema', isEqualTo: tema)
-              .orderBy('fecha_realizacion', descending: true)
-              .limit(1)
-              .get();
+        List<Map<String, dynamic>> noRepetidas =
+            todas.where((p) => !preguntasAnteriores.contains(p['id'])).toList();
+        List<Map<String, dynamic>> seleccionadas = [];
 
-      List<String> preguntasAnteriores = [];
-      if (lastEval.docs.isNotEmpty) {
-        preguntasAnteriores = List<String>.from(
-          lastEval.docs.first['preguntas_ids'] ?? [],
-        );
-      }
+        if (noRepetidas.length >= cantidadPreguntas) {
+          seleccionadas = noRepetidas.take(cantidadPreguntas).toList();
+        } else {
+          seleccionadas = [...noRepetidas];
+          List<Map<String, dynamic>> restantes =
+              todas
+                  .where(
+                    (p) => !seleccionadas.map((e) => e['id']).contains(p['id']),
+                  )
+                  .toList();
+          restantes.shuffle();
+          int faltantes = cantidadPreguntas - seleccionadas.length;
+          seleccionadas.addAll(restantes.take(faltantes));
+        }
 
-      // Filtra las nuevas primero
-      List<Map<String, dynamic>> noRepetidas =
-          todas.where((p) => !preguntasAnteriores.contains(p['id'])).toList();
-
-      // Si no hay suficientes nuevas, rellena aleatoriamente
-      List<Map<String, dynamic>> seleccionadas = [];
-
-      if (noRepetidas.length >= cantidadPreguntas) {
-        seleccionadas = noRepetidas.take(cantidadPreguntas).toList();
-      } else {
-        seleccionadas = [...noRepetidas];
-        List<Map<String, dynamic>> restantes =
-            todas
-                .where(
-                  (p) => !seleccionadas.map((e) => e['id']).contains(p['id']),
+        final preguntasMapeadas =
+            seleccionadas
+                .map(
+                  (p) => {
+                    'pregunta': p['pregunta'],
+                    'opciones': p['opciones'],
+                    'respuesta_correcta':
+                        p['respuesta_correcta'] ?? p['respuestaCorrecta'],
+                    'id': p['id'],
+                  },
                 )
                 .toList();
 
-        restantes.shuffle();
-        int faltantes = cantidadPreguntas - seleccionadas.length;
-        seleccionadas.addAll(restantes.take(faltantes));
+        // Usar nombre completo como clave para el mapa de UI
+        nuevasPreguntasPorTema[temaNombreCompleto] = preguntasMapeadas;
+
+        await firestore.collection('evaluaciones_realizadas').add({
+          'uid_usuario': user!.uid,
+          'nombre_usuario': await _obtenerNombreDesdeUsuarios(user!.uid),
+          'tema': claveTema, // Guardar claveTema en Firestore
+          'preguntas_ids': seleccionadas.map((p) => p['id']).toList(),
+          'respuestas_usuario': {},
+          'calificacion': 0,
+          'fecha_realizacion': FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        debugPrint(
+          "Error obteniendo preguntas para $claveTema ($temaNombreCompleto): $e",
+        );
+        _mostrarError(
+          "Error al cargar preguntas para el tema '$temaNombreCompleto'. Intenta de nuevo.",
+        );
       }
-
-      // Contar cuántas están repetidas
-      final repetidas =
-          seleccionadas
-              .where((p) => preguntasAnteriores.contains(p['id']))
-              .length;
-
-      final limiteRepetidas = cantidadPreguntas ~/ 10; // 10% de repetidas
-      if (repetidas >= limiteRepetidas) {
-        print("⚠️ Alta cantidad de repetidas: $repetidas");
-        // Solo sirve como mensaje informativo ahora
-      }
-      // Mapear para usar en UI
-      final preguntasMapeadas =
-          seleccionadas.map((p) {
-            return {
-              'pregunta': p['pregunta'],
-              'opciones': p['opciones'],
-              'respuesta_correcta':
-                  p['respuesta_correcta'] ?? p['respuestaCorrecta'],
-              'id': p['id'],
-            };
-          }).toList();
-
-      nuevasPreguntasPorTema[tema] = preguntasMapeadas;
-
-      // Guardar evaluación generada
-      await firestore.collection('evaluaciones_realizadas').add({
-        'uid_usuario': user!.uid,
-        'nombre_usuario': await _obtenerNombreDesdeUsuarios(user!.uid),
-        'tema': tema,
-        'preguntas_ids': seleccionadas.map((p) => p['id']).toList(),
-        'respuestas_usuario': {},
-        'calificacion': 0,
-        'fecha_realizacion': FieldValue.serverTimestamp(),
-      });
     }
 
-    setState(() {
-      preguntasPorTema = nuevasPreguntasPorTema;
-      temaSeleccionado = nuevasPreguntasPorTema.keys.first;
-      mostrarBotonGenerarNuevas = activarGenerarNuevas;
-      cargando = false;
-    });
-  }
-
-  Widget _botonGenerarConIA() {
-    return Card(
-      color: Colors.yellow[100],
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Text(
-                "⚠️ ¿Preguntas agotadas o repetidas?",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.orange[800],
-                  fontSize: 16,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: Center(
-                child: const Text(
-                  "Puedes generar un nuevo conjunto de preguntas mediante IA (ChatGPT). "
-                  "Este proceso puede tardar unos segundos y tiene un costo en recursos. "
-                  "Úsalo solo si crees que ya no hay preguntas nuevas disponibles.",
-                  style: TextStyle(fontSize: 14),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.amber,
-                  foregroundColor: Colors.black,
-                ),
-                icon: const Icon(Icons.bolt),
-                label: const Text("Generar con IA (Make)"),
-                onPressed: () async {
-                  if (temasSeleccionados.length != 1) {
-                    _mostrarError("Selecciona solo un tema para usar IA.");
-                    return;
-                  }
-
-                  final tema = temasSeleccionados.first;
-
-                  setState(() {
-                    cargando = true;
-                    yaCalificado = false;
-                    respuestasUsuario.clear();
-                    puntaje = 0;
-                    yaSeNotificoIA = false;
-                    envioExitoso = false;
-                  });
-
-                  final notificado = await evaluacionService
-                      .notificarGeneracionPreguntas(tema);
-
-                  setState(() {
-                    cargando = false;
-                    yaSeNotificoIA = notificado;
-                  });
-
-                  if (notificado) {
-                    await showDialog(
-                      context: context,
-                      builder:
-                          (_) => AlertDialog(
-                            title: const Text(
-                              "✅ Preguntas generadas con éxito",
-                            ),
-                            content: const Text(
-                              "Las preguntas han sido enviadas correctamente para generarse con IA. El banco de preguntas se actualizará.",
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () async {
-                                  Navigator.of(context).pop();
-                                  setState(() => cargando = true);
-                                  await Future.delayed(
-                                    const Duration(seconds: 3),
-                                  ); // ⏳ espera breve
-                                  await cargarTotalesPorTema(); // 🔄 refresca contador
-                                  setState(() => cargando = false);
-                                },
-                                child: const Text("Aceptar"),
-                              ),
-                            ],
-                          ),
-                    );
-                  } else {
-                    _mostrarError("No se pudo notificar a Make.");
-                  }
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    if (mounted) {
+      setState(() {
+        preguntasPorTema = nuevasPreguntasPorTema;
+        if (nuevasPreguntasPorTema.isNotEmpty) {
+          temaSeleccionado =
+              nuevasPreguntasPorTema
+                  .keys
+                  .first; // temaSeleccionado es nombre completo
+        }
+        cargando = false;
+      });
+    }
   }
 
   Future<String> _obtenerNombreDesdeUsuarios(String uid) async {
@@ -328,7 +294,6 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
 
   Future<List<Map<String, dynamic>>> obtenerEvaluacionesPasadas() async {
     if (user == null) return [];
-
     final snapshot =
         await FirebaseFirestore.instance
             .collection('evaluaciones_realizadas')
@@ -336,62 +301,37 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
             .orderBy('fecha_realizacion', descending: true)
             .limit(10)
             .get();
-
     return snapshot.docs.map((doc) {
       final data = doc.data();
+      final claveTema =
+          data['tema'] ?? 'Sin tema'; // Esto es la clave, ej: 'FnAlg'
+      final temaNombreCompleto = _nombreTema(
+        claveTema,
+      ); // Convertir a nombre legible
 
-      // Campos que esperas
-      final tema = data['tema'] ?? 'Sin tema';
       final calificacionRaw = data['calificacion'] ?? 0;
-
-      final preguntas = (data['preguntas_ids'] as List?)?.length ?? 1;
-      final calificacionFinal = ((calificacionRaw / preguntas) * 10).clamp(
-        0,
-        10,
-      );
-
-      // Manejo especial para fecha
+      final preguntasCount = (data['preguntas_ids'] as List?)?.length ?? 1;
+      final calificacionFinal =
+          ((calificacionRaw / (preguntasCount > 0 ? preguntasCount : 1)) * 10)
+              .clamp(0.0, 10.0);
       final rawFecha = data['fecha_realizacion'];
       String fechaFormateada = 'Sin fecha';
-
-      // ✅ Solo conviertes si ES un Timestamp
       if (rawFecha is Timestamp) {
         final fecha = rawFecha.toDate();
         fechaFormateada =
             "${fecha.day}/${fecha.month}/${fecha.year} ${fecha.hour}:${fecha.minute.toString().padLeft(2, '0')}";
       } else {
-        // 🔎 Si no es Timestamp, solo mostramos 'Sin fecha' y avisamos en consola
         print("⚠️ 'fecha_realizacion' no es Timestamp: $rawFecha");
       }
-
-      // Resultado que regresa esta función
       return {
-        'tema': tema,
+        'tema': temaNombreCompleto, // Usar nombre completo para UI
+        'clave_tema': claveTema, // Mantener clave por si se necesita
         'calificacion': calificacionFinal.toStringAsFixed(1),
         'fecha': fechaFormateada,
-        'preguntas': preguntas,
+        'preguntas': preguntasCount,
         'respuestas_usuario': data['respuestas_usuario'] ?? {},
-        'preguntas_ids': data['preguntas_ids'] ?? [],
-        'respuestas_usuario': data['respuestas_usuario'],
-        'docRef': doc.reference, // para obtener detalles si hace falta
+        'preguntas_ids': data['preguntas_ids'] ?? [], 'docRef': doc.reference,
       };
-    }).toList();
-  }
-
-  Future<List<Map<String, dynamic>>> obtenerDetallesPreguntas(
-    List<String> ids,
-    String tema,
-  ) async {
-    final snapshot =
-        await firestore
-            .collection('preguntas_por_tema')
-            .where(FieldPath.documentId, whereIn: ids)
-            .get();
-
-    return snapshot.docs.map((doc) {
-      final data = doc.data();
-      data['id'] = doc.id;
-      return data;
     }).toList();
   }
 
@@ -400,12 +340,24 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
       context: context,
       builder:
           (context) => AlertDialog(
-            title: const Text("Error"),
-            content: Text(mensaje),
+            backgroundColor: Theme.of(context).cardColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            title: Text(
+              "Error",
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+            ),
+            content: Text(mensaje, style: GoogleFonts.poppins()),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text("Aceptar"),
+                child: Text(
+                  "Aceptar",
+                  style: GoogleFonts.poppins(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
               ),
             ],
           ),
@@ -413,9 +365,14 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
   }
 
   void _calificar() async {
-    final preguntas = preguntasPorTema[temaSeleccionado] ?? [];
-    int score = 0;
+    if (temaSeleccionado == null) return; // No hay tema activo
+    final claveTemaSeleccionado = _claveTema(
+      temaSeleccionado!,
+    ); // Convertir a clave para Firestore
+    final preguntas = preguntasPorTema[temaSeleccionado!] ?? [];
 
+    if (preguntas.isEmpty) return;
+    int score = 0;
     for (int i = 0; i < preguntas.length; i++) {
       final correcta =
           preguntas[i]["respuesta_correcta"] ??
@@ -426,11 +383,8 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
       }
     }
 
-    final preguntasIds = preguntas.map((p) => p['id'] ?? '').toList();
-
     final uid = user?.uid;
     String nombre = user?.displayName ?? "Anónimo";
-
     if (uid != null) {
       final doc = await firestore.collection('usuarios').doc(uid).get();
       if (doc.exists && doc.data()?['Nombre'] != null) {
@@ -438,16 +392,14 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
       }
     }
 
-    // ✅ Buscar la evaluación más reciente del tema actual (guardada al generar)
     final lastEval =
         await firestore
             .collection('evaluaciones_realizadas')
             .where('uid_usuario', isEqualTo: uid)
-            .where('tema', isEqualTo: temaSeleccionado)
+            .where('tema', isEqualTo: claveTemaSeleccionado) // Usar claveTema
             .orderBy('fecha_realizacion', descending: true)
             .limit(1)
             .get();
-
     if (lastEval.docs.isNotEmpty) {
       await lastEval.docs.first.reference.update({
         'respuestas_usuario': respuestasUsuario.map(
@@ -462,19 +414,31 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
       context: context,
       builder:
           (context) => AlertDialog(
-            title: const Text("✅ Evaluación guardada"),
-            content: const Text(
+            backgroundColor: Theme.of(context).cardColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            title: Text(
+              "✅ Evaluación Guardada",
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+            ),
+            content: Text(
               "Tus respuestas y calificación han sido guardadas exitosamente.",
+              style: GoogleFonts.poppins(),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text("Aceptar"),
+                child: Text(
+                  "Aceptar",
+                  style: GoogleFonts.poppins(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
               ),
             ],
           ),
     );
-
     setState(() {
       yaCalificado = true;
       puntaje = score;
@@ -482,7 +446,6 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
 
     final calificacionFinal = (score / preguntas.length) * 10;
     final aprobado = calificacionFinal >= 6.0;
-
     await showCustomDialog(
       context: context,
       titulo: aprobado ? "¡Felicidades, $nombre! 🎉" : "Ánimo, $nombre 😢",
@@ -492,20 +455,17 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
               : "Obtuviste ${calificacionFinal.toStringAsFixed(1)}. No te preocupes, sigue practicando y lo lograrás.",
       tipo: aprobado ? CustomDialogType.success : CustomDialogType.error,
     );
-
-    // 🔔 Enviar notificación al calificar
     await NotificationService.crearNotificacion(
-      uidDestino: user!.uid, // o el UID del tutor si lo deseas
+      uidDestino: user!.uid,
       tipo: 'calificacion',
       titulo: "✅ Evaluación completada",
       contenido:
-          "$nombre has terminado una autoevaluación del tema '$temaSeleccionado'.",
-      referenciaId: temaSeleccionado ?? '',
-      tema: temaSeleccionado,
+          "$nombre has terminado una autoevaluación del tema '${_nombreTema(claveTemaSeleccionado)}'.", // Usar nombre legible
+      referenciaId: claveTemaSeleccionado,
+      tema: claveTemaSeleccionado,
       uidEmisor: user?.uid,
       nombreEmisor: nombre,
     );
-
     if (aprobado) {
       await _audioPlayer.play(AssetSource('audio/applause.mp3'));
       _confettiController.play();
@@ -515,109 +475,13 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
     }
   }
 
-  Future<void> generarPreguntasExternas() async {
-    try {
-      setState(() => cargando = true);
-      if (user == null || user!.uid.isEmpty) {
-        _mostrarError("No se pudo identificar al usuario.");
-        return;
-      }
-
-      final tema = temasSeleccionados.first;
-      final nuevasPreguntas = await evaluacionService
-          .obtenerPreguntasDesdeFirestore(tema, cantidad: cantidadPreguntas);
-
-      setState(() {
-        preguntasPorTema = {
-          temaSeleccionado!:
-              nuevasPreguntas[temaSeleccionado!]!
-                  .map(
-                    (p) => {
-                      'pregunta': p.pregunta,
-                      'opciones': p.opciones,
-                      'respuesta_correcta': p.respuestaCorrecta,
-                    },
-                  )
-                  .toList(),
-        };
-        cargando = false;
-      });
-    } catch (e) {
-      setState(() => cargando = false);
-      _mostrarError("Error al generar preguntas automáticamente:\n$e");
-    }
-  }
-
-  // En build() solo agregamos el aviso + botón si mostrarBotonGenerarNuevas == true
-  Widget _avisoGenerarNuevas() {
-    return Column(
-      children: [
-        Center(
-          child: const Text(
-            "Se han encontrado preguntas repetidas. ¿Deseas generar nuevas preguntas con IA?",
-            style: TextStyle(color: Colors.red),
-            textAlign: TextAlign.center,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Center(
-          child: ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.amber,
-              foregroundColor: Colors.black,
-            ),
-            icon: const Icon(Icons.bolt),
-            label: const Text("Generar con IA (Make)"),
-            onPressed: () async {
-              if (temasSeleccionados.length != 1) {
-                _mostrarError("Selecciona solo un tema para usar IA.");
-                return;
-              }
-
-              final tema = temasSeleccionados.first;
-
-              setState(() {
-                cargando = true;
-                yaCalificado = false;
-                respuestasUsuario.clear();
-                puntaje = 0;
-                yaSeNotificoIA = false;
-                envioExitoso = false;
-              });
-
-              final notificado = await evaluacionService
-                  .notificarGeneracionPreguntas(tema);
-
-              setState(() {
-                cargando = false;
-                yaSeNotificoIA = notificado;
-              });
-
-              if (notificado) {
-                await showCustomDialog(
-                  context: context,
-                  titulo: "Preguntas generadas con IA",
-                  mensaje:
-                      "Se enviaron correctamente a Make para que se generen nuevas preguntas.",
-                  tipo: CustomDialogType.success,
-                );
-              } else {
-                _mostrarError("No se pudo notificar a Make.");
-              }
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
   Map<String, String> _convertirOpciones(dynamic rawOpciones) {
     if (rawOpciones is Map) {
       return Map<String, String>.from(rawOpciones);
     } else if (rawOpciones is List) {
       final letras = ['A', 'B', 'C', 'D', 'E'];
       return {
-        for (int i = 0; i < rawOpciones.length; i++)
+        for (int i = 0; i < rawOpciones.length && i < letras.length; i++)
           letras[i]: rawOpciones[i].toString(),
       };
     } else {
@@ -627,671 +491,583 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
 
   void _volverASeleccion() {
     setState(() {
-      // La línea clave que te regresa a la pantalla de selección
       preguntasPorTema.clear();
-
-      // Limpiamos el resto del estado de la evaluación para evitar problemas
       respuestasUsuario.clear();
       yaCalificado = false;
       puntaje = 0;
-
-      // Opcional pero recomendado: deseleccionar los temas
       temasSeleccionados.clear();
+      temaSeleccionado = null;
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final preguntas = preguntasPorTema[temaSeleccionado] ?? [];
-
-    return Stack(
-      children: [
-        Scaffold(
-          appBar: const CustomAppBar(showBack: true),
-
-          body: LayoutBuilder(
-            builder: (context, constraints) {
-              const double kMaxContentWidth = 1100.0;
-
-              return Padding(
-                padding: const EdgeInsets.all(16.0),
-                // 1. Centra el contenido en la pantalla
-                child: Center(
-                  // 2. Limita el ancho máximo del contenido
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      maxWidth: kMaxContentWidth,
-                    ),
-                    // 3. Tu columna original va aquí dentro
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (preguntasPorTema.isEmpty) ...[
-                          Text(
-                            "Temas disponibles",
-                            style: GoogleFonts.roboto(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
+  Widget _buildConfiguracionUI(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 3,
+      margin: const EdgeInsets.only(
+        bottom: 20,
+        left: 4,
+        right: 4,
+      ), // Margen ligero para no pegar a bordes
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: theme.cardColor, // Usar color de tarjeta del tema
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              "Configura tu Autoevaluación",
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: theme.textTheme.titleLarge?.color,
+              ),
+            ),
+            const SizedBox(height: 24),
+            DropdownButtonFormField<int>(
+              value: cantidadPreguntas,
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    cantidadPreguntas = value;
+                  });
+                }
+              },
+              items:
+                  [5, 10, 15, 20, 25, 30]
+                      .map(
+                        (n) => DropdownMenuItem(
+                          value: n,
+                          child: Text('$n preguntas'),
+                        ),
+                      )
+                      .toList(),
+              decoration: InputDecoration(
+                labelText: "Cantidad de preguntas por tema",
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                prefixIcon: const Icon(Icons.format_list_numbered),
+                filled: true,
+              ),
+              dropdownColor:
+                  theme.canvasColor, // Color de fondo del desplegable
+            ),
+            const SizedBox(height: 20),
+            Text(
+              "Selecciona los temas:",
+              style: GoogleFonts.poppins(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                color: theme.textTheme.titleMedium?.color,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children:
+                  temasDisponibles.map((temaNombreCompleto) {
+                    final seleccionado = temasSeleccionados.contains(
+                      temaNombreCompleto,
+                    );
+                    final total =
+                        totalPreguntasPorTema[temaNombreCompleto] ?? 0;
+                    return FilterChip(
+                      label: Text(
+                        "$temaNombreCompleto ($total)",
+                        style: GoogleFonts.poppins(
+                          color:
+                              seleccionado
+                                  ? theme.colorScheme.onPrimary
+                                  : theme.chipTheme.labelStyle?.color,
+                        ),
+                      ),
+                      selected: seleccionado,
+                      onSelected: (value) {
+                        setState(() {
+                          if (value) {
+                            temasSeleccionados.add(temaNombreCompleto);
+                          } else {
+                            temasSeleccionados.remove(temaNombreCompleto);
+                          }
+                        });
+                      },
+                      selectedColor: colorBotonPrimario,
+                      checkmarkColor: theme.colorScheme.onPrimary,
+                      backgroundColor: theme.chipTheme.backgroundColor,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        side: BorderSide(
+                          color:
+                              seleccionado
+                                  ? colorBotonPrimario
+                                  : theme.dividerColor,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+            ),
+            const SizedBox(height: 28),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorBotonPrimario,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                textStyle: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(25),
+                ),
+              ),
+              onPressed:
+                  temasSeleccionados.isNotEmpty
+                      ? () => obtenerPreguntas(temasSeleccionados)
+                      : null,
+              icon: const Icon(Icons.play_circle_outline_rounded, size: 22),
+              label: const Text("Generar Evaluación"),
+            ),
+            const SizedBox(height: 12),
+            if (temasSeleccionados.length == 1)
+              _buildBotonGenerarConIAEstilizado(
+                context,
+                temasSeleccionados.first,
+              ),
+            const SizedBox(height: 16),
+            TextButton.icon(
+              // Cambiado a TextButton para un look más secundario
+              icon: const Icon(Icons.history_rounded),
+              label: const Text("Ver Resultados Pasados"),
+              style: TextButton.styleFrom(
+                foregroundColor:
+                    theme.colorScheme.primary, // Usar color primario del tema
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                textStyle: GoogleFonts.poppins(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              onPressed: () async {
+                final historial = await obtenerEvaluacionesPasadas();
+                if (!mounted) return;
+                if (historial.isEmpty) {
+                  _mostrarError("No tienes evaluaciones anteriores.");
+                  return;
+                }
+                await showDialog(
+                  context: context,
+                  builder:
+                      (_) => AlertDialog(
+                        backgroundColor:
+                            Theme.of(context).dialogBackgroundColor,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        title: Text(
+                          "🕓 Tus Evaluaciones Pasadas",
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
                           ),
-                          const SizedBox(height: 8),
-                          DropdownButtonFormField<int>(
-                            value: cantidadPreguntas,
-                            onChanged: (value) {
-                              if (value != null) {
-                                setState(() {
-                                  cantidadPreguntas = value;
-                                });
-                              }
-                            },
-                            items:
-                                [5, 10, 15, 20, 25, 30]
-                                    .map(
-                                      (n) => DropdownMenuItem(
-                                        value: n,
-                                        child: Text('$n preguntas'),
-                                      ),
-                                    )
-                                    .toList(),
-                            decoration: const InputDecoration(
-                              labelText: "Cantidad de preguntas",
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Center(
-                            child: Wrap(
-                              spacing: 8,
-                              runSpacing: 4,
-                              children:
-                                  temasDisponibles.map((tema) {
-                                    final seleccionado = temasSeleccionados
-                                        .contains(tema);
-                                    return FilterChip(
-                                      label: Text(
-                                        "$tema (${totalPreguntasPorTema[tema] ?? 0})",
-                                      ),
-                                      selected: seleccionado,
-                                      onSelected: (value) {
-                                        setState(() {
-                                          if (value) {
-                                            temasSeleccionados.add(tema);
-                                          } else {
-                                            temasSeleccionados.remove(tema);
-                                          }
-                                        });
-                                      },
-                                    );
-                                  }).toList(),
-                            ),
-                          ),
-
-                          const SizedBox(height: 12),
-                          Center(
-                            child: ElevatedButton.icon(
-                              onPressed:
-                                  temasSeleccionados.isNotEmpty
-                                      ? () =>
-                                          obtenerPreguntas(temasSeleccionados)
-                                      : null,
-                              icon: const Icon(Icons.refresh),
-                              label: const Text("Generar evaluación"),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          if (temasSeleccionados.isNotEmpty)
-                            _botonGenerarConIA(),
-
-                          const SizedBox(height: 12),
-                          Center(
-                            child: ElevatedButton.icon(
-                              icon: const Icon(Icons.history),
-                              label: const Text("Ver resultados pasados"),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.grey[800],
-                                foregroundColor: Colors.white,
-                              ),
-                              onPressed: () async {
-                                final historial =
-                                    await obtenerEvaluacionesPasadas();
-
-                                if (historial.isEmpty) {
+                        ),
+                        content: SizedBox(
+                          width: double.maxFinite,
+                          child: ListView.separated(
+                            shrinkWrap: true,
+                            itemCount: historial.length,
+                            separatorBuilder: (_, __) => const Divider(),
+                            itemBuilder: (ctx, idx) {
+                              final eval = historial[idx];
+                              return ListTile(
+                                onTap: () async {
+                                  if (!mounted) return;
+                                  Navigator.pop(
+                                    context,
+                                  ); // Cierra el diálogo de historial
+                                  // Lógica para cargar y mostrar la revisión de esta evaluación
+                                  // Esto podría implicar cargar las preguntas y respuestas
+                                  // y establecer un estado de "revisión" en la UI.
                                   _mostrarError(
-                                    "No tienes evaluaciones anteriores.",
+                                    "Funcionalidad de revisar evaluación pasada no implementada completamente.",
                                   );
-                                  return;
-                                }
-                                await showDialog(
-                                  context: context,
-                                  builder:
-                                      (_) => AlertDialog(
-                                        backgroundColor: Colors.white,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                        ),
-                                        title: const Text(
-                                          "🕓 Tus evaluaciones pasadas",
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        content: SizedBox(
-                                          width: double.maxFinite,
-                                          child: ListView.separated(
-                                            shrinkWrap: true,
-                                            itemCount: historial.length,
-                                            separatorBuilder:
-                                                (_, __) => const Divider(),
-
-                                            itemBuilder: (context, index) {
-                                              final eval = historial[index];
-                                              return ListTile(
-                                                onTap: () async {
-                                                  final List<String> ids =
-                                                      List<String>.from(
-                                                        eval['preguntas_ids'] ??
-                                                            [],
-                                                      );
-                                                  final Map<String, dynamic>
-                                                  respuestas = Map<
-                                                    String,
-                                                    dynamic
-                                                  >.from(
-                                                    eval['respuestas_usuario'] ??
-                                                        {},
-                                                  );
-                                                  final String tema =
-                                                      eval['tema'] ??
-                                                      'Tema desconocido';
-
-                                                  final snapshot =
-                                                      await FirebaseFirestore
-                                                          .instance
-                                                          .collection(
-                                                            'preguntas_por_tema',
-                                                          )
-                                                          .where(
-                                                            FieldPath
-                                                                .documentId,
-                                                            whereIn: ids,
-                                                          )
-                                                          .get();
-
-                                                  final preguntasOrdenadas =
-                                                      ids
-                                                          .map((id) {
-                                                            try {
-                                                              final doc = snapshot
-                                                                  .docs
-                                                                  .firstWhere(
-                                                                    (d) =>
-                                                                        d.id ==
-                                                                        id,
-                                                                  );
-                                                              final data =
-                                                                  doc.data();
-
-                                                              final opciones =
-                                                                  _convertirOpciones(
-                                                                    data['opciones'],
-                                                                  );
-                                                              final respuestaUsuario =
-                                                                  respuestas[ids
-                                                                      .indexOf(
-                                                                        id,
-                                                                      )
-                                                                      .toString()] ??
-                                                                  '';
-
-                                                              return {
-                                                                'pregunta':
-                                                                    data['pregunta'],
-                                                                'opciones':
-                                                                    opciones,
-                                                                'respuesta_correcta':
-                                                                    data['respuesta_correcta'] ??
-                                                                    data['respuestaCorrecta'],
-                                                                'id': doc.id,
-                                                                'respuesta_usuario':
-                                                                    respuestaUsuario,
-                                                              };
-                                                            } catch (e) {
-                                                              print(
-                                                                "❌ Pregunta no encontrada: $id",
-                                                              );
-                                                              return null;
-                                                            }
-                                                          })
-                                                          .where(
-                                                            (p) => p != null,
-                                                          )
-                                                          .toList();
-
-                                                  await showDialog(
-                                                    context: context,
-                                                    builder:
-                                                        (_) => AlertDialog(
-                                                          backgroundColor:
-                                                              Colors.white,
-                                                          shape: RoundedRectangleBorder(
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  12,
-                                                                ),
-                                                          ),
-                                                          title: Text(
-                                                            "📘 Preguntas - $tema",
-                                                          ),
-                                                          content: SizedBox(
-                                                            width:
-                                                                double
-                                                                    .maxFinite,
-                                                            child: ListView.separated(
-                                                              shrinkWrap: true,
-                                                              itemCount:
-                                                                  preguntasOrdenadas
-                                                                      .length,
-                                                              separatorBuilder:
-                                                                  (_, __) =>
-                                                                      const Divider(),
-                                                              itemBuilder: (
-                                                                context,
-                                                                index,
-                                                              ) {
-                                                                final p =
-                                                                    preguntasOrdenadas[index]!;
-                                                                final opciones =
-                                                                    Map<
-                                                                      String,
-                                                                      String
-                                                                    >.from(
-                                                                      p['opciones'],
-                                                                    );
-                                                                final correcta =
-                                                                    p['respuesta_correcta'];
-                                                                final usuario =
-                                                                    p['respuesta_usuario'];
-                                                                final esCorrecta =
-                                                                    usuario ==
-                                                                    correcta;
-
-                                                                return Card(
-                                                                  // Usar un Card puede mejorar la presentación
-                                                                  margin:
-                                                                      const EdgeInsets.symmetric(
-                                                                        vertical:
-                                                                            8.0,
-                                                                      ),
-                                                                  elevation: 1,
-                                                                  color:
-                                                                      esCorrecta
-                                                                          ? Colors
-                                                                              .green
-                                                                              .shade50
-                                                                          : (usuario == null ||
-                                                                                  usuario.isEmpty
-                                                                              ? Colors.grey.shade100
-                                                                              : Colors.red.shade50),
-                                                                  child: Padding(
-                                                                    padding:
-                                                                        const EdgeInsets.all(
-                                                                          12.0,
-                                                                        ),
-                                                                    child: Column(
-                                                                      crossAxisAlignment:
-                                                                          CrossAxisAlignment
-                                                                              .start,
-                                                                      children: [
-                                                                        Text(
-                                                                          "Pregunta ${index + 1}",
-                                                                          style: const TextStyle(
-                                                                            fontWeight:
-                                                                                FontWeight.bold,
-                                                                            fontSize:
-                                                                                16,
-                                                                          ),
-                                                                        ),
-                                                                        const SizedBox(
-                                                                          height:
-                                                                              8,
-                                                                        ),
-
-                                                                        // PREGUNTA
-                                                                        SingleChildScrollView(
-                                                                          // <--- SOLUCIÓN
-                                                                          scrollDirection:
-                                                                              Axis.horizontal,
-                                                                          child: CustomLatexText(
-                                                                            contenido:
-                                                                                "🧠 ${p['pregunta']}",
-                                                                            fontSize:
-                                                                                17,
-                                                                            // scrollHorizontal: true, // Tu widget ya lo tiene por defecto, pero esto es explícito
-                                                                            prepararLatex:
-                                                                                prepararLaTeX, // o la que uses
-                                                                          ),
-                                                                        ),
-                                                                        const SizedBox(
-                                                                          height:
-                                                                              10,
-                                                                        ),
-
-                                                                        // RESPUESTA CORRECTA
-                                                                        SingleChildScrollView(
-                                                                          // <--- SOLUCIÓN
-                                                                          scrollDirection:
-                                                                              Axis.horizontal,
-                                                                          child: CustomLatexText(
-                                                                            contenido:
-                                                                                "✅ Respuesta correcta: $correcta) ${opciones[correcta] ?? ''}",
-                                                                            fontSize:
-                                                                                15,
-                                                                            color:
-                                                                                Colors.green.shade800,
-                                                                            prepararLatex:
-                                                                                prepararLaTeX,
-                                                                          ),
-                                                                        ),
-                                                                        const SizedBox(
-                                                                          height:
-                                                                              4,
-                                                                        ),
-
-                                                                        // TU RESPUESTA
-                                                                        SingleChildScrollView(
-                                                                          // <--- SOLUCIÓN
-                                                                          scrollDirection:
-                                                                              Axis.horizontal,
-                                                                          child: CustomLatexText(
-                                                                            contenido:
-                                                                                "📝 Tu respuesta: $usuario) ${opciones[usuario] ?? 'Sin responder'}",
-                                                                            fontSize:
-                                                                                15,
-                                                                            color:
-                                                                                esCorrecta
-                                                                                    ? Colors.green.shade800
-                                                                                    : (usuario ==
-                                                                                                null ||
-                                                                                            usuario.isEmpty
-                                                                                        ? Colors.black54
-                                                                                        : Colors.red.shade800),
-                                                                            prepararLatex:
-                                                                                prepararLaTeX,
-                                                                          ),
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-                                                                );
-                                                              },
-                                                            ),
-                                                          ),
-                                                          actions: [
-                                                            TextButton(
-                                                              onPressed:
-                                                                  () =>
-                                                                      Navigator.pop(
-                                                                        context,
-                                                                      ),
-                                                              child: const Text(
-                                                                "Cerrar",
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                  );
-                                                },
-                                                leading: CircleAvatar(
-                                                  backgroundColor:
-                                                      Colors.blue.shade100,
-                                                  child: const Icon(
-                                                    Icons.school,
-                                                    color: Colors.blue,
-                                                  ),
-                                                ),
-                                                title: Text(
-                                                  eval['tema'] ??
-                                                      "Tema desconocido",
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 16,
-                                                  ),
-                                                ),
-                                                subtitle: Text(
-                                                  "📅 ${eval['fecha']}",
-                                                  style: const TextStyle(
-                                                    fontSize: 14,
-                                                    color: Colors.grey,
-                                                  ),
-                                                ),
-                                                trailing: Column(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment.center,
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.end,
-                                                  children: [
-                                                    Text(
-                                                      "⭐ ${eval['calificacion']}/10",
-                                                      style: TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        color:
-                                                            (double.tryParse(
-                                                                          eval['calificacion'],
-                                                                        ) ??
-                                                                        0) <
-                                                                    6
-                                                                ? Colors.red
-                                                                : Colors
-                                                                    .green[700],
-                                                      ),
-                                                    ),
-                                                    Text(
-                                                      "${eval['preguntas']} preguntas",
-                                                      style: const TextStyle(
-                                                        fontSize: 12,
-                                                        color: Colors.grey,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                        ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed:
-                                                () => Navigator.pop(context),
-                                            child: const Text("Cerrar"),
-                                          ),
-                                        ],
-                                      ),
-                                );
-                              },
-                            ),
-                          ),
-                        ],
-                        if (mostrarBotonGenerarNuevas) ...[
-                          const SizedBox(height: 16),
-                          _avisoGenerarNuevas(),
-                        ],
-                        const SizedBox(height: 8),
-                        // ElevatedButton.icon(
-                        //   style: ElevatedButton.styleFrom(
-                        //     backgroundColor: Colors.amber,
-                        //     foregroundColor: Colors.black,
-                        //   ),
-                        //   icon: const Icon(Icons.bolt),
-                        //   label: const Text(
-                        //     "Prueba: generar preguntas con IA (Make)",
-                        //   ),
-                        //   onPressed: () async {
-                        //     if (temasSeleccionados.length != 1) {
-                        //       _mostrarError(
-                        //         "Selecciona solo un tema para usar IA.",
-                        //       );
-                        //       return;
-                        //     }
-
-                        //     final tema = temasSeleccionados.first;
-
-                        //     setState(() {
-                        //       cargando = true;
-                        //       yaCalificado = false;
-                        //       respuestasUsuario.clear();
-                        //       puntaje = 0;
-                        //       yaSeNotificoIA = false;
-                        //       envioExitoso = false;
-                        //     });
-
-                        //     // 🔔 Notificar a Make
-                        //     final notificado = await evaluacionService
-                        //         .notificarGeneracionPreguntas(tema);
-
-                        //     setState(() {
-                        //       cargando = false;
-                        //       yaSeNotificoIA = notificado;
-                        //     });
-
-                        //     if (notificado) {
-                        //       await showCustomDialog(
-                        //         context: context,
-                        //         titulo: "Preguntas generadas con IA",
-                        //         mensaje:
-                        //             "Las preguntas fueron generadas correctamente por Make.\n Por",
-                        //         tipo: CustomDialogType.success,
-                        //       );
-                        //     } else {
-                        //       _mostrarError("No se pudo notificar a Make.");
-                        //     }
-                        //   },
-                        // ),
-                        const SizedBox(height: 20),
-
-                        if (cargando)
-                          const Center(child: CircularProgressIndicator())
-                        else if (preguntasPorTema.isEmpty)
-                          Center(
-                            child: const Text(
-                              "Selecciona temas y presiona 'Generar evaluación'",
-                            ),
-                          )
-                        else
-                          Expanded(
-                            child: Column(
-                              children: [
-                                // --- INICIO: SECCIÓN MODIFICADA ---
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                },
+                                leading: CircleAvatar(
+                                  backgroundColor: colorBotonSecundario
+                                      .withOpacity(0.15),
+                                  child: Icon(
+                                    Icons.school_outlined,
+                                    color: colorBotonSecundario,
+                                  ),
+                                ),
+                                title: Text(
+                                  eval['tema'] ?? "Tema desconocido",
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  "📅 ${eval['fecha']}",
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13,
+                                    color: theme.textTheme.bodySmall?.color,
+                                  ),
+                                ),
+                                trailing: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
-                                    // El Dropdown ocupa el espacio disponible
-                                    Expanded(
-                                      child: DropdownButtonFormField<String>(
-                                        value: temaSeleccionado,
-                                        items:
-                                            preguntasPorTema.keys
-                                                .map(
-                                                  (tema) => DropdownMenuItem(
-                                                    value: tema,
-                                                    child: Text(tema),
-                                                  ),
-                                                )
-                                                .toList(),
-                                        onChanged: (nuevoTema) {
-                                          setState(() {
-                                            temaSeleccionado = nuevoTema;
-                                            respuestasUsuario.clear();
-                                            yaCalificado = false;
-                                            puntaje = 0;
-                                          });
-                                        },
-                                        decoration: const InputDecoration(
-                                          labelText: "Viendo tema",
-                                          border: OutlineInputBorder(),
-                                        ),
+                                    Text(
+                                      "⭐ ${eval['calificacion']}/10",
+                                      style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                        color:
+                                            (double.tryParse(
+                                                          eval['calificacion'],
+                                                        ) ??
+                                                        0) <
+                                                    6
+                                                ? theme.colorScheme.error
+                                                : Colors.green[700],
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
-                                    // Tu nuevo botón para volver
-                                    Tooltip(
-                                      message: "Volver a la selección de temas",
-                                      child: IconButton(
-                                        icon: const Icon(
-                                          Icons.edit_note_outlined,
-                                        ),
-                                        onPressed:
-                                            _volverASeleccion, // <-- Llama a la función que creamos
-                                        style: IconButton.styleFrom(
-                                          foregroundColor:
-                                              Theme.of(context).primaryColor,
-                                          backgroundColor: Theme.of(
-                                            context,
-                                          ).primaryColor.withOpacity(0.1),
-                                        ),
+                                    Text(
+                                      "${eval['preguntas']} preguntas",
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 11,
+                                        color: theme.textTheme.bodySmall?.color
+                                            ?.withOpacity(0.7),
                                       ),
                                     ),
                                   ],
                                 ),
+                              );
+                            },
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: Text(
+                              "Cerrar",
+                              style: GoogleFonts.poppins(
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-                                // --- FIN: SECCIÓN MODIFICADA ---
-                                const SizedBox(height: 12),
+  Widget _buildBotonGenerarConIAEstilizado(
+    BuildContext context,
+    String temaNombreCompletoParaIA,
+  ) {
+    final theme = Theme.of(context);
+    // Usar _claveTema para obtener la clave que necesita tu servicio de IA
+    final claveTemaParaIA = _claveTema(temaNombreCompletoParaIA);
+
+    return Card(
+      elevation: 2,
+      color: theme.colorScheme.secondaryContainer.withOpacity(0.7),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.auto_awesome_rounded,
+                  color: theme.colorScheme.onSecondaryContainer,
+                  size: 22,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  "Opción IA: Nuevas Preguntas",
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSecondaryContainer,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              "Genera un set fresco de preguntas para '${_nombreTema(claveTemaParaIA)}' usando IA (puede tardar unos segundos).", // Mostrar nombre legible
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 13.5,
+                color: theme.colorScheme.onSurfaceVariant.withOpacity(0.9),
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.colorScheme.secondary,
+                foregroundColor: theme.colorScheme.onSecondary,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: Text(
+                "Solicitar a IA",
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+              ),
+              onPressed: () async {
+                setState(() {
+                  cargando = true;
+                });
+                final notificado = await evaluacionService
+                    .notificarGeneracionPreguntas(
+                      claveTemaParaIA,
+                    ); // Enviar clave a servicio
+                if (!mounted) return;
+                setState(() {
+                  cargando = false;
+                });
+
+                if (notificado) {
+                  await showDialog(
+                    context: context,
+                    builder:
+                        (_) => AlertDialog(
+                          backgroundColor: theme.cardColor,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          title: Text(
+                            "✅ Solicitud Enviada",
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          content: Text(
+                            "Tu solicitud para generar nuevas preguntas con IA ha sido enviada. El banco de preguntas se actualizará pronto.",
+                            style: GoogleFonts.poppins(),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: Text(
+                                "Entendido",
+                                style: GoogleFonts.poppins(
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                  );
+                  await cargarTotalesPorTema();
+                } else {
+                  _mostrarError(
+                    "No se pudo enviar la solicitud de generación con IA. Intenta más tarde.",
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // temaSeleccionado ahora guarda el nombre completo, ej: "Funciones algebraicas..."
+    final preguntasDelTemaActual =
+        (temaSeleccionado != null)
+            ? preguntasPorTema[temaSeleccionado!] ?? []
+            : [];
+
+    return Stack(
+      children: [
+        Scaffold(
+          appBar: const CustomAppBar(
+            titleText: "Autoevaluación",
+            showBack: true,
+          ),
+          body: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                padding: EdgeInsets.all(
+                  constraints.maxWidth > 700 ? 20.0 : 12.0,
+                ), // Padding ajustado
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxWidth: 800,
+                    ), // Ancho máximo un poco reducido
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (preguntasPorTema.isEmpty && !cargando)
+                          _buildConfiguracionUI(context),
+
+                        if (cargando)
+                          const Center(
+                            heightFactor: 5,
+                            child: CircularProgressIndicator(),
+                          ),
+
+                        if (preguntasPorTema.isNotEmpty &&
+                            !cargando &&
+                            temaSeleccionado != null) ...[
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12.0),
+                            child: Row(
+                              children: [
                                 Expanded(
-                                  child: ListView.builder(
-                                    itemCount: preguntas.length,
-                                    itemBuilder: (context, index) {
-                                      final pregunta = preguntas[index];
-                                      return CustomLatexQuestionCard(
-                                        numero: index + 1,
-                                        pregunta: pregunta["pregunta"],
-                                        opciones: _convertirOpciones(
-                                          pregunta["opciones"],
-                                        ),
-                                        seleccionada: respuestasUsuario[index],
-                                        onChanged: (value) {
-                                          setState(() {
-                                            respuestasUsuario[index] = value;
-                                          });
-                                        },
-                                        mostrarCorrecta: yaCalificado,
-                                        respuestaCorrecta:
-                                            pregunta["respuesta_correcta"] ??
-                                            pregunta["respuestaCorrecta"],
-                                        respuestaUsuario:
-                                            respuestasUsuario[index],
-                                      );
+                                  child: DropdownButtonFormField<String>(
+                                    value: temaSeleccionado,
+                                    items:
+                                        preguntasPorTema.keys
+                                            .map(
+                                              (temaNombreCompleto) =>
+                                                  DropdownMenuItem(
+                                                    value: temaNombreCompleto,
+                                                    child: Text(
+                                                      _nombreTema(
+                                                        temaNombreCompleto,
+                                                      ),
+                                                    ),
+                                                  ),
+                                            )
+                                            .toList(),
+                                    onChanged: (nuevoTemaNombreCompleto) {
+                                      setState(() {
+                                        temaSeleccionado =
+                                            nuevoTemaNombreCompleto;
+                                        respuestasUsuario.clear();
+                                        yaCalificado = false;
+                                        puntaje = 0;
+                                      });
                                     },
+                                    decoration: InputDecoration(
+                                      labelText: "Viendo preguntas del tema",
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      filled: true,
+                                    ),
+                                    dropdownColor: theme.canvasColor,
                                   ),
                                 ),
-                                const SizedBox(height: 8),
-                                ElevatedButton(
-                                  onPressed:
-                                      yaCalificado
-                                          ? () {
-                                            setState(() {
-                                              respuestasUsuario.clear();
-                                              yaCalificado = false;
-                                              puntaje = 0;
-                                            });
-                                          }
-                                          : _calificar,
-                                  child: Text(
-                                    yaCalificado
-                                        ? "Reiniciar evaluación"
-                                        : "Calificar",
+                                const SizedBox(width: 10),
+                                Tooltip(
+                                  message: "Configurar nueva evaluación",
+                                  child: IconButton(
+                                    icon: const Icon(
+                                      Icons.settings_backup_restore_rounded,
+                                      size: 28,
+                                    ),
+                                    onPressed: _volverASeleccion,
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: theme
+                                          .colorScheme
+                                          .surfaceContainerHighest
+                                          .withOpacity(0.8),
+                                      foregroundColor:
+                                          theme.colorScheme.primary,
+                                      padding: const EdgeInsets.all(12),
+                                    ),
                                   ),
                                 ),
-
-                                if (yaCalificado)
-                                  CustomScoreCard(
-                                    puntaje: puntaje,
-                                    total: preguntas.length,
-                                  ),
                               ],
                             ),
                           ),
+                          const SizedBox(height: 16),
+                          ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: preguntasDelTemaActual.length,
+                            itemBuilder: (context, index) {
+                              final pregunta = preguntasDelTemaActual[index];
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 16.0),
+                                child: CustomLatexQuestionCard(
+                                  numero: index + 1,
+                                  pregunta: pregunta["pregunta"],
+                                  opciones: _convertirOpciones(
+                                    pregunta["opciones"],
+                                  ),
+                                  seleccionada: respuestasUsuario[index],
+                                  onChanged: (value) {
+                                    setState(() {
+                                      respuestasUsuario[index] = value;
+                                    });
+                                  },
+                                  mostrarCorrecta: yaCalificado,
+                                  respuestaCorrecta:
+                                      pregunta["respuesta_correcta"] ??
+                                      pregunta["respuestaCorrecta"],
+                                  respuestaUsuario: respuestasUsuario[index],
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 24),
+                          if (preguntasDelTemaActual.isNotEmpty)
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    yaCalificado
+                                        ? colorBotonSecundario
+                                        : colorBotonPrimario,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ), // Botón más alto
+                                textStyle: GoogleFonts.poppins(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                              ),
+                              onPressed:
+                                  yaCalificado
+                                      ? () {
+                                        setState(() {
+                                          _volverASeleccion();
+                                        });
+                                      }
+                                      : _calificar,
+                              child: Text(
+                                yaCalificado
+                                    ? "Nueva Evaluación"
+                                    : "Calificar Evaluación",
+                              ),
+                            ),
+                          if (yaCalificado) ...[
+                            const SizedBox(height: 24),
+                            CustomScoreCard(
+                              puntaje: puntaje,
+                              total: preguntasDelTemaActual.length,
+                            ),
+                          ],
+                          const SizedBox(height: 20), // Espacio al final
+                        ],
                       ],
                     ),
                   ),
@@ -1300,8 +1076,7 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
             },
           ),
         ),
-
-        // 🎊 Confetti flotante (fuera del Scaffold)
+        // Widgets de Confeti
         Align(
           alignment: Alignment.topCenter,
           child: ConfettiWidget(
@@ -1322,12 +1097,11 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
             ],
           ),
         ),
-        // Lado izquierdo
         Align(
           alignment: Alignment.centerLeft,
           child: ConfettiWidget(
             confettiController: _confettiLeftController,
-            blastDirection: 0, // Hacia la derecha
+            blastDirection: 0,
             emissionFrequency: 0.05,
             numberOfParticles: 10,
             maxBlastForce: 15,
@@ -1337,13 +1111,11 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
             colors: const [Colors.green, Colors.pink, Colors.blue],
           ),
         ),
-
-        // Lado derecho
         Align(
           alignment: Alignment.centerRight,
           child: ConfettiWidget(
             confettiController: _confettiRightController,
-            blastDirection: 3.14, // Hacia la izquierda
+            blastDirection: 3.14,
             emissionFrequency: 0.05,
             numberOfParticles: 10,
             maxBlastForce: 15,
@@ -1353,13 +1125,11 @@ class _AutoevaluationPageState extends State<AutoevaluationPage> {
             colors: const [Colors.orange, Colors.purple, Colors.yellow],
           ),
         ),
-
-        // Desde abajo
         Align(
           alignment: Alignment.bottomCenter,
           child: ConfettiWidget(
             confettiController: _confettiBottomController,
-            blastDirection: -3.14 / 2, // Hacia arriba
+            blastDirection: -3.14 / 2,
             emissionFrequency: 0.08,
             numberOfParticles: 20,
             maxBlastForce: 18,
