@@ -1812,7 +1812,29 @@ class _ChatHomePageState extends State<ChatHomePage> {
     if (!mounted) return;
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
-    // Mostrar un indicador de progreso
+    // --- PASO CRUCIAL: Actualizar UI ANTES de la operación destructiva ---
+    bool chatDisueltoEraElSeleccionado = (chatIdSeleccionado == groupId);
+
+    if (chatDisueltoEraElSeleccionado) {
+      // Inmediatamente cambia el estado para que la UI deje de depender del chat ID que se va a borrar.
+      // Esto es lo que previene el error de "unexpected null value".
+      setState(() {
+        // Si estás en una pantalla pequeña y viendo el detalle, vuelve a la lista.
+        if (MediaQuery.of(context).size.width < 720.0) {
+          // tabletBreakpoint (ajústalo si es diferente)
+          _showList = true;
+        }
+        chatIdSeleccionado = null;
+        otroUid = null; // Limpiar cualquier otro estado relacionado con el chat
+      });
+      // Espera un instante muy breve para darle oportunidad a Flutter de procesar este setState.
+      // Esto ayuda a que la UI se desvincule del Stream del documento antes de que se elimine.
+      await Future.delayed(
+        const Duration(milliseconds: 50),
+      ); // Puedes ajustar este tiempo o incluso quitarlo si el setState es suficiente.
+    }
+
+    // --- Mostrar diálogo de progreso ---
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1836,113 +1858,118 @@ class _ChatHomePageState extends State<ChatHomePage> {
       final CollectionReference messagesRef = chatDocRef.collection('Mensajes');
       final FirebaseStorage storage = FirebaseStorage.instance;
 
-      // 1. Obtener IDs de todos los miembros para notificar (opcional)
-      List<String> memberIds = [];
-      final groupDocSnapshot = await chatDocRef.get();
-      if (groupDocSnapshot.exists) {
-        final data = groupDocSnapshot.data() as Map<String, dynamic>;
-        memberIds = List<String>.from(data['ids'] ?? []);
+      List<String> memberIdsParaNotificar = [];
+      final groupDocSnapshotAntesDeBorrar = await chatDocRef.get();
+      if (groupDocSnapshotAntesDeBorrar.exists) {
+        final data =
+            groupDocSnapshotAntesDeBorrar.data() as Map<String, dynamic>;
+        memberIdsParaNotificar = List<String>.from(data['ids'] ?? []);
       }
 
-      // 2. Eliminar todos los mensajes de la subcolección
+      // 1. Eliminar mensajes de la subcolección
       final QuerySnapshot messagesSnapshot = await messagesRef.get();
-      WriteBatch batch = FirebaseFirestore.instance.batch();
+      WriteBatch batchDeleteMessages = FirebaseFirestore.instance.batch();
       for (DocumentSnapshot msgDoc in messagesSnapshot.docs) {
-        // Opcional: si los mensajes tienen archivos en Storage, borrarlos primero.
-        // Necesitarías una lógica para encontrar la ruta del archivo en Storage desde el mensaje.
-        // Ejemplo: if (msgDoc.data() ... contains 'urlContenido' ... y es de Storage de este chat)
-        //    await storage.refFromURL(msgDoc.data()['urlContenido']).delete();
-        batch.delete(msgDoc.reference);
+        // Aquí también podrías verificar si msgDoc tiene 'urlContenido' y borrar de Storage,
+        // pero es más complejo y propenso a errores desde el cliente.
+        batchDeleteMessages.delete(msgDoc.reference);
       }
-      await batch.commit();
+      await batchDeleteMessages.commit();
       print('Mensajes del grupo $groupId eliminados.');
 
-      // 3. Eliminar archivos del grupo en Firebase Storage
+      // 2. Eliminar archivos de Storage (con las limitaciones del cliente)
       // a. Foto del grupo
-      try {
-        if (groupDocSnapshot.exists) {
-          final data = groupDocSnapshot.data() as Map<String, dynamic>;
-          final String? groupPhotoUrl = data['groupPhoto'] as String?;
-          if (groupPhotoUrl != null && groupPhotoUrl.isNotEmpty) {
-            // Importante: Solo borrar si la URL es de Firebase Storage y tienes el path.
-            // storage.refFromURL() es la forma más segura si la URL es de Firebase Storage.
-            // Si guardas el path directamente, es más fácil.
-            // Ejemplo con path (si lo guardaras): final photoRef = storage.ref('grupos/$groupId/profile.jpg'); await photoRef.delete();
-            // Con URL, es más complejo obtener el path exacto, a menos que sigas una convención.
-            // Por simplicidad, si tu 'subirImagenGrupo' usa un path predecible como 'grupos/$groupId.jpg':
-            final photoRef = storage.ref(
-              'grupos/$groupId.jpg',
-            ); // Asumiendo convención de nombre
-            await photoRef.delete();
-            print('Foto del grupo $groupId eliminada de Storage.');
+      if (groupDocSnapshotAntesDeBorrar.exists) {
+        final data =
+            groupDocSnapshotAntesDeBorrar.data() as Map<String, dynamic>;
+        final String? groupPhotoUrl = data['groupPhoto'] as String?;
+        if (groupPhotoUrl != null && groupPhotoUrl.isNotEmpty) {
+          try {
+            // Intenta borrar usando refFromURL si es una URL de Firebase Storage
+            if (groupPhotoUrl.contains(storage.bucket)) {
+              // Una verificación básica
+              final photoRef = storage.refFromURL(groupPhotoUrl);
+              await photoRef.delete();
+              print(
+                'Foto del grupo $groupId eliminada de Storage (vía refFromURL).',
+              );
+            } else if (groupPhotoUrl.contains("$groupId.jpg")) {
+              // Si usas una convención de path como 'grupos/$groupId.jpg'
+              final photoRefConvention = storage.ref('grupos/$groupId.jpg');
+              await photoRefConvention.delete();
+              print(
+                'Foto del grupo $groupId eliminada de Storage (vía convención).',
+              );
+            }
+          } catch (e) {
+            print(
+              "Error eliminando foto del grupo $groupId de Storage: $e. Puede que ya no exista o la URL no sea manejable directamente.",
+            );
           }
         }
-      } catch (e) {
-        print(
-          "Error eliminando foto del grupo de Storage (puede que no exista o error de permiso): $e",
-        );
       }
-
-      // b. Archivos multimedia de los mensajes (si no se borraron en el paso 2)
-      // Esto requeriría iterar de nuevo sobre los mensajes o tener una lista de paths.
-      // La ruta 'chats/$chatId/media/' sugiere una estructura.
-      // Se puede listar y borrar, pero es más intensivo del lado del cliente.
-      // Cloud Function recomendada para esto.
+      // b. Archivos multimedia de los mensajes (MUY RECOMENDADO HACER ESTO CON CLOUD FUNCTIONS)
       try {
         final listResult = await storage.ref('chats/$groupId/media').listAll();
         for (var prefix in listResult.prefixes) {
-          // Prefixes son las carpetas de cada mensajeId
+          // Carpetas por mensajeId
           final messageMediaList = await prefix.listAll();
           for (var item in messageMediaList.items) {
             await item.delete();
           }
         }
-        print('Archivos multimedia del grupo $groupId eliminados de Storage.');
+        print(
+          'Archivos multimedia del grupo $groupId eliminados de Storage (intento desde cliente).',
+        );
       } catch (e) {
-        print("Error eliminando archivos multimedia del grupo de Storage: $e");
+        print(
+          "Error o no se encontraron archivos multimedia para el grupo $groupId en Storage: $e",
+        );
       }
 
-      // 4. Eliminar el documento principal del chat
+      // 3. Eliminar el documento principal del chat
       await chatDocRef.delete();
       print('Documento del grupo $groupId eliminado de Firestore.');
 
-      // 5. Notificar a los miembros (opcional)
-      for (String memberUid in memberIds) {
-        if (memberUid != uid && nombreUsuario != null) {
-          // No notificar al creador
+      // 4. Notificar a los miembros (opcional)
+      final String nombreDelDisolvedor = nombreUsuario ?? "El creador";
+      for (String memberUid in memberIdsParaNotificar) {
+        if (memberUid != uid) {
+          // No notificar al creador que está disolviendo
           await NotificationService.crearNotificacion(
             uidDestino: memberUid,
             tipo: 'grupo_disuelto',
             titulo: 'Grupo Disuelto',
             contenido:
-                'El grupo "$groupName" ha sido disuelto por el creador ($nombreUsuario).',
-            referenciaId:
-                groupId, // El ID ya no existirá, pero puede ser útil para el cliente de notificación
+                'El grupo "$groupName" ha sido disuelto por $nombreDelDisolvedor.',
+            referenciaId: groupId, // El ID ya no existirá, pero puede ser útil
             uidEmisor: uid,
-            nombreEmisor: nombreUsuario!,
+            nombreEmisor: nombreDelDisolvedor,
           );
         }
       }
 
       if (mounted) {
-        Navigator.of(context).pop(); // Cierra el diálogo de progreso
+        // Asegúrate de cerrar el diálogo de progreso usando el context correcto.
+        // Si showDialog usó el 'context' de la página, Navigator.of(context).pop() está bien.
+        Navigator.of(
+          context,
+          rootNavigator: true,
+        ).pop(); // rootNavigator: true para asegurar que cierre el diálogo superior
+
         scaffoldMessenger.showSnackBar(
           SnackBar(content: Text('Grupo "$groupName" disuelto exitosamente.')),
         );
-        // Volver a la lista de chats si el grupo disuelto era el seleccionado
-        if (chatIdSeleccionado == groupId) {
-          setState(() {
-            _showList = true;
-            chatIdSeleccionado = null;
-            otroUid = null;
-          });
-        }
+        // El setState para cambiar la vista ya se hizo al principio si era necesario.
       }
     } catch (e, s) {
       print('Error al disolver el grupo: $e');
       print('Stack trace: $s');
       if (mounted) {
-        Navigator.of(context).pop(); // Cierra el diálogo de progreso
+        Navigator.of(
+          context,
+          rootNavigator: true,
+        ).pop(); // Asegúrate de cerrar el diálogo de progreso en caso de error también
         scaffoldMessenger.showSnackBar(
           SnackBar(
             content: Text('Error al disolver el grupo: ${e.toString()}'),
@@ -2644,161 +2671,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
       },
     );
   }
-
-  // void _confirmarEliminarMiembro(
-  //   BuildContext parentDialogContext, // Contexto del diálogo de miembros
-  //   String groupId,
-  //   String miembroIdAEliminar,
-  //   String nombreMiembro,
-  //   String nombreGrupo,
-  // ) {
-  //   showDialog(
-  //     context:
-  //         context, // Usar el context principal de la página para este diálogo de confirmación
-  //     builder: (BuildContext confirmDialogContext) {
-  //       return AlertDialog(
-  //         title: Text('Eliminar a $nombreMiembro'),
-  //         content: Text(
-  //           '¿Estás seguro de que quieres eliminar a "$nombreMiembro" del grupo "$nombreGrupo"? Esta acción no se puede deshacer.',
-  //         ),
-  //         actions: <Widget>[
-  //           TextButton(
-  //             child: const Text('Cancelar'),
-  //             onPressed: () {
-  //               Navigator.of(
-  //                 confirmDialogContext,
-  //               ).pop(); // Cierra solo el diálogo de confirmación
-  //             },
-  //           ),
-  //           TextButton(
-  //             style: TextButton.styleFrom(
-  //               foregroundColor: Theme.of(context).colorScheme.error,
-  //             ),
-  //             child: const Text('Eliminar Miembro'),
-  //             onPressed: () {
-  //               Navigator.of(
-  //                 confirmDialogContext,
-  //               ).pop(); // Cierra el diálogo de confirmación
-  //               _ejecutarEliminarMiembro(
-  //                 groupId,
-  //                 miembroIdAEliminar,
-  //                 nombreMiembro,
-  //                 nombreGrupo,
-  //               );
-  //               // El diálogo de miembros se actualizará gracias al StreamBuilder
-  //             },
-  //           ),
-  //         ],
-  //       );
-  //     },
-  //   );
-  // }
-
-  // Future<void> _ejecutarEliminarMiembro(
-  //   String groupId,
-  //   String miembroIdAEliminar,
-  //   String nombreMiembroEliminado, // Para el mensaje del sistema
-  //   String nombreDelGrupo, // Para la notificación
-  // ) async {
-  //   // Doble verificación: el creador no debería poder eliminarse a sí mismo aquí.
-  //   if (uid == miembroIdAEliminar) {
-  //     if (mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         const SnackBar(
-  //           content: Text(
-  //             'No puedes eliminarte a ti mismo usando esta opción. Usa "Salir del grupo".',
-  //           ),
-  //         ),
-  //       );
-  //     }
-  //     return;
-  //   }
-
-  //   final DocumentReference chatDocRef = FirebaseFirestore.instance
-  //       .collection('Chats')
-  //       .doc(groupId);
-
-  //   try {
-  //     WriteBatch batch = FirebaseFirestore.instance.batch();
-
-  //     // 1. Quitar el UID del miembro de la lista 'ids'
-  //     batch.update(chatDocRef, {
-  //       'ids': FieldValue.arrayRemove([miembroIdAEliminar]),
-  //     });
-
-  //     // 2. Quitar las entradas del miembro de 'unreadCounts' y 'typing'
-  //     batch.update(chatDocRef, {
-  //       'unreadCounts.$miembroIdAEliminar': FieldValue.delete(),
-  //       'typing.$miembroIdAEliminar': FieldValue.delete(),
-  //     });
-
-  //     await batch.commit(); // Ejecutar todas las operaciones atómicamente
-
-  //     // 3. (Opcional pero recomendado) Enviar un mensaje al sistema en el chat
-  //     // Asegúrate de que 'nombreUsuario' (el nombre del creador que realiza la acción) esté cargado.
-  //     final String nombreCreadorActual = nombreUsuario ?? "El creador";
-  //     final String mensajeSistema =
-  //         '$nombreCreadorActual ha eliminado a $nombreMiembroEliminado del grupo.';
-  //     final Timestamp ahora = Timestamp.now();
-
-  //     await FirebaseFirestore.instance
-  //         .collection('Chats')
-  //         .doc(groupId)
-  //         .collection('Mensajes')
-  //         .add({
-  //           'AutorID':
-  //               'sistema', // Un ID especial para identificar mensajes del sistema
-  //           'Contenido': mensajeSistema,
-  //           'Fecha': ahora,
-  //           'tipo':
-  //               'sistema_miembro_eliminado', // Un tipo específico para estos mensajes
-  //           // Puedes añadir otros campos que necesites para los mensajes del sistema
-  //         });
-
-  //     // Actualizar la información 'lastMessage' del chat principal
-  //     await chatDocRef.update({
-  //       'lastMessage': mensajeSistema,
-  //       'lastMessageAt': ahora,
-  //     });
-
-  //     // 4. (Opcional) Enviar una notificación al usuario eliminado
-  //     if (nombreUsuario != null) {
-  //       // nombreUsuario es el del que ejecuta la acción (el creador)
-  //       await NotificationService.crearNotificacion(
-  //         uidDestino: miembroIdAEliminar,
-  //         tipo: 'eliminado_de_grupo', // Un tipo de notificación específico
-  //         titulo: 'Has sido eliminado de un grupo',
-  //         contenido:
-  //             '$nombreUsuario te ha eliminado del grupo "$nombreDelGrupo".',
-  //         referenciaId: groupId,
-  //         uidEmisor: uid, // El creador
-  //         nombreEmisor: nombreUsuario!,
-  //       );
-  //     }
-
-  //     if (mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(
-  //           content: Text(
-  //             '$nombreMiembroEliminado ha sido eliminado del grupo.',
-  //           ),
-  //         ),
-  //       );
-  //       // El StreamBuilder en _mostrarDialogoMiembrosGrupo se encargará de actualizar la lista.
-  //     }
-  //     print(
-  //       'Miembro $miembroIdAEliminar eliminado del grupo $groupId por el creador $uid.',
-  //     );
-  //   } catch (e, s) {
-  //     print('Error al eliminar miembro del grupo: ${e.toString()}');
-  //     print('Stack trace: ${s.toString()}');
-  //     if (mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text('Error al eliminar miembro: ${e.toString()}')),
-  //       );
-  //     }
-  //   }
-  // }
 
   // Método que abre el diálogo de creación de grupo
   void _mostrarDialogoCrearGrupo() {
