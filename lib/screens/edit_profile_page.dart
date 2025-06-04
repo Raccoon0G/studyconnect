@@ -651,12 +651,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
         });
       },
       child: Scaffold(
-        backgroundColor: theme.colorScheme.surface,
+        // backgroundColor: theme.colorScheme.surface,
+        backgroundColor: const Color(0xFF036799),
         appBar: CustomAppBar(
           showBack: true,
-          // AHORA USAMOS titleWidget en lugar de titleContent (si así lo modificaste en CustomAppBar)
-          // o titleText si CustomAppBar espera un String.
-          // Asumiendo que CustomAppBar usa titleWidget:
+          // AHORA USAMOS titleWidget en lugar de titleContent
+          // PARA PODER PERSONALIZAR EL TÍTULO CON UN WIDGET
           titleWidget:
               _hasUnsavedChanges
                   ? Row(
