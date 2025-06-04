@@ -2,15 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:study_connect/widgets/notification_icon_widget.dart';
-import 'package:study_connect/widgets/widgets.dart';
+// Asegúrate que la ruta a widgets.dart sea correcta si CustomAppBar y HomeCarousel están ahí.
+// import 'package:study_connect/widgets/widgets.dart'; // Descomenta si es necesario
+import 'package:study_connect/widgets/custom_app_bar.dart'; // Asumiendo que CustomAppBar está aquí
+import 'package:study_connect/widgets/home_carousel.dart'; // Asumiendo que HomeCarousel está aquí
 
 // 🎨 Colores personalizados
-const Color azulPrimario = Color(0xFF0D47A1); // Azul profundo
-const Color azulSecundario = Color(0xFF1976D2); // Azul claro
-const Color moradoPrimario = Color(0xFF7E57C2); // Púrpura educativo
-const Color fondoOscuro = Color(0xFF0A192F); // Azul oscuro tipo navy
-const Color blancoSuave = Color(0xFFE3F2FD); // Blanco azulado
+const Color azulPrimario = Color(0xFF0D47A1);
+const Color azulSecundario = Color(0xFF1976D2);
+const Color moradoPrimario = Color(0xFF7E57C2);
+const Color fondoOscuro = Color(0xFF0A192F);
+const Color blancoSuave = Color(0xFFE3F2FD);
+const Color tarjetaFondoOscuro = Color(
+  0xFF0E2038,
+); // Un poco más claro que fondoOscuro
+const Color textoClaroPrincipal = Colors.white;
+const Color textoClaroSecundario = Colors.white70;
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -28,7 +35,6 @@ class _HomePageState extends State<HomePage> {
   bool mostrarDetallesEjercicios = false;
   bool mostrarDetallesPreguntas = false;
   List<Map<String, dynamic>>? _rankingCache;
-
   bool _primeraCarga = true;
 
   @override
@@ -43,24 +49,32 @@ class _HomePageState extends State<HomePage> {
     if (_primeraCarga) {
       _primeraCarga = false;
     } else {
-      // ✅ Esto se ejecuta cuando regresamos a HomePage
-      recargarRanking(); // Limpia y vuelve a calcular el top 5
+      recargarRanking();
     }
   }
 
   Future<void> _obtenerDatos() async {
     final user = _auth.currentUser;
-
     if (user != null) {
-      final doc =
-          await FirebaseFirestore.instance
-              .collection('usuarios')
-              .doc(user.uid)
-              .get();
-
-      setState(() {
-        nombreUsuario = doc.data()?['Nombre'] ?? '';
-      });
+      try {
+        final doc =
+            await FirebaseFirestore.instance
+                .collection('usuarios')
+                .doc(user.uid)
+                .get();
+        if (mounted) {
+          setState(() {
+            nombreUsuario = doc.data()?['Nombre'] ?? '';
+          });
+        }
+      } catch (e) {
+        debugPrint("Error obteniendo nombre de usuario: $e");
+        if (mounted) {
+          setState(() {
+            nombreUsuario = ''; // Evitar null
+          });
+        }
+      }
     }
 
     final temas = {
@@ -69,152 +83,264 @@ class _HomePageState extends State<HomePage> {
       'TecInteg': 'EjerTecInteg',
       'Der': 'EjerDer',
     };
-
     int total = 0;
     Map<String, int> conteo = {};
-
     for (final entry in temas.entries) {
-      final snapshot =
-          await FirebaseFirestore.instance
-              .collection('calculo')
-              .doc(entry.key)
-              .collection(entry.value)
-              .get();
-
-      conteo[entry.key] = snapshot.docs.length;
-      total += snapshot.docs.length;
+      try {
+        // Usar .count() para obtener solo el número de documentos de forma eficiente
+        final snapshot =
+            await FirebaseFirestore.instance
+                .collection('calculo')
+                .doc(entry.key)
+                .collection(entry.value)
+                .count()
+                .get();
+        conteo[entry.key] = snapshot.count ?? 0;
+        total += snapshot.count ?? 0;
+      } catch (e) {
+        debugPrint("Error contando ejercicios para ${entry.key}: $e");
+        conteo[entry.key] = 0; // Asignar 0 en caso de error
+      }
     }
-
-    setState(() {
-      ejerciciosPorTema = conteo;
-      totalEjercicios = total;
-    });
+    if (mounted) {
+      setState(() {
+        ejerciciosPorTema = conteo;
+        totalEjercicios = total;
+      });
+    }
   }
 
   Future<void> recargarRanking() async {
-    setState(() {
-      _rankingCache = null;
-    });
+    if (mounted) {
+      setState(() {
+        _rankingCache = null;
+      });
+    }
   }
 
+  // IMPORTANTE: Esta función es muy ineficiente para muchos usuarios/ejercicios.
+  // Considera desnormalizar datos (ej. totalEjercicios, calificacionPromedio) en los documentos
+  // de usuario y actualizarlos con Cloud Functions para un ranking performante.
   Future<List<Map<String, dynamic>>> obtenerRanking() async {
     if (_rankingCache != null) return _rankingCache!;
 
     final usersSnapshot =
-        await FirebaseFirestore.instance
-            .collection('usuarios')
-            .get(); // No usamos orderBy porque calcularemos el total nosotros
-
-    final temas = ['FnAlg', 'Lim', 'Der', 'TecInteg'];
+        await FirebaseFirestore.instance.collection('usuarios').get();
+    // final temas = ['FnAlg', 'Lim', 'Der', 'TecInteg']; // No es necesario si se usa 'EjerSubidos'
     List<Map<String, dynamic>> ranking = [];
 
     for (final userDoc in usersSnapshot.docs) {
-      final userId = userDoc.id;
-      int totalEjer = 0;
-
-      for (final tema in temas) {
-        final ejerciciosSnapshot =
-            await FirebaseFirestore.instance
-                .collection('calculo')
-                .doc(tema)
-                .collection('Ejer$tema')
-                .where('AutorId', isEqualTo: userId)
-                .get();
-
-        totalEjer += ejerciciosSnapshot.size;
-      }
-
       final data = userDoc.data();
+      // Priorizar el campo desnormalizado 'EjerSubidos' si existe.
+      int totalEjer = (data['EjerSubidos'] as num?)?.toInt() ?? 0;
+
       ranking.add({
-        'uid': userId,
-        'nombre': data['Nombre'] ?? 'Usuario',
-        'foto': data['FotoPerfil'],
-        'calificacion': data['CalificacionEjercicios'] ?? 0.0,
+        'uid': userDoc.id,
+        'nombre': data['Nombre'] ?? 'Usuario Anónimo',
+        'foto': data['FotoPerfil'], // Puede ser null
+        'calificacion':
+            (data['CalificacionEjercicios'] as num?)?.toDouble() ?? 0.0,
         'ejercicios': totalEjer,
       });
     }
 
-    // Ordenar por número de ejercicios (de mayor a menor)
     ranking.sort((a, b) {
-      final promA = (a['calificacion'] ?? 0.0) as double;
-      final promB = (b['calificacion'] ?? 0.0) as double;
-
-      if (promA == promB) {
-        return (b['ejercicios'] ?? 0).compareTo(a['ejercicios'] ?? 0);
-      }
-      return promB.compareTo(promA); // Calificación primero (descendente)
+      final promA = a['calificacion'] as double;
+      final promB = b['calificacion'] as double;
+      if (promA != promB)
+        return promB.compareTo(promA); // Mayor calificación primero
+      return (b['ejercicios'] as int).compareTo(
+        a['ejercicios'] as int,
+      ); // Luego más ejercicios
     });
+
     _rankingCache = ranking.take(5).toList(); // Top 5 usuarios
     return _rankingCache!;
   }
 
   Future<Map<String, int>> obtenerConteoPreguntasPorTema() async {
-    final snapshot =
-        await FirebaseFirestore.instance.collection('preguntas_por_tema').get();
-
     Map<String, int> conteo = {};
-
-    for (final doc in snapshot.docs) {
-      final tema = doc.data()['tema'] ?? 'Tema desconocido';
-      conteo[tema] = (conteo[tema] ?? 0) + 1;
+    try {
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('preguntas_por_tema')
+              .get();
+      for (final doc in snapshot.docs) {
+        final tema = doc.data()['tema'] as String? ?? 'Tema desconocido';
+        conteo[tema] = (conteo[tema] ?? 0) + 1;
+      }
+    } catch (e) {
+      debugPrint("Error obteniendo conteo de preguntas: $e");
     }
-
     return conteo;
+  }
+
+  Widget _buildInfoCard({
+    required BuildContext context,
+    required String title,
+    required String countText,
+    required IconData icon,
+    required Color iconColor,
+    required List<Widget> detailsChildren,
+    required bool showDetails,
+    required VoidCallback onToggleDetails,
+    required String buttonText,
+    required VoidCallback onButtonPressed,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: tarjetaFondoOscuro, // Color sólido para estas tarjetas
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: iconColor, size: 28),
+              const SizedBox(width: 10),
+              Text(
+                title,
+                style: GoogleFonts.poppins(
+                  color: textoClaroPrincipal,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            countText,
+            style: GoogleFonts.poppins(
+              color: textoClaroPrincipal,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: onToggleDetails,
+            style: TextButton.styleFrom(
+              foregroundColor: moradoPrimario.withOpacity(0.9),
+            ),
+            child: Text(
+              showDetails ? 'Ocultar detalles' : 'Ver desglose por tema',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+            ),
+          ),
+          if (showDetails) ...[
+            const Divider(color: Colors.white24, height: 20, thickness: 0.5),
+            ...detailsChildren,
+            const SizedBox(height: 10),
+          ],
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: onButtonPressed,
+            style: ElevatedButton.styleFrom(
+              backgroundColor:
+                  iconColor, // Usar el color del icono para el botón
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(30),
+              ),
+              textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            ),
+            icon: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+            label: Text(buttonText),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 800;
+    final isMobile =
+        screenWidth <
+        850; // Ajusta este breakpoint según necesites para 3 columnas
     final user = _auth.currentUser;
     final isLoggedIn = user != null;
 
     return Scaffold(
       backgroundColor: fondoOscuro,
       appBar: const CustomAppBar(),
-
       body: Column(
         children: [
           Expanded(
             child: Stack(
               children: [
                 SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 16 : 32,
+                    vertical: 24,
+                  ),
                   child: Column(
                     children: [
-                      _preloadIcons(),
+                      _preloadIcons(), // Para precargar iconos si es necesario
                       isMobile
                           ? Column(
+                            // Layout Móvil
                             children: [
-                              _buildBienvenida(user),
-                              const SizedBox(height: 20),
-                              _buildContenidosCard(),
-                              const SizedBox(height: 20),
-                              _buildRightColumn(context, isMobile),
+                              _buildBienvenida(context, user, isMobile),
+                              const SizedBox(height: 30),
+                              _buildContenidosCard(
+                                context,
+                              ), // Tarjeta de Contenidos
+                              const SizedBox(height: 30),
+                              _buildRightColumnContent(
+                                context,
+                                isMobile,
+                                isLoggedIn,
+                              ), // Ranking y Autoevaluación
                             ],
                           )
                           : Row(
+                            // Layout Desktop
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(child: _buildLeftColumn()),
-                              const SizedBox(width: 20),
-                              Expanded(child: _buildBienvenida(user)),
-                              const SizedBox(width: 20),
                               Expanded(
-                                child: _buildRightColumn(context, isMobile),
-                              ),
+                                flex: 2,
+                                child: _buildLeftColumn(context, isMobile),
+                              ), // Columna Izquierda: Carousel y Contenidos
+                              const SizedBox(width: 30),
+                              Expanded(
+                                flex: 3,
+                                child: _buildBienvenida(
+                                  context,
+                                  user,
+                                  isMobile,
+                                ),
+                              ), // Columna Central: Bienvenida
+                              const SizedBox(width: 30),
+                              Expanded(
+                                flex: 2,
+                                child: _buildRightColumnContent(
+                                  context,
+                                  isMobile,
+                                  isLoggedIn,
+                                ),
+                              ), // Columna Derecha: Ranking, Imagen, Autoevaluación
                             ],
                           ),
-                      const SizedBox(
-                        height: 100,
-                      ), // Espacio para no tapar el footer flotante
+                      const SizedBox(height: 120), // Espacio para footer y chat
                     ],
                   ),
                 ),
-                // ⭐ Botón flotante de Chat
                 Positioned(
-                  bottom: 30,
-                  right: 30,
+                  bottom: 0,
+                  right: 20,
                   child: _buildChatButton(context, isLoggedIn),
                 ),
               ],
@@ -226,333 +352,369 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildLeftColumn() {
+  Widget _buildLeftColumn(BuildContext context, bool isMobile) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ClipRRect(
-        //   borderRadius: BorderRadius.circular(16),
-        //   child: Image.asset(
-        //     'assets/images/profe.jpg',
-        //     width: double.infinity,
-        //     height: 560,
-        //     fit: BoxFit.cover,
-        //   ),
-        // ),
-        HomeCarousel(),
-
-        //NoticiasCarouselApi(),
-        const SizedBox(height: 20),
-        _buildContenidosCard(),
+        const HomeCarousel(), // Asumiendo que HomeCarousel es un widget existente
+        const SizedBox(height: 30),
+        _buildContenidosCard(
+          context,
+        ), // Tarjeta de contenidos aquí para desktop
       ],
     );
   }
 
-  Widget _buildBienvenida(User? user) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 600),
-      child: Column(
-        children: [
-          if (nombreUsuario != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Text(
-                'Hola, $nombreUsuario 👋',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          Text(
-            'Potencia tu aprendizaje y\nAlcanza tus objetivos académicos',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.poppins(
-              color: blancoSuave,
-              fontSize: 36,
-              fontWeight: FontWeight.bold,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 40),
-          Text(
-            'A través de ejercicios colaborativos\ncreados por estudiantes como tú',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.poppins(
-              color: const Color(0xFFB0E0FF),
-              fontSize: 24,
-              fontWeight: FontWeight.w600,
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 120),
+  Widget _buildBienvenida(BuildContext context, User? user, bool isMobile) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        if (nombreUsuario != null && nombreUsuario!.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.only(bottom: 16),
             child: Text(
-              'Sube tus propios ejercicios, estudia los de otros y compite por el\nreconocimiento en nuestro sistema de ranking únete a una comunidad\nde aprendizaje que recompensa tu esfuerzo y colaboración',
+              'Hola, $nombreUsuario 👋',
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontSize: 16,
-                height: 1.6,
-                fontWeight: FontWeight.w400,
+                color: textoClaroPrincipal,
+                fontSize: isMobile ? 30 : 36, // Más grande
+                fontWeight: FontWeight.bold, // Más destacado
               ),
             ),
           ),
-          const SizedBox(height: 60),
-          if (user == null)
-            ElevatedButton(
+        Text(
+          'Potencia tu aprendizaje y\nAlcanza tus objetivos académicos',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.poppins(
+            color: blancoSuave,
+            fontSize: isMobile ? 26 : 38,
+            fontWeight: FontWeight.bold,
+            height: 1.3,
+            shadows: [
+              Shadow(
+                blurRadius: 10,
+                color: Colors.black.withOpacity(0.3),
+                offset: const Offset(2, 2),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'A través de ejercicios colaborativos creados por estudiantes como tú.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.poppins(
+            color: const Color(0xFFB0E0FF).withOpacity(0.95),
+            fontSize: isMobile ? 18 : 22,
+            fontWeight: FontWeight.w500,
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: 40),
+        ConstrainedBox(
+          // Para limitar el ancho de las featurettes en desktop
+          constraints: const BoxConstraints(
+            maxWidth: 550,
+          ), // Ligeramente más ancho
+          child: Column(
+            children: const [
+              _Featurette(
+                icon: Icons.group_add_outlined,
+                text:
+                    'Únete a una comunidad de aprendizaje activa y solidaria.',
+              ),
+              _Featurette(
+                icon: Icons.lightbulb_outline,
+                text:
+                    'Sube, comparte y aprende de una gran variedad de ejercicios.',
+              ),
+              _Featurette(
+                icon: Icons.military_tech_outlined,
+                text:
+                    'Compite sanamente y gana reconocimiento en nuestro ranking.',
+              ),
+              _Featurette(
+                icon: Icons.model_training_outlined,
+                text:
+                    'Pon a prueba tus conocimientos con autoevaluaciones por tema.',
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 50),
+        if (user == null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16.0),
+            child: ElevatedButton(
               onPressed: () => Navigator.pushNamed(context, '/register'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
+                backgroundColor: moradoPrimario,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 40,
+                  vertical: 18,
+                ), // Botón más grande
+                textStyle: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
               ),
-              child: const Text('Registrarse'),
+              child: const Text('Crear Cuenta Ahora'),
             ),
-          const SizedBox(height: 40),
-          ElevatedButton.icon(
-            onPressed: () => Navigator.pushNamed(context, '/content'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              foregroundColor: Colors.white,
-              side: const BorderSide(color: Colors.white),
-            ),
-            icon: const Icon(Icons.play_arrow),
-            label: const Text('Ver contenidos'),
           ),
-          const SizedBox(height: 40),
-        ],
-      ),
+        ElevatedButton.icon(
+          onPressed: () => Navigator.pushNamed(context, '/content'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor:
+                user == null
+                    ? azulSecundario.withOpacity(0.8)
+                    : moradoPrimario.withOpacity(0.9),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 35, vertical: 16),
+            textStyle: GoogleFonts.poppins(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(30),
+            ),
+            side:
+                user != null
+                    ? null
+                    : BorderSide(color: Colors.white.withOpacity(0.5)),
+          ),
+          icon: const Icon(Icons.dashboard_customize_outlined, size: 20),
+          label: const Text('Explorar Contenidos'),
+        ),
+        const SizedBox(height: 40),
+      ],
     );
   }
 
-  Widget _buildContenidosCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1E3C72), Color(0xFF2A5298)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Text(
-              '📚 Contenidos disponibles',
-              style: GoogleFonts.poppins(
-                color: blancoSuave,
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Center(
-            child: Text(
-              '$totalEjercicios+ ejercicios',
-              style: GoogleFonts.poppins(
-                color: blancoSuave,
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                mostrarDetallesEjercicios = !mostrarDetallesEjercicios;
-              });
-            },
-            child: Center(
+  Widget _buildContenidosCard(BuildContext context) {
+    return _buildInfoCard(
+      context: context,
+      title: 'Contenidos Disponibles',
+      countText: '$totalEjercicios+ ejercicios',
+      icon: Icons.auto_stories_outlined,
+      iconColor: azulSecundario,
+      detailsChildren:
+          ejerciciosPorTema.entries.map((entry) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
               child: Text(
-                mostrarDetallesEjercicios ? 'Ocultar detalles' : 'Ver más',
-                style: GoogleFonts.poppins(
-                  color: Colors.white70,
-                  fontWeight: FontWeight.w500,
+                '• ${_nombreTema(entry.key)}: ${entry.value}',
+                style: const TextStyle(
+                  color: textoClaroSecundario,
                   fontSize: 14,
                 ),
               ),
-            ),
+            );
+          }).toList(),
+      showDetails: mostrarDetallesEjercicios,
+      onToggleDetails:
+          () => setState(
+            () => mostrarDetallesEjercicios = !mostrarDetallesEjercicios,
           ),
-          if (mostrarDetallesEjercicios)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children:
-                  ejerciciosPorTema.entries.map((entry) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Center(
-                        child: Text(
-                          '• ${_nombreTema(entry.key)}: ${entry.value}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-            ),
-        ],
-      ),
+      buttonText: 'Ver Todos los Ejercicios', // Texto más explícito
+      onButtonPressed: () => Navigator.pushNamed(context, '/content'),
     );
   }
 
-  Widget _buildRightColumn(BuildContext context, bool isMobile) {
-    final isLoggedIn = FirebaseAuth.instance.currentUser != null;
+  Widget _buildAutoevaluacionCard(
+    BuildContext context,
+    Map<String, int> preguntasPorTema,
+    bool isLoggedIn,
+  ) {
+    final totalPreguntas = preguntasPorTema.values.fold(
+      0,
+      (sum, item) => sum + item,
+    );
+    return _buildInfoCard(
+      context: context,
+      title: 'Autoevaluación',
+      countText: '$totalPreguntas+ preguntas',
+      icon: Icons.quiz_outlined,
+      iconColor: moradoPrimario,
+      detailsChildren:
+          preguntasPorTema.entries.map((entry) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Text(
+                '• ${entry.key}: ${entry.value}',
+                style: const TextStyle(
+                  color: textoClaroSecundario,
+                  fontSize: 14,
+                ),
+              ),
+            );
+          }).toList(),
+      showDetails: mostrarDetallesPreguntas,
+      onToggleDetails:
+          () => setState(
+            () => mostrarDetallesPreguntas = !mostrarDetallesPreguntas,
+          ),
+      buttonText: 'Iniciar Autoevaluación',
+      onButtonPressed: () {
+        if (!isLoggedIn) {
+          showDialog(
+            context: context,
+            builder:
+                (context) => AlertDialog(
+                  backgroundColor: tarjetaFondoOscuro,
+                  title: Text(
+                    'Inicio de sesión requerido',
+                    style: GoogleFonts.poppins(color: textoClaroPrincipal),
+                  ),
+                  content: Text(
+                    'Para acceder a la autoevaluación necesitas iniciar sesión.',
+                    style: GoogleFonts.poppins(color: textoClaroSecundario),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text(
+                        'Cancelar',
+                        style: GoogleFonts.poppins(color: moradoPrimario),
+                      ),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: moradoPrimario,
+                      ),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamed(context, '/login');
+                      },
+                      child: Text(
+                        'Iniciar sesión',
+                        style: GoogleFonts.poppins(color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ),
+          );
+        } else {
+          Navigator.pushNamed(context, '/autoevaluation');
+        }
+      },
+    );
+  }
 
+  Widget _buildRightColumnContent(
+    BuildContext context,
+    bool isMobile,
+    bool isLoggedIn,
+  ) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         FutureBuilder<List<Map<String, dynamic>>>(
           future: obtenerRanking(),
           builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return _buildSkeletonRanking();
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                _rankingCache == null) {
+              return _buildSkeletonCard(height: 250); // Ajustar altura
             }
-
-            final topUsers = snapshot.data!;
-
-            if (topUsers.isEmpty) {
-              return const Text(
-                'No hay usuarios en el ranking',
-                style: TextStyle(color: Colors.white),
+            if (snapshot.hasError)
+              return Center(
+                child: Text(
+                  'Error cargando ranking: ${snapshot.error}',
+                  style: const TextStyle(color: Colors.redAccent),
+                ),
               );
-            }
+            if (!snapshot.hasData || snapshot.data!.isEmpty)
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Text(
+                    'Aún no hay usuarios en el ranking.',
+                    style: TextStyle(
+                      color: textoClaroSecundario,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              );
 
-            return _buildRankingCardDesdeMapa(topUsers);
+            return _buildRankingCardDesdeMapa(snapshot.data!);
           },
         ),
-
-        const SizedBox(height: 40),
-        if (!isMobile)
+        const SizedBox(height: 30),
+        if (!isMobile) ...[
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
             child: Image.asset(
               'assets/images/alumno.webp',
-              height: 200,
+              height: 220,
               width: double.infinity,
               fit: BoxFit.cover,
             ),
           ),
-
-        const SizedBox(height: 40),
+          const SizedBox(height: 30),
+        ],
         FutureBuilder<Map<String, int>>(
           future: obtenerConteoPreguntasPorTema(),
           builder: (context, snapshot) {
-            if (!snapshot.hasData)
-              return _buildSkeletonRanking(); // Reutiliza skeleton
-            return _buildAutoevaluacionCard(snapshot.data!);
+            if (snapshot.connectionState == ConnectionState.waiting)
+              return _buildSkeletonCard(height: 280); // Ajustar altura
+            if (snapshot.hasError)
+              return Center(
+                child: Text(
+                  'Error cargando preguntas: ${snapshot.error}',
+                  style: const TextStyle(color: Colors.redAccent),
+                ),
+              );
+            if (!snapshot.hasData || snapshot.data!.isEmpty)
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Text(
+                    'No hay preguntas para autoevaluación.',
+                    style: TextStyle(
+                      color: textoClaroSecundario,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              );
+
+            return _buildAutoevaluacionCard(
+              context,
+              snapshot.data!,
+              isLoggedIn,
+            );
           },
         ),
-        const SizedBox(height: 20),
-        // Botón de chat (sin cambios)
-        // GestureDetector(
-        //   onTap: () {
-        //     if (!isLoggedIn) {
-        //       showDialog(
-        //         context: context,
-        //         builder:
-        //             (context) => AlertDialog(
-        //               title: const Text('Inicio de sesión requerido'),
-        //               content: const Text(
-        //                 'Para usar el chat necesitas iniciar sesión.',
-        //               ),
-        //               actions: [
-        //                 TextButton(
-        //                   onPressed: () => Navigator.pop(context),
-        //                   child: const Text('Cancelar'),
-        //                 ),
-        //                 ElevatedButton(
-        //                   onPressed: () {
-        //                     Navigator.pop(context);
-        //                     Navigator.pushNamed(context, '/login');
-        //                   },
-        //                   child: const Text('Iniciar sesión'),
-        //                 ),
-        //               ],
-        //             ),
-        //       );
-        //     } else {
-        //       Navigator.pushNamed(context, '/chat');
-        //     }
-        //   },
-        //   child: MouseRegion(
-        //     cursor: SystemMouseCursors.click,
-        //     child: Container(
-        //       decoration: BoxDecoration(
-        //         color: Colors.white,
-        //         borderRadius: BorderRadius.circular(30),
-        //         boxShadow: [
-        //           if (isLoggedIn)
-        //             BoxShadow(
-        //               color: Colors.black.withOpacity(0.05),
-        //               blurRadius: 5,
-        //               offset: const Offset(0, 2),
-        //             ),
-        //         ],
-        //       ),
-        //       child: Padding(
-        //         padding: const EdgeInsets.symmetric(
-        //           horizontal: 24,
-        //           vertical: 14,
-        //         ),
-        //         child: Row(
-        //           mainAxisSize: MainAxisSize.min,
-        //           children: [
-        //             Icon(
-        //               isLoggedIn
-        //                   ? Icons.chat_bubble_outline
-        //                   : Icons.lock_outline,
-        //               color: Colors.blueGrey,
-        //             ),
-        //             const SizedBox(width: 8),
-        //             Text(
-        //               isLoggedIn ? 'Chat' : 'Inicia sesión',
-        //               style: const TextStyle(
-        //                 color: Colors.blueGrey,
-        //                 fontWeight: FontWeight.w500,
-        //               ),
-        //             ),
-        //           ],
-        //         ),
-        //       ),
-        //     ),
-        //   ),
-        // ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 20), // Espacio antes del final de la columna
       ],
     );
   }
 
-  Widget _buildSkeletonRanking() {
+  Widget _buildSkeletonCard({double height = 220}) {
+    // Renombrado y parametrizado
     return Container(
-      height: 200,
+      height: height,
       width: double.infinity,
-      margin: const EdgeInsets.symmetric(vertical: 12),
+      margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: tarjetaFondoOscuro.withOpacity(0.5),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: const [
+          CircularProgressIndicator(color: Colors.white70),
           SizedBox(height: 16),
-          CircularProgressIndicator(color: Colors.white),
-          SizedBox(height: 12),
-          Text('Cargando ...', style: TextStyle(color: Colors.white70)),
+          Text(
+            'Cargando datos...',
+            style: TextStyle(color: textoClaroSecundario, fontSize: 16),
+          ),
         ],
       ),
     );
@@ -567,72 +729,53 @@ class _HomePageState extends State<HomePage> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 3),
-            ),
-            child: CircleAvatar(radius: 32, backgroundImage: avatar),
-          ),
+        CircleAvatar(
+          radius: 32,
+          backgroundImage: avatar,
+          backgroundColor: Colors.white24,
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Tooltip(
-          message: nombre, // Esto mostrará el nombre completo al pasar el mouse
+          message: nombre,
           child: SizedBox(
-            width: 80, // Limita el ancho del texto para que no se desborde
+            width: 80,
             child: Text(
-              nombre.length > 14 ? '${nombre.substring(0, 12)}…' : nombre,
+              nombre.length > 10 ? '${nombre.substring(0, 8)}…' : nombre,
               textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis, // Cortar con puntos suspensivos
-              maxLines: 1, // Asegura que sea una sola línea
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
               style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                shadows: [
-                  Shadow(
-                    blurRadius: 2,
-                    color: Colors.black26,
-                    offset: Offset(1, 1),
-                  ),
-                ],
+                color: textoClaroPrincipal,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
               ),
             ),
           ),
         ),
-
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.star, color: Colors.amber, size: 16),
-            const SizedBox(width: 4),
+            const Icon(
+              Icons.star_rounded,
+              color: Colors.amber,
+              size: 16,
+            ), // Icono más relleno
+            const SizedBox(width: 3),
             Text(
               '$puntaje pts',
               style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontSize: 13,
+                color: textoClaroPrincipal,
+                fontSize: 12,
                 fontWeight: FontWeight.w500,
-                shadows: [
-                  Shadow(
-                    blurRadius: 2,
-                    color: Colors.black26,
-                    offset: Offset(1, 1),
-                  ),
-                ],
               ),
             ),
           ],
         ),
-        const SizedBox(height: 4),
         Text(
-          '$ejercicios ejercicios',
+          '$ejercicios ejer.',
           style: GoogleFonts.poppins(
-            color: Colors.white70,
-            fontSize: 12,
-            fontWeight: FontWeight.w400,
+            color: textoClaroSecundario.withOpacity(0.8),
+            fontSize: 11,
           ),
         ),
       ],
@@ -640,62 +783,57 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildRankingCardDesdeMapa(List<Map<String, dynamic>> topUsers) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 600),
-      curve: Curves.easeInOut,
-      padding: const EdgeInsets.all(16),
-      width: double.infinity, // <-- AÑADE ESTO
+    return Container(
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF4FC3F7), Color(0xFF0288D1)],
+        gradient: LinearGradient(
+          // Mantenemos el gradiente distintivo para el ranking
+          colors: [
+            azulPrimario.withOpacity(0.9),
+            azulSecundario.withOpacity(0.95),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
           ),
-        ],
+        ], // Sombra más pronunciada
       ),
       child: Column(
         children: [
           Text(
-            '🏅 Top 5 - Comunidad destacada',
+            '🏅 Top 5 - Comunidad Destacada',
             style: GoogleFonts.poppins(
               fontSize: 20,
               fontWeight: FontWeight.bold,
               color: Colors.white,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 16,
-            runSpacing: 16,
+            alignment: WrapAlignment.spaceAround,
+            spacing: 10,
+            runSpacing: 16, // Ajustar spacing si es necesario
             children:
-                topUsers.asMap().entries.map((entry) {
-                  final i = entry.key;
-                  final data = entry.value;
-                  final nombre = data['nombre'] ?? 'Usuario';
-                  final puntaje = (data['calificacion'] ?? 0.0).toStringAsFixed(
-                    2,
-                  );
-                  final ejercicios = data['ejercicios'] ?? 0;
-                  final foto = data['foto'];
-
-                  final defaultAvatars = [
-                    'assets/images/avatar1.webp',
-                    'assets/images/avatar2.webp',
-                    'assets/images/avatar3.webp',
-                  ];
-
+                topUsers.map((data) {
+                  final nombre = data['nombre'] as String? ?? 'Usuario';
+                  final puntaje = (data['calificacion'] as double? ?? 0.0)
+                      .toStringAsFixed(2);
+                  final ejercicios = data['ejercicios'] as int? ?? 0;
+                  final foto = data['foto'] as String?;
                   final ImageProvider avatar =
-                      (foto != null && foto.startsWith('http'))
+                      (foto != null &&
+                              foto.isNotEmpty &&
+                              foto.startsWith('http'))
                           ? NetworkImage(foto)
-                          : AssetImage(defaultAvatars[i % 3]);
+                          : const AssetImage(
+                            'assets/images/avatar1.webp',
+                          ); // Asegúrate de tener esta imagen
 
                   return _avatarMiniRanking(
                     avatar,
@@ -705,111 +843,29 @@ class _HomePageState extends State<HomePage> {
                   );
                 }).toList(),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAutoevaluacionCard(Map<String, int> preguntasPorTema) {
-    final totalPreguntas = preguntasPorTema.values.fold(0, (a, b) => a + b);
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Text(
-              '📝 Autoevaluación disponible',
-              style: GoogleFonts.poppins(
-                color: blancoSuave,
-                fontSize: 24,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Center(
-            child: Text(
-              '$totalPreguntas+ preguntas',
-              style: GoogleFonts.poppins(
-                color: blancoSuave,
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                mostrarDetallesPreguntas = !mostrarDetallesPreguntas;
-              });
-            },
-            child: Center(
-              child: Text(
-                mostrarDetallesPreguntas ? 'Ocultar temas' : 'Ver más',
-                style: GoogleFonts.poppins(
-                  color: blancoSuave,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-          if (mostrarDetallesPreguntas)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children:
-                  preguntasPorTema.entries.map((entry) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Center(
-                        child: Text(
-                          '• ${entry.key}: ${entry.value}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-            ),
           const SizedBox(height: 20),
-          Center(
-            child: ElevatedButton.icon(
-              onPressed: () => Navigator.pushNamed(context, '/autoevaluation'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Color(0xFF6A11CB),
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
+          TextButton.icon(
+            icon: const Icon(Icons.leaderboard_outlined, color: blancoSuave),
+            label: Text(
+              'Ver Ranking Completo',
+              style: GoogleFonts.poppins(
+                color: blancoSuave,
+                fontWeight: FontWeight.w600,
               ),
-
-              icon: const Icon(Icons.assignment_turned_in),
-              label: const Text('Ir a autoevaluación'),
+            ),
+            onPressed: () {
+              // TODO: Implementar navegación a la página de ranking completo
+              Navigator.pushNamed(
+                context,
+                '/ranking',
+              ); // Asumiendo que tienes una ruta '/ranking'
+            },
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(color: blancoSuave.withOpacity(0.5)),
+              ),
             ),
           ),
         ],
@@ -849,10 +905,8 @@ class _HomePageState extends State<HomePage> {
   Widget _buildFooter(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-      margin: const EdgeInsets.only(top: 40),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: Colors.white24)),
-      ),
+      color:
+          fondoOscuro, // Para asegurar que el footer no contraste si el SingleChildScrollView no llega al final
       child: Wrap(
         alignment: WrapAlignment.center,
         spacing: 32,
@@ -862,48 +916,62 @@ class _HomePageState extends State<HomePage> {
             onPressed: () => Navigator.pushNamed(context, '/credits'),
             child: const Text(
               'Créditos',
-              style: TextStyle(color: Colors.white70),
+              style: TextStyle(color: textoClaroSecundario),
             ),
           ),
           TextButton(
             onPressed: () => Navigator.pushNamed(context, '/faq'),
             child: const Text(
               'Preguntas frecuentes',
-              style: TextStyle(color: Colors.white70),
+              style: TextStyle(color: textoClaroSecundario),
             ),
           ),
           const Text(
             '© 2025 Study Connect | ESCOM IPN',
             style: TextStyle(color: Colors.white38),
-          ),
+          ), // Año actualizado
         ],
       ),
     );
   }
 
   Widget _buildChatButton(BuildContext context, bool isLoggedIn) {
-    return GestureDetector(
-      onTap: () {
+    return FloatingActionButton.extended(
+      onPressed: () {
         if (!isLoggedIn) {
           showDialog(
             context: context,
             builder:
                 (context) => AlertDialog(
-                  title: const Text('Inicio de sesión requerido'),
-                  content: const Text(
+                  backgroundColor: tarjetaFondoOscuro,
+                  title: Text(
+                    'Inicio de sesión requerido',
+                    style: GoogleFonts.poppins(color: textoClaroPrincipal),
+                  ),
+                  content: Text(
                     'Para usar el chat necesitas iniciar sesión.',
+                    style: GoogleFonts.poppins(color: textoClaroSecundario),
                   ),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancelar'),
+                      child: Text(
+                        'Cancelar',
+                        style: GoogleFonts.poppins(color: moradoPrimario),
+                      ),
                     ),
                     ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: moradoPrimario,
+                      ),
                       onPressed: () {
                         Navigator.pop(context);
                         Navigator.pushNamed(context, '/login');
                       },
-                      child: const Text('Iniciar sesión'),
+                      child: Text(
+                        'Iniciar sesión',
+                        style: GoogleFonts.poppins(color: Colors.white),
+                      ),
                     ),
                   ],
                 ),
@@ -912,40 +980,52 @@ class _HomePageState extends State<HomePage> {
           Navigator.pushNamed(context, '/chat');
         }
       },
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(30),
-            boxShadow: [
-              if (isLoggedIn)
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.15),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
-                ),
-            ],
+      label: Text(
+        isLoggedIn ? 'Chat Comunitario' : 'Chat (Inicia Sesión)',
+        style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+      ),
+      icon: Icon(isLoggedIn ? Icons.chat_bubble_outline : Icons.lock_outline),
+      backgroundColor: moradoPrimario,
+      foregroundColor: Colors.white,
+      elevation: 6,
+    );
+  }
+}
+
+class _Featurette extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _Featurette({super.key, required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        vertical: isMobile ? 8.0 : 12.0,
+      ), // Más espacio vertical
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.center, // Mejor alineación vertical
+        children: [
+          Icon(
+            icon,
+            color: moradoPrimario,
+            size: isMobile ? 24 : 30,
+          ), // Iconos un poco más grandes
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              text,
+              style: GoogleFonts.poppins(
+                color: textoClaroSecundario,
+                fontSize: isMobile ? 15 : 17,
+                height: 1.55,
+              ), // Mejor interlineado
+            ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                isLoggedIn ? Icons.chat_bubble_outline : Icons.lock_outline,
-                color: Colors.blueGrey,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                isLoggedIn ? 'Chat' : 'Inicia sesión',
-                style: const TextStyle(
-                  color: Colors.blueGrey,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
+        ],
       ),
     );
   }
