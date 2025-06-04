@@ -1778,6 +1778,180 @@ class _ChatHomePageState extends State<ChatHomePage> {
     );
   }
 
+  void _confirmarDisolverGrupo(String groupId, String groupName) {
+    showDialog(
+      context: context,
+      builder: (BuildContext confirmContext) {
+        return AlertDialog(
+          title: Text('Disolver Grupo "$groupName"'),
+          content: const Text(
+            '¿Estás seguro de que quieres disolver este grupo? Todos los mensajes y archivos serán eliminados permanentemente para todos los miembros. Esta acción no se puede deshacer.',
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancelar'),
+              onPressed: () => Navigator.of(confirmContext).pop(),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
+              child: const Text('Disolver Grupo'),
+              onPressed: () {
+                Navigator.of(confirmContext).pop();
+                _ejecutarDisolverGrupo(groupId, groupName);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _ejecutarDisolverGrupo(String groupId, String groupName) async {
+    if (!mounted) return;
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    // Mostrar un indicador de progreso
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext progressContext) {
+        return AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Text("Disolviendo grupo..."),
+            ],
+          ),
+        );
+      },
+    );
+
+    try {
+      final DocumentReference chatDocRef = FirebaseFirestore.instance
+          .collection('Chats')
+          .doc(groupId);
+      final CollectionReference messagesRef = chatDocRef.collection('Mensajes');
+      final FirebaseStorage storage = FirebaseStorage.instance;
+
+      // 1. Obtener IDs de todos los miembros para notificar (opcional)
+      List<String> memberIds = [];
+      final groupDocSnapshot = await chatDocRef.get();
+      if (groupDocSnapshot.exists) {
+        final data = groupDocSnapshot.data() as Map<String, dynamic>;
+        memberIds = List<String>.from(data['ids'] ?? []);
+      }
+
+      // 2. Eliminar todos los mensajes de la subcolección
+      final QuerySnapshot messagesSnapshot = await messagesRef.get();
+      WriteBatch batch = FirebaseFirestore.instance.batch();
+      for (DocumentSnapshot msgDoc in messagesSnapshot.docs) {
+        // Opcional: si los mensajes tienen archivos en Storage, borrarlos primero.
+        // Necesitarías una lógica para encontrar la ruta del archivo en Storage desde el mensaje.
+        // Ejemplo: if (msgDoc.data() ... contains 'urlContenido' ... y es de Storage de este chat)
+        //    await storage.refFromURL(msgDoc.data()['urlContenido']).delete();
+        batch.delete(msgDoc.reference);
+      }
+      await batch.commit();
+      print('Mensajes del grupo $groupId eliminados.');
+
+      // 3. Eliminar archivos del grupo en Firebase Storage
+      // a. Foto del grupo
+      try {
+        if (groupDocSnapshot.exists) {
+          final data = groupDocSnapshot.data() as Map<String, dynamic>;
+          final String? groupPhotoUrl = data['groupPhoto'] as String?;
+          if (groupPhotoUrl != null && groupPhotoUrl.isNotEmpty) {
+            // Importante: Solo borrar si la URL es de Firebase Storage y tienes el path.
+            // storage.refFromURL() es la forma más segura si la URL es de Firebase Storage.
+            // Si guardas el path directamente, es más fácil.
+            // Ejemplo con path (si lo guardaras): final photoRef = storage.ref('grupos/$groupId/profile.jpg'); await photoRef.delete();
+            // Con URL, es más complejo obtener el path exacto, a menos que sigas una convención.
+            // Por simplicidad, si tu 'subirImagenGrupo' usa un path predecible como 'grupos/$groupId.jpg':
+            final photoRef = storage.ref(
+              'grupos/$groupId.jpg',
+            ); // Asumiendo convención de nombre
+            await photoRef.delete();
+            print('Foto del grupo $groupId eliminada de Storage.');
+          }
+        }
+      } catch (e) {
+        print(
+          "Error eliminando foto del grupo de Storage (puede que no exista o error de permiso): $e",
+        );
+      }
+
+      // b. Archivos multimedia de los mensajes (si no se borraron en el paso 2)
+      // Esto requeriría iterar de nuevo sobre los mensajes o tener una lista de paths.
+      // La ruta 'chats/$chatId/media/' sugiere una estructura.
+      // Se puede listar y borrar, pero es más intensivo del lado del cliente.
+      // Cloud Function recomendada para esto.
+      try {
+        final listResult = await storage.ref('chats/$groupId/media').listAll();
+        for (var prefix in listResult.prefixes) {
+          // Prefixes son las carpetas de cada mensajeId
+          final messageMediaList = await prefix.listAll();
+          for (var item in messageMediaList.items) {
+            await item.delete();
+          }
+        }
+        print('Archivos multimedia del grupo $groupId eliminados de Storage.');
+      } catch (e) {
+        print("Error eliminando archivos multimedia del grupo de Storage: $e");
+      }
+
+      // 4. Eliminar el documento principal del chat
+      await chatDocRef.delete();
+      print('Documento del grupo $groupId eliminado de Firestore.');
+
+      // 5. Notificar a los miembros (opcional)
+      for (String memberUid in memberIds) {
+        if (memberUid != uid && nombreUsuario != null) {
+          // No notificar al creador
+          await NotificationService.crearNotificacion(
+            uidDestino: memberUid,
+            tipo: 'grupo_disuelto',
+            titulo: 'Grupo Disuelto',
+            contenido:
+                'El grupo "$groupName" ha sido disuelto por el creador ($nombreUsuario).',
+            referenciaId:
+                groupId, // El ID ya no existirá, pero puede ser útil para el cliente de notificación
+            uidEmisor: uid,
+            nombreEmisor: nombreUsuario!,
+          );
+        }
+      }
+
+      if (mounted) {
+        Navigator.of(context).pop(); // Cierra el diálogo de progreso
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text('Grupo "$groupName" disuelto exitosamente.')),
+        );
+        // Volver a la lista de chats si el grupo disuelto era el seleccionado
+        if (chatIdSeleccionado == groupId) {
+          setState(() {
+            _showList = true;
+            chatIdSeleccionado = null;
+            otroUid = null;
+          });
+        }
+      }
+    } catch (e, s) {
+      print('Error al disolver el grupo: $e');
+      print('Stack trace: $s');
+      if (mounted) {
+        Navigator.of(context).pop(); // Cierra el diálogo de progreso
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('Error al disolver el grupo: ${e.toString()}'),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _ejecutarEliminarMiembro(
     String groupId,
     String miembroIdAEliminar,
@@ -1955,160 +2129,30 @@ class _ChatHomePageState extends State<ChatHomePage> {
     }
   }
 
-  // --- Función para editar el nombre del grupo ---
-  // void _mostrarDialogoEditarNombreGrupo(
-  //   String groupId,
-  //   String nombreActual,
-  //   String nombreUsuarioActual,
-  // ) {
-  //   final TextEditingController _nombreController = TextEditingController(
-  //     text: nombreActual,
-  //   );
-  //   showDialog(
-  //     context: context,
-  //     builder: (BuildContext alertContext) {
-  //       return AlertDialog(
-  //         title: const Text('Editar nombre del grupo'),
-  //         content: TextField(
-  //           controller: _nombreController,
-  //           autofocus: true,
-  //           decoration: const InputDecoration(
-  //             hintText: 'Nuevo nombre del grupo',
-  //           ),
-  //           textCapitalization: TextCapitalization.sentences,
-  //         ),
-  //         actions: [
-  //           TextButton(
-  //             onPressed: () => Navigator.of(alertContext).pop(),
-  //             child: const Text('Cancelar'),
-  //           ),
-  //           ElevatedButton(
-  //             child: const Text('Guardar'),
-  //             onPressed: () async {
-  //               final nuevoNombre = _nombreController.text.trim();
-  //               if (nuevoNombre.isNotEmpty && nuevoNombre != nombreActual) {
-  //                 final String mensajeSistema =
-  //                     '$nombreUsuarioActual cambió el nombre del grupo a "$nuevoNombre".';
-  //                 await FirebaseFirestore.instance
-  //                     .collection('Chats')
-  //                     .doc(groupId)
-  //                     .update({
-  //                       'groupName': nuevoNombre,
-  //                       'lastMessage': mensajeSistema,
-  //                       'lastMessageAt': Timestamp.now(),
-  //                     });
-  //                 FirebaseFirestore.instance
-  //                     .collection('Chats')
-  //                     .doc(groupId)
-  //                     .collection('Mensajes')
-  //                     .add({
-  //                       'AutorID': 'sistema',
-  //                       'Contenido': mensajeSistema,
-  //                       'Fecha': Timestamp.now(),
-  //                       'tipo': 'sistema_info_actualizada',
-  //                     });
-  //                 if (mounted) Navigator.of(alertContext).pop();
-  //               } else if (nuevoNombre == nombreActual) {
-  //                 if (mounted) Navigator.of(alertContext).pop();
-  //               } else {
-  //                 if (mounted)
-  //                   ScaffoldMessenger.of(context).showSnackBar(
-  //                     const SnackBar(
-  //                       content: Text("El nombre no puede estar vacío."),
-  //                     ),
-  //                   );
-  //               }
-  //             },
-  //           ),
-  //         ],
-  //       );
-  //     },
-  //   );
-  // }
-
-  // // --- Función para editar la descripción del grupo ---
-  // void _mostrarDialogoEditarDescripcionGrupo(
-  //   String groupId,
-  //   String descActual,
-  //   String nombreUsuarioActual,
-  // ) {
-  //   final TextEditingController _descController = TextEditingController(
-  //     text: descActual,
-  //   );
-  //   showDialog(
-  //     context: context,
-  //     builder: (BuildContext alertContext) {
-  //       return AlertDialog(
-  //         title: const Text('Editar descripción del grupo'),
-  //         content: TextField(
-  //           controller: _descController,
-  //           autofocus: true,
-  //           maxLines: null,
-  //           textCapitalization: TextCapitalization.sentences,
-  //           decoration: const InputDecoration(
-  //             hintText: 'Descripción del grupo (opcional)',
-  //           ),
-  //         ),
-  //         actions: [
-  //           TextButton(
-  //             onPressed: () => Navigator.of(alertContext).pop(),
-  //             child: const Text('Cancelar'),
-  //           ),
-  //           ElevatedButton(
-  //             child: const Text('Guardar'),
-  //             onPressed: () async {
-  //               final nuevaDesc = _descController.text.trim();
-  //               final String mensajeSistema =
-  //                   '$nombreUsuarioActual actualizó la descripción del grupo.';
-  //               await FirebaseFirestore.instance
-  //                   .collection('Chats')
-  //                   .doc(groupId)
-  //                   .update({
-  //                     'groupDescription': nuevaDesc,
-  //                     'lastMessage':
-  //                         nuevaDesc.isNotEmpty
-  //                             ? mensajeSistema
-  //                             : '$nombreUsuarioActual eliminó la descripción del grupo.',
-  //                     'lastMessageAt': Timestamp.now(),
-  //                   });
-  //               FirebaseFirestore.instance
-  //                   .collection('Chats')
-  //                   .doc(groupId)
-  //                   .collection('Mensajes')
-  //                   .add({
-  //                     'AutorID': 'sistema',
-  //                     'Contenido':
-  //                         nuevaDesc.isNotEmpty
-  //                             ? mensajeSistema
-  //                             : '$nombreUsuarioActual eliminó la descripción del grupo.',
-  //                     'Fecha': Timestamp.now(),
-  //                     'tipo': 'sistema_info_actualizada',
-  //                   });
-  //               if (mounted) Navigator.of(alertContext).pop();
-  //             },
-  //           ),
-  //         ],
-  //       );
-  //     },
-  //   );
-  // }
+  // Asegúrate de que todas las funciones auxiliares que esta función llama
+  // (_seleccionarYActualizarImagenGrupo, _mostrarDialogoEditarNombreGrupo, etc.)
+  // estén definidas correctamente DENTRO de tu clase _ChatHomePageState.
 
   void _mostrarDialogoMiembrosGrupo(
     String groupId,
-    String initialGroupName,
-    String? initialGroupPhotoUrl,
+    String initialGroupName, // Nombre del grupo al momento de abrir el diálogo
+    String?
+    initialGroupPhotoUrl, // Foto del grupo al momento de abrir el diálogo
     List<String>
-    initialMemberIds, // Puede ser útil para mostrar algo mientras carga el stream
-    String? groupCreatorId,
+    initialMemberIds, // Puede ser útil para el contexto de añadir miembros
+    String? groupCreatorId, // ID del creador original del grupo
   ) {
+    print(
+      'Abriendo diálogo de miembros para: $groupId, NombreInicial: $initialGroupName, FotoInicial: $initialGroupPhotoUrl, CreadorOriginal: $groupCreatorId',
+    );
+
     showDialog(
-      context: context, // Usar el contexto principal para el showDialog
-      barrierDismissible: true, // Permitir cerrar tocando fuera
+      context: context,
+      barrierDismissible: true,
       builder: (BuildContext contextDialog) {
-        // Contexto específico para este AlertDialog
+        // contextDialog es el contexto específico de este AlertDialog
         return AlertDialog(
           titlePadding: const EdgeInsets.all(0),
-          // El título ahora usa un StreamBuilder para reflejar cambios en nombre/foto del grupo en tiempo real
           title: StreamBuilder<DocumentSnapshot>(
             stream:
                 FirebaseFirestore.instance
@@ -2116,35 +2160,35 @@ class _ChatHomePageState extends State<ChatHomePage> {
                     .doc(groupId)
                     .snapshots(),
             builder: (contextTitleStream, groupSnapshotTitle) {
-              // Valores por defecto o iniciales
-              String currentTitle = initialGroupName;
-              String? currentPhoto = initialGroupPhotoUrl;
-              bool userIsCreator =
-                  uid ==
-                  groupCreatorId; // Usar el groupCreatorId pasado para la lógica inicial del título
-              bool userIsAdmin = false;
+              String displayGroupName = initialGroupName;
+              String? displayGroupPhoto = initialGroupPhotoUrl;
+              bool currentUserIsCreator = uid == groupCreatorId;
+              bool currentUserIsAdmin = false;
+              String? actualCreatorIdFromSnapshot =
+                  groupCreatorId; // Mantener el original si el snapshot no lo tiene
 
               if (groupSnapshotTitle.hasData &&
                   groupSnapshotTitle.data!.exists) {
                 final data =
                     groupSnapshotTitle.data!.data() as Map<String, dynamic>;
-                currentTitle = data['groupName'] ?? initialGroupName;
-                currentPhoto = data['groupPhoto'] as String?;
+                displayGroupName = data['groupName'] ?? initialGroupName;
+                displayGroupPhoto = data['groupPhoto'] as String?;
+                actualCreatorIdFromSnapshot =
+                    data['createdBy'] as String? ?? groupCreatorId;
                 final List<String> adminsFromSnapshot = List<String>.from(
                   data['admins'] ?? [],
                 );
-                userIsAdmin = adminsFromSnapshot.contains(uid);
+                currentUserIsAdmin = adminsFromSnapshot.contains(uid);
+                currentUserIsCreator = uid == actualCreatorIdFromSnapshot;
               }
 
-              final bool canEditBasicInfo = userIsCreator || userIsAdmin;
+              final bool canUserEditBasicGroupInfo =
+                  currentUserIsCreator || currentUserIsAdmin;
+              final bool canUserAddMembers =
+                  currentUserIsCreator || currentUserIsAdmin;
 
               return Container(
-                padding: const EdgeInsets.fromLTRB(
-                  16,
-                  12,
-                  8,
-                  12,
-                ), // Padding ajustado
+                padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
                 color: Theme.of(contextDialog).colorScheme.primary,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2156,18 +2200,18 @@ class _ChatHomePageState extends State<ChatHomePage> {
                             alignment: Alignment.center,
                             children: [
                               CircleAvatar(
-                                radius: 40, // Radio ligeramente mayor
+                                radius: 24,
                                 backgroundImage:
-                                    (currentPhoto != null &&
-                                            currentPhoto.isNotEmpty)
-                                        ? NetworkImage(currentPhoto)
+                                    (displayGroupPhoto != null &&
+                                            displayGroupPhoto.isNotEmpty)
+                                        ? NetworkImage(displayGroupPhoto)
                                         : const AssetImage(
                                               'assets/images/avatar_grupo_default.png',
                                             )
                                             as ImageProvider,
                                 backgroundColor: Colors.grey.shade300,
                               ),
-                              if (canEditBasicInfo)
+                              if (canUserEditBasicGroupInfo)
                                 Container(
                                   width: 32,
                                   height: 32,
@@ -2183,12 +2227,11 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                       color: Colors.white,
                                     ),
                                     tooltip: 'Cambiar imagen del grupo',
-                                    // Usar 'context' (el de la página) para el SnackBar de _seleccionarYActualizarImagenGrupo
                                     onPressed:
                                         () =>
                                             _seleccionarYActualizarImagenGrupo(
                                               groupId,
-                                              currentTitle,
+                                              displayGroupName,
                                               context,
                                             ),
                                   ),
@@ -2199,21 +2242,19 @@ class _ChatHomePageState extends State<ChatHomePage> {
                           Expanded(
                             child: InkWell(
                               onTap:
-                                  canEditBasicInfo
-                                      ? () {
-                                        _mostrarDialogoEditarNombreGrupo(
-                                          groupId,
-                                          currentTitle,
-                                          nombreUsuario ?? 'Usuario',
-                                        );
-                                      }
+                                  canUserEditBasicGroupInfo
+                                      ? () => _mostrarDialogoEditarNombreGrupo(
+                                        groupId,
+                                        displayGroupName,
+                                        nombreUsuario ?? 'Usuario',
+                                      )
                                       : null,
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Flexible(
                                     child: Text(
-                                      currentTitle,
+                                      displayGroupName,
                                       style: TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
@@ -2222,9 +2263,9 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  if (canEditBasicInfo)
+                                  if (canUserEditBasicGroupInfo)
                                     const SizedBox(width: 6),
-                                  if (canEditBasicInfo)
+                                  if (canUserEditBasicGroupInfo)
                                     Icon(
                                       Icons.edit,
                                       color: Colors.white70,
@@ -2237,13 +2278,11 @@ class _ChatHomePageState extends State<ChatHomePage> {
                         ],
                       ),
                     ),
-                    if (canEditBasicInfo) // Solo creador o admin pueden añadir participantes
+                    if (canUserAddMembers)
                       IconButton(
                         icon: Icon(Icons.person_add_alt_1, color: Colors.white),
                         tooltip: 'Añadir participante',
                         onPressed: () {
-                          // Obtenemos los miembros actuales directamente del snapshot si está disponible
-                          // o hacemos una nueva llamada si es necesario (más seguro)
                           FirebaseFirestore.instance
                               .collection('Chats')
                               .doc(groupId)
@@ -2256,7 +2295,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                       List<String>.from(
                                         currentGroupDocData['ids'] ?? [],
                                       );
-                                  // No cerramos este diálogo, el de seleccionar miembros se superpondrá.
                                   _mostrarDialogoSeleccionarNuevosMiembros(
                                     groupId,
                                     membersNow,
@@ -2275,11 +2313,12 @@ class _ChatHomePageState extends State<ChatHomePage> {
               );
             },
           ),
+          contentPadding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
           content: SizedBox(
-            width: 380, // Ligeramente más ancho
+            width: 380,
             height:
                 MediaQuery.of(contextDialog).size.height *
-                0.55, // Un poco más de altura
+                0.55, // Ajustar altura
             child: StreamBuilder<DocumentSnapshot>(
               stream:
                   FirebaseFirestore.instance
@@ -2294,7 +2333,8 @@ class _ChatHomePageState extends State<ChatHomePage> {
                 final groupData =
                     groupSnapshotContent.data!.data() as Map<String, dynamic>;
                 final String? actualCreatorId =
-                    groupData['createdBy'] as String?;
+                    groupData['createdBy']
+                        as String?; // Usar este para la lógica interna
                 final List<String> currentMemberIds = List<String>.from(
                   groupData['ids'] ?? [],
                 );
@@ -2302,7 +2342,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                   groupData['admins'] ?? [],
                 );
                 final String groupDesc = groupData['groupDescription'] ?? '';
-                final String currentGroupNameForActions =
+                final String groupNameForActions =
                     groupData['groupName'] ?? initialGroupName;
 
                 final bool esUsuarioActualElCreador = uid == actualCreatorId;
@@ -2310,8 +2350,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
                 final bool puedeGestionarInfoGrupo =
                     esUsuarioActualElCreador || esUsuarioActualAdmin;
-                final bool puedeGestionarListaAdmins =
-                    esUsuarioActualElCreador; // Solo el creador gestiona admins
+                final bool soloCreadorGestionaAdmins = esUsuarioActualElCreador;
 
                 if (currentMemberIds.isEmpty)
                   return const Center(
@@ -2320,12 +2359,13 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     ListTile(
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 4.0,
-                        vertical: 0,
-                      ),
+                        vertical: 4.0,
+                      ), //Ajuste
                       dense: true,
                       title: const Text(
                         "Descripción",
@@ -2360,19 +2400,22 @@ class _ChatHomePageState extends State<ChatHomePage> {
                               )
                               : null,
                     ),
-                    const Divider(height: 1),
+                    const Divider(height: 1, thickness: 1),
                     Padding(
                       padding: const EdgeInsets.only(
                         left: 4.0,
                         top: 10.0,
-                        bottom: 4.0,
+                        bottom: 6.0,
                       ),
                       child: Text(
                         "${currentMemberIds.length} Participante(s)",
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
-                          color: Theme.of(contextContentStream).hintColor,
+                          color:
+                              Theme.of(
+                                contextContentStream,
+                              ).textTheme.bodySmall?.color,
                         ),
                       ),
                     ),
@@ -2401,22 +2444,18 @@ class _ChatHomePageState extends State<ChatHomePage> {
                           final bool esEsteMiembroAdmin = currentAdminIds
                               .contains(memberIdToList);
 
-                          // Definir permisos para acciones sobre *este* miembro
                           bool puedeEliminarAEsteMiembro = false;
                           if (esUsuarioActualElCreador &&
                               memberIdToList != uid) {
-                            // El creador puede eliminar a cualquiera menos a sí mismo
                             puedeEliminarAEsteMiembro = true;
                           } else if (esUsuarioActualAdmin &&
                               !esEsteMiembroElCreador &&
                               !esEsteMiembroAdmin &&
                               memberIdToList != uid) {
-                            // Un admin puede eliminar a un miembro normal (que no sea el creador ni otro admin, ni a sí mismo)
                             puedeEliminarAEsteMiembro = true;
                           }
-
                           final bool puedeCambiarRolAdminAEsteMiembro =
-                              puedeGestionarListaAdmins &&
+                              soloCreadorGestionaAdmins &&
                               memberIdToList != uid &&
                               !esEsteMiembroElCreador;
 
@@ -2491,12 +2530,12 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                           groupId,
                                           memberIdToList,
                                           nombreMiembro,
-                                          currentGroupNameForActions,
+                                          groupNameForActions,
                                         ),
                                   ),
                                 if (puedeCambiarRolAdminAEsteMiembro)
                                   PopupMenuButton<String>(
-                                    icon: Icon(
+                                    icon: const Icon(
                                       Icons.admin_panel_settings_outlined,
                                       size: 20,
                                     ),
@@ -2508,7 +2547,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                           memberIdToList,
                                           true,
                                           nombreMiembro,
-                                          currentGroupNameForActions,
+                                          groupNameForActions,
                                         );
                                       else if (value == 'quitar_admin')
                                         _actualizarRolAdmin(
@@ -2516,7 +2555,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                           memberIdToList,
                                           false,
                                           nombreMiembro,
-                                          currentGroupNameForActions,
+                                          groupNameForActions,
                                         );
                                     },
                                     itemBuilder:
@@ -2546,8 +2585,46 @@ class _ChatHomePageState extends State<ChatHomePage> {
               },
             ),
           ),
-          actionsAlignment: MainAxisAlignment.spaceEvenly,
+          actionsAlignment: MainAxisAlignment.spaceBetween,
           actions: <Widget>[
+            if (uid ==
+                groupCreatorId) // Botón de Disolver Grupo solo para el creador original (groupCreatorId pasado al diálogo)
+              TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(contextDialog).colorScheme.error,
+                ),
+                child: const Text(
+                  'Disolver Grupo',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                onPressed: () async {
+                  // Hacer async para el await
+                  // Cerrar el diálogo de miembros ANTES de iniciar la operación de disolver
+                  Navigator.of(contextDialog).pop();
+
+                  String nameForDialog =
+                      initialGroupName; // Usar el nombre que se pasó inicialmente
+                  try {
+                    // Opcional: intentar obtener el nombre más reciente, pero no bloquear si falla
+                    DocumentSnapshot freshGroupDoc =
+                        await FirebaseFirestore.instance
+                            .collection('Chats')
+                            .doc(groupId)
+                            .get();
+                    if (freshGroupDoc.exists) {
+                      nameForDialog =
+                          (freshGroupDoc.data()
+                              as Map<String, dynamic>)['groupName'] ??
+                          initialGroupName;
+                    }
+                  } catch (e) {
+                    print(
+                      "No se pudo obtener el nombre más reciente para disolver, usando el inicial: $e",
+                    );
+                  }
+                  _confirmarDisolverGrupo(groupId, nameForDialog);
+                },
+              ),
             TextButton(
               style: TextButton.styleFrom(
                 foregroundColor: Theme.of(contextDialog).colorScheme.error,
@@ -2555,10 +2632,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
               child: const Text('Salir del grupo'),
               onPressed: () {
                 Navigator.of(contextDialog).pop();
-                _confirmarSalirDelGrupo(
-                  groupId,
-                  initialGroupName,
-                ); // Usar initialGroupName para el diálogo de confirmación
+                _confirmarSalirDelGrupo(groupId, initialGroupName);
               },
             ),
             TextButton(
@@ -2728,201 +2802,207 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
   // Método que abre el diálogo de creación de grupo
   void _mostrarDialogoCrearGrupo() {
-    // controladores y estado local del diálogo
-    final TextEditingController _groupNameController = TextEditingController();
-    final TextEditingController _searchController = TextEditingController();
-    List<String> _selected = [];
-    String _filter = '';
+    final TextEditingController groupNameDialogController =
+        TextEditingController();
+    final TextEditingController groupDescriptionDialogController =
+        TextEditingController();
+    final TextEditingController searchUserDialogController =
+        TextEditingController();
+    List<String> selectedUsersForGroupDialog = [];
+    String userFilterDialog = '';
+    Uint8List?
+    groupImageDialogBytes; // Variable local para la imagen del diálogo
 
     showDialog(
       context: context,
-      builder: (context) {
-        final TextEditingController _groupNameController =
-            TextEditingController();
-        final TextEditingController _searchController = TextEditingController();
-        List<String> _selected = [];
-        String _filter = '';
-
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
         return StatefulBuilder(
-          builder: (context, setStateDialog) {
+          builder: (BuildContext sfbContext, StateSetter setStateDialog) {
             return AlertDialog(
-              title: const Text('Nuevo grupo'),
+              title: const Text('Nuevo Grupo'),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 20.0,
+                vertical: 20.0,
+              ),
               content: SizedBox(
-                width: 350,
-                height: 400,
+                width: 400,
+                height:
+                    MediaQuery.of(sfbContext).size.height *
+                    0.7, // Ajustar altura
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Stack(
-                      alignment: Alignment.bottomRight,
-                      children: [
-                        CircleAvatar(
-                          radius: 60,
-                          backgroundImage:
-                              _imagenGrupo != null
-                                  ? MemoryImage(_imagenGrupo!)
-                                  : const AssetImage(
-                                        'assets/images/avatar1.png',
-                                      )
-                                      as ImageProvider,
-                        ),
-                        Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: IconButton(
-                            icon: const Icon(Icons.edit, size: 20),
-                            onPressed: () async {
-                              final input =
-                                  html.FileUploadInputElement()
-                                    ..accept = 'image/*';
-                              input.click();
-                              input.onChange.listen((event) {
-                                final file = input.files?.first;
-                                if (file != null) {
-                                  final reader = html.FileReader();
-                                  reader.readAsArrayBuffer(file);
-                                  reader.onLoadEnd.listen((event) {
-                                    _imagenGrupo = reader.result as Uint8List;
-                                    setStateDialog(() {}); // <- importante
-                                  });
-                                }
+                    GestureDetector(
+                      onTap: () async {
+                        if (kIsWeb) {
+                          final html.FileUploadInputElement input =
+                              html.FileUploadInputElement()..accept = 'image/*';
+                          input.click();
+                          input.onChange.first.then((event) {
+                            final file = input.files?.first;
+                            if (file != null) {
+                              final reader = html.FileReader();
+                              reader.readAsArrayBuffer(file);
+                              reader.onLoadEnd.listen((e) {
+                                setStateDialog(() {
+                                  groupImageDialogBytes =
+                                      reader.result as Uint8List?;
+                                });
                               });
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _groupNameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Nombre del grupo',
-                      ),
-                      onChanged: (_) => setStateDialog(() {}),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _searchController,
-                      decoration: const InputDecoration(
-                        hintText: 'Buscar usuarios...',
-                        prefixIcon: Icon(Icons.search),
-                      ),
-                      onChanged: (txt) {
-                        _filter = txt.trim().toLowerCase();
-                        setStateDialog(() {});
+                            }
+                          });
+                        } else {
+                          FilePickerResult? result = await FilePicker.platform
+                              .pickFiles(type: FileType.image);
+                          if (result != null &&
+                              result.files.single.bytes != null) {
+                            setStateDialog(() {
+                              groupImageDialogBytes = result.files.single.bytes;
+                            });
+                          }
+                        }
                       },
+                      child: CircleAvatar(
+                        radius: 50,
+                        backgroundImage:
+                            groupImageDialogBytes != null
+                                ? MemoryImage(groupImageDialogBytes!)
+                                : const AssetImage(
+                                      'assets/images/avatar_grupo_default.png',
+                                    )
+                                    as ImageProvider,
+                        backgroundColor: Colors.grey[200],
+                        child:
+                            groupImageDialogBytes == null
+                                ? Icon(
+                                  Icons.camera_alt,
+                                  size: 30,
+                                  color: Colors.grey[700],
+                                )
+                                : null,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: groupNameDialogController,
+                      decoration: InputDecoration(
+                        labelText: 'Nombre del grupo *',
+                        hintText: 'Escribe el nombre del grupo',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      textCapitalization: TextCapitalization.sentences,
+                      onChanged:
+                          (_) => setStateDialog(
+                            () {},
+                          ), // Para actualizar estado del botón Crear
                     ),
                     const SizedBox(height: 12),
+                    TextField(
+                      controller: groupDescriptionDialogController,
+                      decoration: InputDecoration(
+                        labelText: 'Descripción (opcional)',
+                        hintText: 'Añade una descripción',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      textCapitalization: TextCapitalization.sentences,
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: searchUserDialogController,
+                      decoration: InputDecoration(
+                        hintText: 'Buscar usuarios para añadir...',
+                        prefixIcon: Icon(Icons.search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onChanged:
+                          (txt) => setStateDialog(
+                            () => userFilterDialog = txt.trim().toLowerCase(),
+                          ),
+                    ),
+                    const SizedBox(height: 8),
                     Expanded(
                       child: StreamBuilder<QuerySnapshot>(
                         stream:
                             FirebaseFirestore.instance
-                                .collection('Chats')
-                                .where('ids', arrayContains: uid)
-                                .orderBy('lastMessageAt', descending: true)
-                                .limit(5)
+                                .collection('usuarios')
+                                .where(FieldPath.documentId, whereNotIn: [uid])
                                 .snapshots(),
-                        builder: (ctx, chatSnap) {
-                          if (!chatSnap.hasData) {
+                        builder: (ctx, userSnap) {
+                          if (!userSnap.hasData)
                             return const Center(
                               child: CircularProgressIndicator(),
                             );
-                          }
 
-                          // Extrae los usuarios con los que se tienen los 5 chats más recientes (1 a 1 y grupos)
-                          final recentUserIds = <String>{};
-                          for (var doc in chatSnap.data!.docs) {
-                            final ids = List<String>.from(doc['ids']);
-                            for (var id in ids) {
-                              if (id != uid) recentUserIds.add(id);
-                            }
-                          }
+                          final allUsers = userSnap.data!.docs;
+                          final filteredUsers =
+                              userFilterDialog.isEmpty
+                                  ? allUsers
+                                  : allUsers.where((doc) {
+                                    final userName =
+                                        (doc.data()
+                                                as Map<
+                                                  String,
+                                                  dynamic
+                                                >)['Nombre']
+                                            ?.toString()
+                                            .toLowerCase() ??
+                                        '';
+                                    return userName.contains(userFilterDialog);
+                                  }).toList();
 
-                          // Si hay filtro activo, buscar entre todos los usuarios
-                          final searchStream =
-                              _filter.isNotEmpty
-                                  ? FirebaseFirestore.instance
-                                      .collection('usuarios')
-                                      .snapshots()
-                                  : FirebaseFirestore.instance
-                                      .collection('usuarios')
-                                      .where(
-                                        FieldPath.documentId,
-                                        whereIn: recentUserIds.toList(),
-                                      )
-                                      .snapshots();
+                          if (filteredUsers.isEmpty)
+                            return const Center(
+                              child: Text("No se encontraron usuarios."),
+                            );
 
-                          return StreamBuilder<QuerySnapshot>(
-                            stream: searchStream,
-                            builder: (ctx, snap) {
-                              if (!snap.hasData) {
-                                return const Center(
-                                  child: CircularProgressIndicator(),
-                                );
-                              }
+                          return ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: filteredUsers.length,
+                            itemBuilder: (_, i) {
+                              final userDoc = filteredUsers[i];
+                              final userData =
+                                  userDoc.data()! as Map<String, dynamic>;
+                              final nombre = userData['Nombre'] ?? 'Usuario';
+                              final String? foto =
+                                  userData['FotoPerfil']
+                                      as String?; // Hacerlo nullable
+                              final isSelected = selectedUsersForGroupDialog
+                                  .contains(userDoc.id);
 
-                              final all =
-                                  snap.data!.docs
-                                      .where((d) => d.id != uid)
-                                      .toList();
-
-                              // Si hay filtro, aplicamos búsqueda local
-                              final filtered =
-                                  _filter.isEmpty
-                                      ? all
-                                      : all.where((d) {
-                                        final name =
-                                            (d['Nombre'] ?? '')
-                                                .toString()
-                                                .toLowerCase();
-                                        return name.contains(_filter);
-                                      }).toList();
-
-                              if (filtered.isEmpty) {
-                                return const Center(
-                                  child: Text("No hay usuarios"),
-                                );
-                              }
-
-                              return ListView.builder(
-                                itemCount: filtered.length,
-                                itemBuilder: (_, i) {
-                                  final doc = filtered[i];
-                                  final data =
-                                      doc.data()! as Map<String, dynamic>;
-                                  final nombre = data['Nombre'] ?? 'Usuario';
-                                  final foto = data['FotoPerfil'] ?? '';
-                                  final isSel = _selected.contains(doc.id);
-
-                                  return CheckboxListTile(
-                                    value: isSel,
-                                    onChanged: (yes) {
-                                      setStateDialog(() {
-                                        if (yes == true) {
-                                          _selected.add(doc.id);
-                                        } else {
-                                          _selected.remove(doc.id);
-                                        }
-                                      });
-                                    },
-                                    title: Row(
-                                      children: [
-                                        CircleAvatar(
-                                          backgroundImage:
-                                              foto.isNotEmpty
-                                                  ? NetworkImage(foto)
-                                                  : const AssetImage(
-                                                        'assets/images/avatar1.png',
-                                                      )
-                                                      as ImageProvider,
-                                          radius: 16,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(child: Text(nombre)),
-                                      ],
-                                    ),
-                                    controlAffinity:
-                                        ListTileControlAffinity.leading,
-                                  );
+                              return CheckboxListTile(
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                secondary: CircleAvatar(
+                                  backgroundImage:
+                                      (foto != null && foto.isNotEmpty)
+                                          ? NetworkImage(foto)
+                                          : const AssetImage(
+                                                'assets/images/avatar1.png',
+                                              )
+                                              as ImageProvider,
+                                ),
+                                title: Text(nombre),
+                                value: isSelected,
+                                onChanged: (bool? sel) {
+                                  setStateDialog(() {
+                                    if (sel == true) {
+                                      selectedUsersForGroupDialog.add(
+                                        userDoc.id,
+                                      );
+                                    } else {
+                                      selectedUsersForGroupDialog.remove(
+                                        userDoc.id,
+                                      );
+                                    }
+                                  });
                                 },
                               );
                             },
@@ -2933,81 +3013,114 @@ class _ChatHomePageState extends State<ChatHomePage> {
                   ],
                 ),
               ),
+              actionsAlignment: MainAxisAlignment.spaceBetween,
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
                   child: const Text('Cancelar'),
                 ),
                 ElevatedButton(
                   onPressed:
-                      (_groupNameController.text.trim().isNotEmpty &&
-                              _selected.isNotEmpty)
+                      (groupNameDialogController.text.trim().isNotEmpty &&
+                              selectedUsersForGroupDialog.isNotEmpty)
                           ? () async {
-                            final chatId =
+                            final String groupName =
+                                groupNameDialogController.text.trim();
+                            final String groupDescription =
+                                groupDescriptionDialogController.text.trim();
+                            final List<String> membersToCreate = [
+                              uid,
+                              ...selectedUsersForGroupDialog,
+                            ];
+                            final String newChatId =
                                 FirebaseFirestore.instance
                                     .collection('Chats')
                                     .doc()
                                     .id;
-                            final now = Timestamp.now();
+                            String groupPhotoUrlDialog = '';
 
-                            String urlImagen = '';
-                            if (_imagenGrupo != null) {
-                              urlImagen = await subirImagenGrupo(
-                                _imagenGrupo!,
-                                chatId,
+                            if (groupImageDialogBytes != null) {
+                              groupPhotoUrlDialog = await subirImagenGrupo(
+                                groupImageDialogBytes!,
+                                newChatId,
                               );
                             }
+
+                            final String primerMensaje =
+                                (nombreUsuario ?? "Alguien") +
+                                ' creó el grupo "$groupName".';
 
                             await FirebaseFirestore.instance
                                 .collection('Chats')
-                                .doc(chatId)
+                                .doc(newChatId)
                                 .set({
-                                  'ids': [uid, ..._selected],
+                                  'ids': membersToCreate,
                                   'admins': [uid],
                                   'isGroup': true,
-                                  'groupName': _groupNameController.text.trim(),
-                                  'groupPhoto': urlImagen,
+                                  'groupName': groupName,
+                                  'groupDescription': groupDescription,
+                                  'groupPhoto': groupPhotoUrlDialog,
                                   'createdBy': uid,
-                                  'lastMessage': '',
-                                  'lastMessageAt': now,
+                                  'lastMessage': primerMensaje,
+                                  'lastMessageAt': Timestamp.now(),
+                                  'lastActivityAt': Timestamp.now(),
                                   'typing': {
-                                    for (var u in [uid, ..._selected]) u: false,
+                                    for (var u in membersToCreate) u: false,
                                   },
                                   'unreadCounts': {
-                                    for (var u in [uid, ..._selected]) u: 0,
+                                    for (var u in membersToCreate) u: 0,
                                   },
+                                  'archivadoPara': [],
+                                  'silenciadoPor': [],
+                                  'ocultoPara': [],
                                 });
 
-                            for (final miembro in _selected) {
-                              await NotificationService.crearNotificacion(
-                                uidDestino: miembro,
-                                tipo: 'grupo',
-                                titulo: 'Nuevo grupo creado',
-                                contenido:
-                                    '$nombreUsuario te ha agregado al grupo "${_groupNameController.text.trim()}"',
-                                referenciaId: chatId,
-                                uidEmisor: uid,
-                                nombreEmisor: nombreUsuario ?? 'Usuario',
-                              );
-                            }
+                            await FirebaseFirestore.instance
+                                .collection('Chats')
+                                .doc(newChatId)
+                                .collection('Mensajes')
+                                .add({
+                                  'AutorID': 'sistema',
+                                  'Contenido': primerMensaje,
+                                  'Fecha': Timestamp.now(),
+                                  'tipo': 'sistema_grupo_creado',
+                                });
 
-                            if (!mounted) return;
-                            Navigator.pop(context);
+                            for (final miembroId
+                                in selectedUsersForGroupDialog) {
+                              if (nombreUsuario != null) {
+                                await NotificationService.crearNotificacion(
+                                  uidDestino: miembroId,
+                                  tipo: 'agregado_grupo',
+                                  titulo: 'Te han añadido a un grupo',
+                                  contenido:
+                                      '$nombreUsuario te ha agregado al grupo "$groupName".',
+                                  referenciaId: newChatId,
+                                  uidEmisor: uid,
+                                  nombreEmisor: nombreUsuario!,
+                                );
+                              }
+                            }
+                            if (mounted) Navigator.of(dialogContext).pop();
                             setState(() {
-                              chatIdSeleccionado = chatId;
+                              chatIdSeleccionado = newChatId;
                               otroUid = null;
-                              _showList = false;
+                              if (MediaQuery.of(context).size.width < 720.0)
+                                _showList = false;
                             });
                           }
                           : null,
-                  child: const Text('Crear'),
+                  child: const Text('Crear Grupo'),
                 ),
               ],
             );
           },
         );
       },
-    );
+    ).then((_) {
+      // No necesitas disponer los controladores aquí si se definen dentro del builder del showDialog
+      // o si son locales a la función _mostrarDialogoCrearGrupo
+    });
   }
 
   // Panel izquierdo con header, tabs, buscador, historias y lista de chats
