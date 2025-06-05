@@ -578,7 +578,7 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
               backgroundImage:
                   widget.avatarUrl.isNotEmpty
                       ? CachedNetworkImageProvider(widget.avatarUrl)
-                      : const AssetImage('assets/images/avatar1.png')
+                      : const AssetImage('assets/images/avatar1.webp')
                           as ImageProvider,
             ),
           if (!widget.isMine) const SizedBox(width: 6),
@@ -770,7 +770,7 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
               backgroundImage:
                   widget.avatarUrl.isNotEmpty
                       ? CachedNetworkImageProvider(widget.avatarUrl)
-                      : const AssetImage('assets/images/avatar1.png')
+                      : const AssetImage('assets/images/avatar1.webp')
                           as ImageProvider,
             ),
         ],
