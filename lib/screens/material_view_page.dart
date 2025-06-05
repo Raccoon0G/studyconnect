@@ -109,8 +109,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
       setState(() {
         materialData = doc.data();
-        pasos = List<String>.from(version['PasosEjer'] ?? []);
-        descripciones = List<String>.from(version['DescPasos'] ?? []);
       });
 
       final versionesSnap =
