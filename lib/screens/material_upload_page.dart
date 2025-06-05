@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,12 +6,12 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
-import 'dart:typed_data';
-import 'dart:html' as html;
-import '../services/services.dart';
+import 'dart:typed_data'; // Necesario para Uint8List
+import 'dart:html' as html; // Para html.window.open
+import '../services/services.dart'; // Asegúrate que NotificationService y LocalNotificationService estén aquí
 import '../utils/utils.dart';
 import '../widgets/widgets.dart';
-import 'package:study_connect/config/secrets.dart';
+import 'package:study_connect/config/secrets.dart'; // Asegúrate que esta ruta es correcta
 
 class UploadMaterialPage extends StatefulWidget {
   const UploadMaterialPage({super.key});
@@ -32,7 +31,6 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
     'Lim': 'Límites de funciones y continuidad',
     'Der': 'Derivada y optimización',
     'TecInteg': 'Técnicas de integración',
-    //'Gnral': 'Temas en General (Cosas de aportación General)',
   };
 
   final TextEditingController _tituloController = TextEditingController();
@@ -42,9 +40,13 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
   bool _subiendo = false;
   bool _exitoAlSubir = false;
 
-  String? _materialId;
+  String?
+  _materialId; // ID del material si se está editando o creando nueva versión
   bool _modoEdicion = false;
   bool _modoNuevaVersion = false;
+  String?
+  _versionActualIdParaEditar; // ID de la versión específica que se edita
+  bool _argumentosCargados = false;
 
   @override
   void initState() {
@@ -52,60 +54,109 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
     _cargarNombreUsuario();
   }
 
-  Future<void> _cargarMaterialParaEditar() async {
-    if (_temaSeleccionado == null || _materialId == null) return;
-
-    final doc =
-        await FirebaseFirestore.instance
-            .collection('materiales')
-            .doc(_temaSeleccionado)
-            .collection('Mat$_temaSeleccionado')
-            .doc(_materialId)
-            .get();
-
-    if (!doc.exists) return;
-
-    final data = doc.data()!;
-    // Carga los datos generales
-    _tituloController.text = data['titulo'] ?? '';
-    _descripcionController.text = data['descripcion'] ?? '';
-    _subtemaController.text = data['subtema'] ?? '';
-
-    // Siempre obtén la versión actual (o la que se va a editar)
-    final versionId = data['versionActual'];
-    final versionDoc =
-        await doc.reference.collection('Versiones').doc(versionId).get();
-
-    if (versionDoc.exists) {
-      final vData = versionDoc.data()!;
-      _descripcionController.text = vData['Descripcion'] ?? '';
-      // Para edición o nueva versión, carga los archivos de la versión actual
-      final archivos = List<Map<String, dynamic>>.from(vData['archivos'] ?? []);
-      setState(() {
-        _archivos.clear();
-        _archivos.addAll(archivos);
-      });
-    }
-
-    setState(() {});
-  }
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final args = ModalRoute.of(context)?.settings.arguments as Map?;
-    if (args != null) {
-      _temaSeleccionado ??= args['tema'];
-      _materialId = args['materialId'];
-      _modoEdicion = args['editar'] == true;
-      _modoNuevaVersion = args['nuevaVersion'] == true;
-      if (_modoEdicion || _modoNuevaVersion) {
-        _cargarMaterialParaEditar();
+    if (!_argumentosCargados) {
+      final args =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      if (args != null) {
+        _temaSeleccionado = args['tema'] as String?;
+        _materialId = args['materialId'] as String?;
+        _modoEdicion = args['editar'] == true;
+        _modoNuevaVersion = args['nuevaVersion'] == true;
+
+        if ((_modoEdicion || _modoNuevaVersion) &&
+            _materialId != null &&
+            _temaSeleccionado != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _cargarMaterialParaEditar();
+          });
+        }
+      }
+      _argumentosCargados = true;
+    }
+  }
+
+  Future<void> _cargarMaterialParaEditar() async {
+    if (!mounted || _temaSeleccionado == null || _materialId == null) return;
+
+    final materialDocRef = FirebaseFirestore.instance
+        .collection('materiales')
+        .doc(_temaSeleccionado)
+        .collection('Mat$_temaSeleccionado')
+        .doc(_materialId);
+
+    try {
+      final materialDoc = await materialDocRef.get();
+      if (!mounted) return;
+
+      if (!materialDoc.exists) {
+        showCustomSnackbar(
+          context: context,
+          message: 'Error: El material a editar no fue encontrado.',
+          success: false,
+        );
+        return;
+      }
+
+      final data = materialDoc.data()!;
+      _tituloController.text = data['titulo'] ?? '';
+      _subtemaController.text = data['subtema'] ?? '';
+      _versionActualIdParaEditar = data['versionActual'] as String?;
+
+      if (_versionActualIdParaEditar == null) {
+        showCustomSnackbar(
+          context: context,
+          message:
+              'Error: No se encontró el ID de la versión actual del material.',
+          success: false,
+        );
+        return;
+      }
+
+      final versionDoc =
+          await materialDocRef
+              .collection('Versiones')
+              .doc(_versionActualIdParaEditar)
+              .get();
+
+      if (!mounted) return;
+
+      if (versionDoc.exists) {
+        final vData = versionDoc.data()!;
+        _descripcionController.text = vData['Descripcion'] ?? '';
+
+        final archivosDeVersion = List<Map<String, dynamic>>.from(
+          vData['archivos'] ?? [],
+        );
+
+        setState(() {
+          _archivos.clear();
+          _archivos.addAll(
+            archivosDeVersion.map((a) => Map<String, dynamic>.from(a)),
+          );
+        });
+      } else {
+        showCustomSnackbar(
+          context: context,
+          message: 'Error: No se pudo cargar la versión actual del material.',
+          success: false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        showCustomSnackbar(
+          context: context,
+          message: 'Error al cargar datos para edición: ${e.toString()}',
+          success: false,
+        );
       }
     }
   }
 
   Future<void> _confirmarEliminarArchivo(int index) async {
+    if (!mounted) return;
     final archivo = _archivos[index];
     final nombre = archivo['nombre'] ?? 'archivo';
 
@@ -119,17 +170,17 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
         DialogButton(
           texto: 'Eliminar',
           onPressed: () async {
-            setState(() {
-              _archivos.removeAt(index);
-            });
-            Navigator.of(
-              context,
-            ).pop(); // cerrar el diálogo si no lo cierras automáticamente
-            showCustomSnackbar(
-              context: context,
-              message: 'Archivo eliminado.',
-              success: true,
-            );
+            if (mounted) {
+              setState(() {
+                _archivos.removeAt(index);
+              });
+              Navigator.of(context).pop();
+              showCustomSnackbar(
+                context: context,
+                message: 'Archivo eliminado.',
+                success: true,
+              );
+            }
           },
         ),
       ],
@@ -139,20 +190,36 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
   Future<void> _cargarNombreUsuario() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid != null) {
-      final doc =
-          await FirebaseFirestore.instance
-              .collection('usuarios')
-              .doc(uid)
-              .get();
-      setState(() {
-        _nombreUsuario = doc['Nombre'] ?? 'Usuario';
-      });
+      try {
+        final doc =
+            await FirebaseFirestore.instance
+                .collection('usuarios')
+                .doc(uid)
+                .get();
+        if (mounted) {
+          setState(() {
+            _nombreUsuario = doc.data()?['Nombre'] ?? 'Usuario Anónimo';
+          });
+        }
+      } catch (e) {
+        print("Error al cargar nombre de usuario: $e");
+        if (mounted) {
+          setState(() {
+            _nombreUsuario = 'Usuario (Error)';
+          });
+        }
+      }
     }
   }
 
   Future<String?> obtenerTituloVideoYoutube(String url) async {
-    final videoId =
-        Uri.parse(url).queryParameters['v'] ?? Uri.parse(url).pathSegments.last;
+    final videoIdMatch = RegExp(
+      r"(?:youtube(?:-nocookie)?\.com/(?:[^/\n\s]+/\S+/|(?:v|e(?:mbed)?)/|\S*?[?&]v=)|youtu\.be/)([a-zA-Z0-9_-]{11})",
+    ).firstMatch(url);
+    final videoId = videoIdMatch?.group(1);
+
+    if (videoId == null)
+      return Future.value('Enlace de YouTube (ID no encontrado)');
 
     final apiUrl =
         'https://www.googleapis.com/youtube/v3/videos?part=snippet&id=$videoId&key=$youtubeApiKey';
@@ -166,10 +233,10 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
           return items[0]['snippet']['title'];
         }
       }
-      return null;
+      return 'Video de YouTube (Título no disponible)';
     } catch (e) {
       print('Error al obtener título del video: $e');
-      return null;
+      return 'Video de YouTube (Error al cargar título)';
     }
   }
 
@@ -192,7 +259,7 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
       return "¡10 materiales! 🥇 Logro: Colaborador Avanzado. ¡Tus aportes son clave para todos!";
     } else if (total == 20) {
       return "¡20 materiales! 🏆 Logro: Master Resource Giver. ¡Eres un pilar en la comunidad!";
-    } else if (total % 10 == 0) {
+    } else if (total % 10 == 0 && total > 0) {
       return "¡$total materiales! ⭐ ¡Nivel leyenda en recursos! Sigue sumando éxitos.";
     } else if (total >= 3 && total < 5) {
       return "¡Gran avance! Ya llevas $total materiales subidos.";
@@ -216,8 +283,23 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
     }
   }
 
+  Future<String> _generarNuevoMaterialId(
+    CollectionReference materialesSubcoleccionRef,
+    String temaKey,
+  ) async {
+    final docs = await materialesSubcoleccionRef.get();
+    final idsExistentes = docs.docs.map((d) => d.id).toSet();
+    int i = 1;
+    String nuevoId;
+    do {
+      nuevoId = '${temaKey}_${i.toString().padLeft(2, '0')}';
+      i++;
+    } while (idsExistentes.contains(nuevoId));
+    return nuevoId;
+  }
+
   Future<void> _subirMaterialEducativo() async {
-    if (_subiendo) return;
+    if (!mounted || _subiendo) return;
 
     if (_temaSeleccionado == null || _tituloController.text.trim().isEmpty) {
       await showCustomDialog(
@@ -229,7 +311,6 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
       );
       return;
     }
-
     if (_archivos.isEmpty) {
       showCustomSnackbar(
         context: context,
@@ -249,251 +330,276 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
       return;
     }
 
+    setState(() => _subiendo = true);
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      if (mounted) {
+        setState(() => _subiendo = false);
+        await showCustomDialog(
+          context: context,
+          titulo: 'Error',
+          mensaje: 'Usuario no autenticado.',
+          tipo: CustomDialogType.error,
+        );
+      }
+      return;
+    }
+
+    final nombreTema = temasDisponibles[_temaSeleccionado!] ?? 'Otro';
+    final now = Timestamp.now();
+    final coleccionMateriales = FirebaseFirestore.instance
+        .collection('materiales')
+        .doc(_temaSeleccionado!)
+        .collection('Mat$_temaSeleccionado');
+
+    final List<Map<String, dynamic>> contenidoParaFirestore = [];
     try {
-      setState(() => _subiendo = true);
-
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      final nombreTema = temasDisponibles[_temaSeleccionado!] ?? 'Otro';
-      final now = Timestamp.now();
-
-      final coleccionMateriales = FirebaseFirestore.instance
-          .collection('materiales')
-          .doc(_temaSeleccionado!)
-          .collection('Mat$_temaSeleccionado');
-
-      // Limpia archivos inválidos que NO tienen bytes ni url (solo si no son link/nota)
-      _archivos.removeWhere(
-        (a) =>
-            (a['tipo'] == 'pdf' ||
-                a['tipo'] == 'image' ||
-                a['tipo'] == 'video' ||
-                a['tipo'] == 'audio') &&
-            a['bytes'] == null &&
-            (a['url'] == null || a['url'].toString().isEmpty),
-      );
-
-      // Subida de archivos a Storage y recopilación de contenido
-      final List<Map<String, dynamic>> contenido = [];
       for (var archivo in _archivos) {
-        // Para archivos NUEVOS: tienen 'bytes' y NO tienen 'url'
         if ((archivo['tipo'] == 'pdf' ||
                 archivo['tipo'] == 'image' ||
                 archivo['tipo'] == 'video' ||
                 archivo['tipo'] == 'audio') &&
             archivo['bytes'] != null) {
-          final nombreArchivo =
+          final nombreArchivoStorage =
               '${DateTime.now().millisecondsSinceEpoch}_${archivo['nombre']}';
           final ref = FirebaseStorage.instance
               .ref()
               .child('materiales')
               .child(_temaSeleccionado!)
-              .child(uid!)
-              .child(nombreArchivo);
-
-          await ref.putData(archivo['bytes']);
+              .child(uid)
+              .child(nombreArchivoStorage);
+          await ref.putData(archivo['bytes'] as Uint8List);
           final url = await ref.getDownloadURL();
-
-          contenido.add({
+          contenidoParaFirestore.add({
             'tipo': archivo['tipo'],
             'nombre': archivo['nombre'],
             'url': url,
             'extension': archivo['extension'],
           });
-        }
-        // Para archivos YA EXISTENTES en la nube: tienen 'url' y NO tienen 'bytes'
-        else if ((archivo['tipo'] == 'pdf' ||
+        } else if ((archivo['tipo'] == 'pdf' ||
                 archivo['tipo'] == 'image' ||
                 archivo['tipo'] == 'video' ||
                 archivo['tipo'] == 'audio') &&
-            archivo['url'] != null) {
-          contenido.add({
+            archivo['url'] != null &&
+            archivo['url'].toString().isNotEmpty) {
+          // Archivo existente con URL
+          contenidoParaFirestore.add({
             'tipo': archivo['tipo'],
             'nombre': archivo['nombre'],
             'url': archivo['url'],
             'extension': archivo['extension'],
           });
-        }
-        // Links o notas (no se suben a storage, solo se guardan como texto)
-        else if (archivo['tipo'] == 'link' || archivo['tipo'] == 'nota') {
-          contenido.add({
+        } else if (archivo['tipo'] == 'link' || archivo['tipo'] == 'nota') {
+          contenidoParaFirestore.add({
             'tipo': archivo['tipo'],
+            // Para links y notas, 'nombre' es el contenido (URL del link o texto de la nota)
+            // Y la clave para el contenido es 'contenido'
             'contenido': archivo['nombre'],
           });
         }
       }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _subiendo = false);
+        await showCustomDialog(
+          context: context,
+          titulo: 'Error al procesar archivos',
+          mensaje: 'Ocurrió un error al preparar los archivos: ${e.toString()}',
+          tipo: CustomDialogType.error,
+        );
+      }
+      return;
+    }
 
-      // --------- Determinación de modo: edición, nueva versión, nuevo ----------
-      String materialId;
-      String versionId;
+    if (contenidoParaFirestore.isEmpty && _archivos.isNotEmpty) {
+      if (mounted) {
+        setState(() => _subiendo = false);
+        await showCustomDialog(
+          context: context,
+          titulo: 'Error de Archivos',
+          mensaje:
+              'No se pudieron procesar los archivos para subir. Asegúrate de que sean válidos y no estén vacíos.',
+          tipo: CustomDialogType.error,
+        );
+      }
+      return;
+    }
 
-      if (_modoEdicion || _modoNuevaVersion) {
-        materialId = _materialId!;
-        if (_modoNuevaVersion) {
-          // ---- NUEVA VERSIÓN ----
-          final doc = await coleccionMateriales.doc(materialId).get();
-          final versionesSnap =
-              await doc.reference.collection('Versiones').get();
-          final versionNum = versionesSnap.docs.length + 1;
-          final nuevaVersionId =
-              'Version_${versionNum.toString().padLeft(2, '0')}';
+    String materialDocId;
+    String versionDocId;
 
-          // 1. Crear nueva versión (nuevo doc)
-          await doc.reference.collection('Versiones').doc(nuevaVersionId).set({
-            'Descripcion': _descripcionController.text.trim(),
-            'Fecha': now,
-            'AutorId': uid,
-            'archivos': contenido, // SOLO aquí guardas archivos
-          });
+    try {
+      WriteBatch batch = FirebaseFirestore.instance.batch();
 
-          // 2. Actualizar SOLO metadatos generales y el versionActual
-          await doc.reference.update({
-            'titulo': _tituloController.text.trim(),
-            'descripcion': _descripcionController.text.trim(),
-            'subtema': _subtemaController.text.trim(),
-            // NO actualices el campo 'archivos' aquí (ni lo pongas)
-            'FechMod': now,
-            'versionActual': nuevaVersionId, // <--- Muy importante
-          });
+      if (_modoEdicion &&
+          _materialId != null &&
+          _versionActualIdParaEditar != null) {
+        materialDocId = _materialId!;
+        versionDocId = _versionActualIdParaEditar!;
 
-          await NotificationService.crearNotificacion(
-            uidDestino: uid!,
-            tipo: 'material',
-            titulo: '¡Nueva versión de material!',
-            contenido: 'Se subió una nueva versión de tu material.',
-            referenciaId: materialId,
-            uidEmisor: uid,
-            nombreEmisor: _nombreUsuario ?? 'Tú',
-            tema: _temaSeleccionado,
+        final materialRef = coleccionMateriales.doc(materialDocId);
+        final versionRef = materialRef
+            .collection('Versiones')
+            .doc(versionDocId);
+
+        batch.update(versionRef, {
+          'Descripcion': _descripcionController.text.trim(),
+          'Fecha': now,
+          'archivos': contenidoParaFirestore,
+        });
+        batch.update(materialRef, {
+          'titulo': _tituloController.text.trim(),
+          'subtema': _subtemaController.text.trim(),
+          'descripcion': _descripcionController.text.trim(),
+          'FechMod': now,
+          'archivos':
+              contenidoParaFirestore, // Actualizar archivos en el doc principal también
+        });
+
+        await batch.commit();
+        if (!mounted) return;
+
+        await NotificationService.crearNotificacion(
+          uidDestino: uid,
+          tipo: 'material_editado',
+          titulo: '¡Material Editado!',
+          contenido:
+              'Has editado tu material: "${_tituloController.text.trim()}".',
+          referenciaId: materialDocId,
+          tema: _temaSeleccionado!,
+          uidEmisor: uid,
+          nombreEmisor: _nombreUsuario ?? 'Sistema',
+        );
+        await LocalNotificationService.show(
+          title: 'Material Editado',
+          body:
+              'Tu material "${_tituloController.text.trim()}" fue editado exitosamente.',
+        );
+        await reproducirSonidoExito();
+        if (mounted) {
+          await showFeedbackDialogAndSnackbar(
+            context: context,
+            titulo: '¡Editado!',
+            mensaje: 'El material fue editado correctamente.',
+            tipo: CustomDialogType.success,
+            snackbarMessage: 'Material editado',
+            snackbarSuccess: true,
           );
-
-          await LocalNotificationService.show(
-            title: 'Material actualizado',
-            body: '¡Tu material fue actualizado con una nueva versión!',
-          );
-
-          await reproducirSonidoExito();
-
-          if (mounted) {
-            await showFeedbackDialogAndSnackbar(
-              context: context,
-              titulo: '¡Nueva versión!',
-              mensaje: 'Nueva versión del material agregada exitosamente.',
-              tipo: CustomDialogType.success,
-              snackbarMessage: 'Nueva versión guardada',
-              snackbarSuccess: true,
-            );
-          }
-
-          setState(() {
-            _exitoAlSubir = true;
-            _subiendo = false;
-          });
-
           Navigator.pushReplacementNamed(
             context,
-            '/material_view', // Ruta a tu MaterialViewPage
-            arguments: {'tema': _temaSeleccionado!, 'materialId': _materialId!},
+            '/material_view',
+            arguments: {
+              'tema': _temaSeleccionado!,
+              'materialId': materialDocId,
+              'tituloTema':
+                  temasDisponibles[_temaSeleccionado!] ?? _temaSeleccionado!,
+            },
           );
+        }
+      } else if (_modoNuevaVersion && _materialId != null) {
+        materialDocId = _materialId!;
+        final materialRef = coleccionMateriales.doc(materialDocId);
 
-          //return;
-        } else {
-          // ---- EDICIÓN NORMAL ----
-          final doc = await coleccionMateriales.doc(materialId).get();
-          final versionActualId = doc['versionActual'];
+        final versionesSnap =
+            await materialRef
+                .collection('Versiones')
+                .orderBy('Fecha', descending: true)
+                .get();
+        final versionNum = versionesSnap.docs.length + 1;
+        versionDocId = 'Version_${versionNum.toString().padLeft(2, '0')}';
 
-          // Actualiza doc principal
-          await doc.reference.update({
-            'titulo': _tituloController.text.trim(),
-            'descripcion': _descripcionController.text.trim(),
-            'subtema': _subtemaController.text.trim(),
-            'archivos': contenido,
-            'FechMod': now,
-          });
+        batch.set(materialRef.collection('Versiones').doc(versionDocId), {
+          'Descripcion': _descripcionController.text.trim(),
+          'Fecha': now,
+          'AutorId': uid,
+          'archivos': contenidoParaFirestore,
+        });
+        batch.update(materialRef, {
+          'titulo': _tituloController.text.trim(),
+          'subtema': _subtemaController.text.trim(),
+          'descripcion': _descripcionController.text.trim(),
+          'FechMod': now,
+          'versionActual': versionDocId,
+          'archivos':
+              contenidoParaFirestore, // Actualizar archivos en el doc principal también
+        });
 
-          // Actualiza versión actual
-          await doc.reference
-              .collection('Versiones')
-              .doc(versionActualId)
-              .update({
-                'Descripcion': _descripcionController.text.trim(),
-                'Fecha': now,
-                'AutorId': uid,
-                'archivos': contenido,
-              });
+        await batch.commit();
+        if (!mounted) return;
 
-          await NotificationService.crearNotificacion(
-            uidDestino: uid!,
-            tipo: 'material',
-            titulo: '¡Material editado!',
-            contenido: 'Se editaron los datos de tu material.',
-            referenciaId: materialId,
-            uidEmisor: uid,
-            nombreEmisor: _nombreUsuario ?? 'Tú',
-            tema: _temaSeleccionado,
+        await NotificationService.crearNotificacion(
+          uidDestino: uid,
+          tipo: 'material_nueva_version',
+          titulo: '¡Nueva Versión de Material!',
+          contenido:
+              'Se añadió una nueva versión a tu material: "${_tituloController.text.trim()}".',
+          referenciaId: materialDocId,
+          tema: _temaSeleccionado!,
+          uidEmisor: uid,
+          nombreEmisor: _nombreUsuario ?? 'Sistema',
+        );
+        await LocalNotificationService.show(
+          title: 'Nueva Versión Guardada',
+          body:
+              'Se guardó una nueva versión para "${_tituloController.text.trim()}".',
+        );
+        await reproducirSonidoExito();
+        if (mounted) {
+          await showFeedbackDialogAndSnackbar(
+            context: context,
+            titulo: '¡Nueva Versión!',
+            mensaje: 'Nueva versión del material agregada exitosamente.',
+            tipo: CustomDialogType.success,
+            snackbarMessage: 'Nueva versión guardada',
+            snackbarSuccess: true,
           );
-
-          await LocalNotificationService.show(
-            title: 'Material editado',
-            body: '¡Tu material fue editado exitosamente!',
-          );
-
-          await reproducirSonidoExito();
-          if (mounted) {
-            await showFeedbackDialogAndSnackbar(
-              context: context,
-              titulo: '¡Editado!',
-              mensaje: 'El material fue editado correctamente.',
-              tipo: CustomDialogType.success,
-              snackbarMessage: 'Material editado',
-              snackbarSuccess: true,
-            );
-          }
-
-          setState(() {
-            _exitoAlSubir = true;
-            _subiendo = false;
-          });
           Navigator.pushReplacementNamed(
             context,
-            '/material_view', // Ruta a tu MaterialViewPage
-            arguments: {'tema': _temaSeleccionado!, 'materialId': _materialId!},
+            '/material_view',
+            arguments: {
+              'tema': _temaSeleccionado!,
+              'materialId': materialDocId,
+              'tituloTema':
+                  temasDisponibles[_temaSeleccionado!] ?? _temaSeleccionado!,
+            },
           );
-          //return;
         }
       } else {
         // ---- NUEVO MATERIAL ----
-        final snapshot = await coleccionMateriales.get();
-        materialId =
-            '${_temaSeleccionado}_${(snapshot.docs.length + 1).toString().padLeft(2, '0')}';
-        versionId = 'Version_01';
+        materialDocId = await _generarNuevoMaterialId(
+          coleccionMateriales,
+          _temaSeleccionado!,
+        );
+        versionDocId = 'Version_01';
 
-        // Guardar documento principal
-        final materialRef = coleccionMateriales.doc(materialId);
-        await materialRef.set({
-          'id': materialId,
+        final materialRef = coleccionMateriales.doc(materialDocId);
+
+        batch.set(materialRef, {
+          'id': materialDocId,
           'autorId': uid,
-          'autorNombre': _nombreUsuario ?? 'Usuario',
+          'autorNombre': _nombreUsuario ?? 'Usuario Anónimo',
           'tema': _temaSeleccionado,
           'subtema': _subtemaController.text.trim(),
           'titulo': _tituloController.text.trim(),
           'descripcion': _descripcionController.text.trim(),
-          'archivos': contenido,
-          'fecha': now,
+          'archivos': contenidoParaFirestore, // Guardar archivos aquí también
+          'fechaCreacion': now,
           'FechMod': now,
           'calificacionPromedio': 0.0,
-          'versionActual': versionId,
+          'versionActual': versionDocId,
           'carpetaStorage': 'materiales/$_temaSeleccionado/$uid',
         });
-
-        // Guardar versión inicial
-        await materialRef.collection('Versiones').doc(versionId).set({
+        batch.set(materialRef.collection('Versiones').doc(versionDocId), {
           'Descripcion': _descripcionController.text.trim(),
           'Fecha': now,
           'AutorId': uid,
-          'archivos': contenido,
+          'archivos': contenidoParaFirestore,
         });
 
-        // --- GAMIFICACIÓN: Contador de materiales subidos
+        await batch.commit();
+        if (!mounted) return;
+
         final userRef = FirebaseFirestore.instance
             .collection('usuarios')
             .doc(uid);
@@ -503,30 +609,22 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
             (datosUsuario['MaterialesSubidos'] ?? 0) as int;
         final totalSubidos = materialesSubidos + 1;
         await userRef.update({'MaterialesSubidos': totalSubidos});
+        await actualizarTodoCalculoDeUsuario(uid: uid);
 
-        // Actualizar ranking, etc.
-        if (uid != null) {
-          await actualizarTodoCalculoDeUsuario(uid: uid);
-        }
-
-        // --- Notificación motivacional
         await NotificationService.crearNotificacion(
-          uidDestino: uid!,
-          tipo: 'material',
-          titulo: '¡Material subido correctamente!',
+          uidDestino: uid,
+          tipo: 'material_nuevo',
+          titulo: '¡Material Subido!',
           contenido: obtenerMensajeLogroMaterial(totalSubidos),
-          referenciaId: materialId,
+          referenciaId: materialDocId,
+          tema: _temaSeleccionado!,
           uidEmisor: uid,
           nombreEmisor: _nombreUsuario ?? 'Tú',
-          tema: _temaSeleccionado,
         );
-
-        // --- Notificación local
         await LocalNotificationService.show(
-          title: 'Material subido',
-          body: 'Tu material en $nombreTema fue guardado exitosamente',
+          title: 'Material Subido',
+          body: 'Tu material en $nombreTema fue guardado exitosamente.',
         );
-
         await reproducirSonidoExito();
         if (mounted) {
           await showFeedbackDialogAndSnackbar(
@@ -537,8 +635,6 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
             snackbarMessage: 'Material guardado con éxito',
             snackbarSuccess: true,
           );
-
-          // Limpiar campos
           setState(() {
             _temaSeleccionado = null;
             _subtemaController.clear();
@@ -546,60 +642,53 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
             _archivos.clear();
             _tituloController.clear();
             _descripcionController.clear();
+            _exitoAlSubir = true;
+            _modoEdicion = false;
+            _modoNuevaVersion = false;
+            _materialId = null;
+            _versionActualIdParaEditar = null;
           });
+        }
+      }
+
+      if (mounted) {
+        setState(() => _subiendo = false);
+        if (_exitoAlSubir && !(_modoEdicion || _modoNuevaVersion)) {
+          await Future.delayed(const Duration(milliseconds: 1500));
+          if (mounted) setState(() => _exitoAlSubir = false);
         }
       }
     } catch (e) {
       if (mounted) {
         await reproducirSonidoError();
+        setState(() => _subiendo = false);
         await showFeedbackDialogAndSnackbar(
           context: context,
           titulo: 'Error al subir material',
-          mensaje: e.toString(),
+          mensaje: 'Ocurrió un error: ${e.toString()}',
           tipo: CustomDialogType.error,
           snackbarMessage: '❌ Hubo un error al subir el material.',
           snackbarSuccess: false,
         );
-      }
-      // Tip opcional aleatorio
-      final List<String> tips = [
-        'Tip: Puedes añadir enlaces de YouTube y se mostrarán como miniaturas.',
-        'Tip: Puedes combinar notas y archivos en una sola publicación.',
-        'Tip: No olvides agregar una descripción detallada.',
-      ];
 
-      final randomTip =
-          tips[DateTime.now().millisecondsSinceEpoch % tips.length];
-
-      // Reproduce sonido
-      final player = AudioPlayer();
-      await player.play(AssetSource('audio/tip.mp3'));
-
-      // Muestra diálogo
-      await showCustomDialog(
-        context: context,
-        titulo: '¡Consejo!',
-        mensaje: randomTip,
-        tipo: CustomDialogType.info,
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _subiendo = false);
-      }
-    }
-
-    if (!(_modoEdicion || _modoNuevaVersion) && mounted) {
-      // Solo para nuevo material
-      setState(() {
-        _exitoAlSubir = true;
-      });
-      // Esperar 1.5 segundos y luego restaurar
-      await Future.delayed(const Duration(milliseconds: 1500));
-
-      if (mounted) {
-        setState(() {
-          _exitoAlSubir = false;
-        });
+        final List<String> tips = [
+          'Tip: Revisa tu conexión a internet.',
+          'Tip: Asegúrate que los archivos no sean demasiado grandes.',
+          'Tip: Contacta a soporte si el problema persiste.',
+        ];
+        final randomTip =
+            tips[DateTime.now().millisecondsSinceEpoch % tips.length];
+        if (mounted) {
+          //Chequeo adicional antes de reproducir sonido y mostrar diálogo
+          final player = AudioPlayer();
+          await player.play(AssetSource('audio/tip.mp3'));
+          await showCustomDialog(
+            context: context,
+            titulo: '¡Consejo!',
+            mensaje: randomTip,
+            tipo: CustomDialogType.info,
+          );
+        }
       }
     }
   }
@@ -612,18 +701,31 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
       allowMultiple: false,
       type: FileType.custom,
       allowedExtensions: extensiones,
+      withData: true,
     );
 
     if (result != null && result.files.isNotEmpty) {
       final file = result.files.first;
-      setState(() {
-        _archivos.add({
-          'nombre': file.name,
-          'bytes': file.bytes,
-          'extension': file.extension ?? '',
-          'tipo': tipo,
-        });
-      });
+      if (file.bytes != null) {
+        if (mounted) {
+          setState(() {
+            _archivos.add({
+              'nombre': file.name,
+              'bytes': file.bytes,
+              'extension': file.extension ?? '',
+              'tipo': tipo,
+            });
+          });
+        }
+      } else {
+        if (mounted) {
+          showCustomSnackbar(
+            context: context,
+            message: "El archivo seleccionado está vacío o no se pudo leer.",
+            success: false,
+          );
+        }
+      }
     }
   }
 
@@ -636,13 +738,21 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
           title: const Text('Agregar enlace'),
           content: TextField(
             controller: controller,
-            decoration: const InputDecoration(hintText: 'https://...'),
+            decoration: const InputDecoration(
+              hintText: 'https://ejemplo.com/video_o_pagina',
+            ),
+            keyboardType: TextInputType.url,
           ),
           actions: [
             TextButton(
-              onPressed: () {
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () async {
                 final enlace = controller.text.trim();
-                if (enlace.isNotEmpty) {
+                if (enlace.isNotEmpty &&
+                    Uri.tryParse(enlace)?.hasAbsolutePath == true) {
                   final yaExiste = _archivos.any(
                     (archivo) =>
                         archivo['tipo'] == 'link' &&
@@ -651,19 +761,43 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
 
                   if (yaExiste) {
                     Navigator.pop(context);
-                    showCustomSnackbar(
-                      context: context,
-                      message: 'Este enlace ya ha sido agregado.',
-                      success: false,
-                    );
+                    if (mounted) {
+                      showCustomSnackbar(
+                        context: context,
+                        message: 'Este enlace ya ha sido agregado.',
+                        success: false,
+                      );
+                    }
                     return;
                   }
 
-                  setState(() {
-                    _archivos.add({'nombre': enlace, 'tipo': 'link'});
-                  });
+                  String tituloYoutube = enlace;
+                  if (enlace.toLowerCase().contains("youtube.com") ||
+                      enlace.toLowerCase().contains("youtu.be")) {
+                    tituloYoutube =
+                        await obtenerTituloVideoYoutube(enlace) ?? enlace;
+                  }
+
+                  if (mounted) {
+                    setState(() {
+                      _archivos.add({
+                        'nombre': enlace,
+                        'tipo': 'link',
+                        'tituloMostrado': tituloYoutube, // Para la UI
+                      });
+                    });
+                  }
+                } else {
+                  if (mounted) {
+                    showCustomSnackbar(
+                      context: context,
+                      message: 'Por favor, ingresa un enlace válido.',
+                      success: false,
+                    );
+                  }
+                  return;
                 }
-                Navigator.pop(context);
+                if (mounted) Navigator.pop(context);
               },
               child: const Text('Agregar'),
             ),
@@ -688,23 +822,27 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
         );
         return;
       }
-
-      setState(() {
-        _archivos.add({'nombre': nota, 'tipo': 'nota'});
-        _notaController.clear();
-      });
+      if (mounted) {
+        setState(() {
+          _archivos.add({'nombre': nota, 'tipo': 'nota'});
+          _notaController.clear();
+        });
+      }
     }
   }
 
   String _extractYoutubeId(String url) {
-    final uri = Uri.parse(url);
-    if (uri.host.contains('youtu.be')) {
-      return uri.pathSegments.first;
-    } else if (uri.queryParameters.containsKey('v')) {
-      return uri.queryParameters['v']!;
-    } else {
-      return '';
-    }
+    RegExp regExp = RegExp(
+      r'.*(?:youtu.be/|v/|u/\w/|embed/|watch\?v=|\&v=)([^#\&\?]*).*', // Ajusta esta RegExp si es necesario para tus URLs de YT
+      caseSensitive: false,
+      multiLine: false,
+    );
+    Match? match = regExp.firstMatch(url);
+    return (match != null &&
+            match.group(1) != null &&
+            match.group(1)!.length == 11)
+        ? match.group(1)!
+        : '';
   }
 
   void _abrirEnlaceEnWeb(String url) {
@@ -713,134 +851,143 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
 
   Widget _buildArchivoPreview(Map<String, dynamic> archivo, int index) {
     final tipo = archivo['tipo'];
-    final nombre = archivo['nombre'] ?? '';
-    final extension = (archivo['extension'] ?? '').toString().toLowerCase();
+    final nombreOriginal = archivo['nombre'] ?? '';
+    final tituloMostrado = archivo['tituloMostrado'] ?? nombreOriginal;
 
-    Widget? leading;
-    String? subtitle;
-    IconData? icon;
+    Widget? leadingWidget;
+    String tituloParaMostrarEnListTile = nombreOriginal;
+    String? subtituloParaMostrarEnListTile;
 
-    // Iconos y subtítulos según tipo
-    if (extension == 'pdf') {
-      icon = Icons.picture_as_pdf;
-    } else if (extension == 'mp3') {
-      icon = Icons.audiotrack;
-      subtitle = 'Audio MP3';
-    } else if (extension == 'mp4') {
-      icon = Icons.movie;
-      subtitle = 'Video MP4';
-    } else if (tipo == 'image') {
-      icon = Icons.image;
-    } else if (tipo == 'link') {
-      icon = Icons.link;
-      subtitle = archivo['nombre'];
+    if (tipo == 'link') {
+      tituloParaMostrarEnListTile = tituloMostrado;
+      subtituloParaMostrarEnListTile = nombreOriginal;
+      if (nombreOriginal.toLowerCase().contains("youtube.com") ||
+          nombreOriginal.toLowerCase().contains("youtu.be")) {
+        final videoId = _extractYoutubeId(nombreOriginal);
+        if (videoId.isNotEmpty) {
+          final thumbnailUrl =
+              'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
+          leadingWidget = SizedBox(
+            width: 80,
+            height: 60,
+            child: Image.network(
+              thumbnailUrl,
+              fit: BoxFit.cover,
+              errorBuilder:
+                  (context, error, stackTrace) => const Icon(
+                    Icons.play_circle_fill,
+                    color: Colors.red,
+                    size: 40,
+                  ),
+            ),
+          );
+        } else {
+          leadingWidget = const Icon(
+            Icons.play_circle_outline,
+            color: Colors.red,
+            size: 40,
+          );
+        }
+      } else {
+        leadingWidget = const Icon(
+          Icons.link,
+          color: Colors.blueGrey,
+          size: 40,
+        );
+      }
     } else if (tipo == 'nota') {
-      icon = Icons.notes;
-      subtitle = archivo['nombre'];
+      tituloParaMostrarEnListTile = 'Nota';
+      subtituloParaMostrarEnListTile =
+          nombreOriginal.length > 50
+              ? '${nombreOriginal.substring(0, 50)}...'
+              : nombreOriginal;
+      leadingWidget = const Icon(Icons.notes, color: Colors.indigo, size: 40);
+    } else if (tipo == 'pdf') {
+      tituloParaMostrarEnListTile =
+          nombreOriginal; // Mostrar nombre del archivo PDF
+      leadingWidget = const Icon(
+        Icons.picture_as_pdf,
+        color: Colors.redAccent,
+        size: 40,
+      );
+    } else if (tipo == 'image') {
+      tituloParaMostrarEnListTile =
+          nombreOriginal; // Mostrar nombre del archivo de imagen
+      if (archivo['bytes'] != null) {
+        leadingWidget = SizedBox(
+          width: 60,
+          height: 60,
+          child: Image.memory(archivo['bytes'] as Uint8List, fit: BoxFit.cover),
+        );
+      } else if (archivo['url'] != null) {
+        leadingWidget = SizedBox(
+          width: 60,
+          height: 60,
+          child: Image.network(
+            archivo['url'],
+            fit: BoxFit.cover,
+            errorBuilder:
+                (context, error, stackTrace) =>
+                    const Icon(Icons.broken_image, size: 40),
+          ),
+        );
+      } else {
+        leadingWidget = const Icon(Icons.image_outlined, size: 40);
+      }
+    } else if (tipo == 'video') {
+      tituloParaMostrarEnListTile =
+          nombreOriginal; // Mostrar nombre del archivo de video
+      leadingWidget = const Icon(
+        Icons.movie,
+        color: Colors.deepOrange,
+        size: 40,
+      );
+    } else if (tipo == 'audio') {
+      tituloParaMostrarEnListTile =
+          nombreOriginal; // Mostrar nombre del archivo de audio
+      leadingWidget = const Icon(
+        Icons.audiotrack,
+        color: Colors.purple,
+        size: 40,
+      );
+    } else {
+      tituloParaMostrarEnListTile = nombreOriginal;
+      leadingWidget = const Icon(Icons.attach_file, size: 40);
     }
 
-    // Para enlaces de YouTube muestra la miniatura y el botón eliminar
-    if (tipo == 'link' &&
-        (nombre.contains("youtube.com") || nombre.contains("youtu.be"))) {
-      final videoId = _extractYoutubeId(nombre);
-      final thumbnailUrl = 'https://img.youtube.com/vi/$videoId/0.jpg';
-
-      return Card(
-        margin: const EdgeInsets.symmetric(vertical: 8),
-        child: Stack(
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
+      elevation: 2,
+      child: ListTile(
+        leading: leadingWidget,
+        title: Text(
+          tituloParaMostrarEnListTile,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle:
+            subtituloParaMostrarEnListTile != null
+                ? Text(
+                  subtituloParaMostrarEnListTile,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                )
+                : null,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Image.network(thumbnailUrl, fit: BoxFit.cover),
-                ListTile(
-                  leading: Icon(Icons.play_circle, color: Colors.red),
-                  title: FutureBuilder<String?>(
-                    future: obtenerTituloVideoYoutube(nombre),
-                    builder: (context, snapshot) {
-                      return Text(snapshot.data ?? 'Video de YouTube');
-                    },
-                  ),
-                  subtitle: Text(nombre),
-                  trailing: ElevatedButton.icon(
-                    onPressed: () => _abrirEnlaceEnWeb(nombre),
-                    icon: Icon(Icons.open_in_new),
-                    label: Text("Ver video"),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            // --- Botón X (arriba a la derecha) ---
-            Positioned(
-              right: 0,
-              top: 0,
-              child: IconButton(
-                icon: Icon(Icons.close, color: Colors.red.shade700, size: 24),
-                onPressed: () async {
-                  final confirm = await showCustomDialog<bool>(
-                    context: context,
-                    titulo: '¿Eliminar archivo?',
-                    mensaje: '¿Estás seguro de eliminar este archivo?',
-                    tipo: CustomDialogType.warning,
-                    botones: [
-                      DialogButton<bool>(texto: 'Cancelar', value: false),
-                      DialogButton<bool>(texto: 'Eliminar', value: true),
-                    ],
-                  );
-                  if (confirm == true) {
-                    setState(() {
-                      _archivos.removeAt(index);
-                    });
-                    showCustomSnackbar(
-                      context: context,
-                      message: 'Archivo eliminado.',
-                      success: true,
-                    );
-                  }
-                },
+            if (tipo == 'link')
+              IconButton(
+                icon: const Icon(Icons.open_in_new, color: Colors.blue),
+                tooltip: 'Abrir enlace',
+                onPressed: () => _abrirEnlaceEnWeb(nombreOriginal),
               ),
+            IconButton(
+              icon: Icon(Icons.close, color: Colors.red.shade700),
+              tooltip: 'Eliminar',
+              onPressed: () => _confirmarEliminarArchivo(index),
             ),
           ],
-        ),
-      );
-    }
-
-    // Otros tipos (PDF, imagen, audio, nota, etc.)
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 0),
-      child: ListTile(
-        leading: Icon(icon, color: Colors.blueGrey),
-        title: Text(nombre),
-        subtitle: subtitle != null ? Text(subtitle) : null,
-        // --- Botón X ---
-        trailing: IconButton(
-          icon: Icon(Icons.close, color: Colors.red.shade700, size: 24),
-          onPressed: () async {
-            final confirm = await showCustomDialog<bool>(
-              context: context,
-              titulo: '¿Eliminar archivo?',
-              mensaje: '¿Estás seguro de eliminar este archivo?',
-              tipo: CustomDialogType.warning,
-              botones: [
-                DialogButton<bool>(texto: 'Cancelar', value: false),
-                DialogButton<bool>(texto: 'Eliminar', value: true),
-              ],
-            );
-            if (confirm == true) {
-              setState(() {
-                _archivos.removeAt(index);
-              });
-              showCustomSnackbar(
-                context: context,
-                message: 'Archivo eliminado.',
-                success: true,
-              );
-            }
-          },
         ),
       ),
     );
@@ -850,23 +997,30 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
-      appBar: const CustomAppBar(showBack: true),
-
+      appBar: CustomAppBar(
+        showBack: true,
+        titleText:
+            _modoEdicion
+                ? 'Editar Material'
+                : _modoNuevaVersion
+                ? 'Nueva Versión de Material'
+                : 'Subir Nuevo Material',
+      ),
       body: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Card(
           elevation: 6,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(16),
           ),
           color: Colors.white,
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(16),
             child: Column(
               children: [
                 DropdownButtonFormField<String>(
                   value: _temaSeleccionado,
-                  hint: const Text('Selecciona un tema'),
+                  hint: const Text('Selecciona un tema *'),
                   items:
                       temasDisponibles.entries
                           .map(
@@ -877,40 +1031,50 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
                           )
                           .toList(),
                   onChanged:
-                      (value) => setState(() => _temaSeleccionado = value),
-                  decoration: const InputDecoration(
+                      (_modoEdicion || _modoNuevaVersion)
+                          ? null
+                          : (value) =>
+                              setState(() => _temaSeleccionado = value),
+                  decoration: InputDecoration(
                     filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(),
+                    fillColor:
+                        (_modoEdicion || _modoNuevaVersion)
+                            ? Colors.grey.shade200
+                            : Colors.white,
+                    border: const OutlineInputBorder(),
                   ),
                 ),
-                if (_modoEdicion)
+                if (_modoEdicion && _materialId != null)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.only(top: 8, bottom: 4),
                     child: Container(
+                      width: double.infinity,
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         color: Colors.amber.shade100,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Text(
-                        'Editando material actual',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                      child: Text(
+                        'Editando material: $_materialId\nVersión: ${_versionActualIdParaEditar ?? "..."}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
                       ),
                     ),
                   ),
-                if (_modoNuevaVersion)
+                if (_modoNuevaVersion && _materialId != null)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.only(top: 8, bottom: 4),
                     child: Container(
+                      width: double.infinity,
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         color: Colors.lightBlue.shade100,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Text(
-                        'Agregando nueva versión del material',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                      child: Text(
+                        'Creando nueva versión para: $_materialId',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
                       ),
                     ),
                   ),
@@ -919,7 +1083,7 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
                 TextField(
                   controller: _tituloController,
                   decoration: const InputDecoration(
-                    labelText: 'Título del material',
+                    labelText: 'Título del material *',
                     filled: true,
                     fillColor: Colors.white,
                     border: OutlineInputBorder(),
@@ -936,13 +1100,12 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
                     border: OutlineInputBorder(),
                   ),
                 ),
-                const SizedBox(height: 16),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _descripcionController,
-                  maxLines: 4,
+                  maxLines: 3,
                   decoration: const InputDecoration(
-                    labelText: 'Descripción del material',
+                    labelText: 'Descripción del material/versión *',
                     filled: true,
                     fillColor: Colors.white,
                     border: OutlineInputBorder(),
@@ -950,19 +1113,20 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
                 ),
                 const SizedBox(height: 16),
                 Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
+                  spacing: 8,
+                  runSpacing: 8,
                   alignment: WrapAlignment.center,
                   children: [
                     CustomActionButton(
-                      text: 'Agregar PDF',
+                      // Asumo que tu CustomActionButton no usa isSmall o ya lo adaptaste
+                      text: 'PDF',
                       icon: Icons.picture_as_pdf,
                       backgroundColor: Colors.red.shade600,
                       onPressed:
                           () => _seleccionarArchivoPorExtension(['pdf'], 'pdf'),
                     ),
                     CustomActionButton(
-                      text: 'Agregar Imagen',
+                      text: 'Imagen',
                       icon: Icons.image,
                       backgroundColor: Colors.blue.shade700,
                       onPressed:
@@ -970,158 +1134,82 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
                             'jpg',
                             'jpeg',
                             'png',
+                            'gif',
+                            'webp',
+                            'bmp',
                           ], 'image'),
                     ),
                     CustomActionButton(
-                      text: 'Agregar Video',
+                      text: 'Video',
                       icon: Icons.videocam,
                       backgroundColor: Colors.deepOrange.shade700,
                       onPressed:
-                          () =>
-                              _seleccionarArchivoPorExtension(['mp4'], 'video'),
+                          () => _seleccionarArchivoPorExtension([
+                            'mp4',
+                            'mov',
+                            'avi',
+                            'mkv',
+                          ], 'video'),
                     ),
                     CustomActionButton(
-                      text: 'Agregar Audio',
+                      text: 'Audio',
                       icon: Icons.audiotrack,
                       backgroundColor: Colors.purple.shade800,
                       onPressed:
-                          () =>
-                              _seleccionarArchivoPorExtension(['mp3'], 'audio'),
+                          () => _seleccionarArchivoPorExtension([
+                            'mp3',
+                            'wav',
+                            'aac',
+                          ], 'audio'),
                     ),
                     CustomActionButton(
-                      text: 'Agregar Enlace',
+                      text: 'Enlace',
                       icon: Icons.link,
                       backgroundColor: Colors.green.shade700,
                       onPressed: _agregarEnlace,
                     ),
                     CustomActionButton(
-                      text: 'Agregar Nota',
+                      text: 'Nota',
                       icon: Icons.notes,
                       backgroundColor: Colors.indigo.shade700,
                       onPressed: _agregarNota,
                     ),
                   ],
                 ),
-
-                // Wrap(
-                //   spacing: 10,
-                //   runSpacing: 10,
-                //   children: [
-                //     ElevatedButton.icon(
-                //       onPressed: () => _seleccionarArchivo('pdf'),
-                //       icon: const Icon(Icons.picture_as_pdf),
-                //       label: const Text('Agregar PDF'),
-                //     ),
-                //     ElevatedButton.icon(
-                //       onPressed: () => _seleccionarArchivo('image'),
-                //       icon: const Icon(Icons.image),
-                //       label: const Text('Agregar Imagen'),
-                //     ),
-                //     ElevatedButton.icon(
-                //       onPressed: () => _seleccionarArchivo('video'),
-                //       icon: const Icon(Icons.videocam),
-                //       label: const Text('Agregar Video'),
-                //     ),
-                //     ElevatedButton.icon(
-                //       onPressed: _agregarEnlace,
-                //       icon: const Icon(Icons.link),
-                //       label: const Text('Agregar Enlace'),
-                //     ),
-                //     ElevatedButton.icon(
-                //       onPressed: _agregarNota,
-                //       icon: const Icon(Icons.notes),
-                //       label: const Text('Agregar Nota'),
-                //     ),
-                //   ],
-                // ),
-                const SizedBox(height: 20),
-                // TextField(
-                //   controller: _notaController,
-                //   maxLines: 3,
-                //   decoration: const InputDecoration(
-                //     hintText: 'Escribe una nota para agregarla...',
-                //     filled: true,
-                //     fillColor: Colors.white,
-                //     border: OutlineInputBorder(),
-                //   ),
-                // ),
-                // const SizedBox(height: 20),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Vista previa:',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
+                if (_archivos.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Archivos y contenido adjunto:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: Color(0xFF036799),
+                      ),
                     ),
                   ),
-                ),
+                ],
                 Expanded(
-                  child: ListView.builder(
-                    itemCount: _archivos.length,
-                    itemBuilder:
-                        (context, index) =>
-                            _buildArchivoPreview(_archivos[index], index),
-                  ),
+                  child:
+                      _archivos.isEmpty
+                          ? const Center(
+                            child: Text(
+                              'Aún no has agregado archivos o contenido.',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          )
+                          : ListView.builder(
+                            itemCount: _archivos.length,
+                            itemBuilder:
+                                (context, index) => _buildArchivoPreview(
+                                  _archivos[index],
+                                  index,
+                                ),
+                          ),
                 ),
 
                 const SizedBox(height: 12),
-
-                // ElevatedButton.icon(
-                //   onPressed: _subiendo ? null : _subirMaterialEducativo,
-                //   icon:
-                //       _subiendo
-                //           ? const SizedBox(
-                //             width: 20,
-                //             height: 20,
-                //             child: CircularProgressIndicator(
-                //               strokeWidth: 2,
-                //               color: Colors.white,
-                //             ),
-                //           )
-                //           : const Icon(Icons.upload),
-                //   label: Text(_subiendo ? 'Subiendo...' : 'Subir a Firestore'),
-                //   style: ElevatedButton.styleFrom(
-                //     backgroundColor: Colors.black,
-                //     foregroundColor: Colors.white,
-                //     padding: const EdgeInsets.symmetric(
-                //       horizontal: 40,
-                //       vertical: 14,
-                //     ),
-                //     shape: RoundedRectangleBorder(
-                //       borderRadius: BorderRadius.circular(30),
-                //     ),
-                //   ),
-                // ),
-                // Stack(
-                //   alignment: Alignment.centerRight,
-                //   children: [
-                //     CustomActionButton(
-                //       text: _subiendo ? 'Subiendo...' : 'Subir',
-                //       icon: Icons.upload,
-                //       onPressed: () {
-                //         if (!_subiendo) _subirMaterialEducativo();
-                //       },
-                //       reserveLoaderSpace: _subiendo,
-                //       animar: _subiendo,
-                //       girarIcono: _subiendo,
-                //       backgroundColor:
-                //           _subiendo ? Colors.grey.shade800 : Colors.black,
-                //     ),
-                //     if (_subiendo)
-                //       const Positioned(
-                //         right: 20,
-                //         child: SizedBox(
-                //           width: 16,
-                //           height: 16,
-                //           child: CircularProgressIndicator(
-                //             strokeWidth: 2,
-                //             color: Colors.white,
-                //           ),
-                //         ),
-                //       ),
-                //   ],
-                // ),
                 AnimatedScale(
                   scale: _exitoAlSubir ? 1.05 : 1.0,
                   duration: const Duration(milliseconds: 300),
@@ -1129,16 +1217,20 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
                   child: CustomActionButton(
                     text:
                         _subiendo
-                            ? 'Subiendo...'
+                            ? 'Procesando...'
                             : _exitoAlSubir
-                            ? '¡Subido!'
-                            : 'Subir',
+                            ? '¡Listo!'
+                            : (_modoEdicion
+                                ? 'Guardar Cambios'
+                                : (_modoNuevaVersion
+                                    ? 'Guardar Nueva Versión'
+                                    : 'Subir Material')),
                     icon:
                         _subiendo
                             ? Icons.hourglass_top
                             : _exitoAlSubir
                             ? Icons.check_circle_outline
-                            : Icons.upload,
+                            : Icons.upload_file,
                     onPressed: () {
                       if (!_subiendo && !_exitoAlSubir) {
                         _subirMaterialEducativo();
