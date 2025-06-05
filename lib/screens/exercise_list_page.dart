@@ -4,8 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:study_connect/services/local_notification_service.dart';
 import 'package:study_connect/utils/utils.dart'; // Para prepararLaTeX
 import 'package:study_connect/widgets/widgets.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Importar Firebase Auth
 
-// Opciones de ordenamiento (sin cambios)
+// Opciones de ordenamiento
 enum SortOptions {
   mejorCalificados,
   peorCalificados,
@@ -56,6 +57,9 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
   List<DocumentSnapshot> _allFetchedDocuments = [];
   List<DocumentSnapshot> _paginatedAndFilteredDocuments = [];
 
+  bool _showCenteredUploadButton = false;
+  bool _argumentsLoaded = false;
+
   @override
   void initState() {
     super.initState();
@@ -65,27 +69,22 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final args = ModalRoute.of(context)?.settings.arguments as Map?;
-    if (_temaKey == null &&
-        args != null &&
-        args.containsKey('tema') &&
-        args.containsKey('titulo')) {
-      if (mounted) {
-        setState(() {
-          _temaKey = args['tema'];
-          _tituloTema = args['titulo'];
-          _updateStream();
+    if (!_argumentsLoaded) {
+      final args = ModalRoute.of(context)?.settings.arguments as Map?;
+      if (args != null &&
+          args.containsKey('tema') &&
+          args.containsKey('titulo')) {
+        _temaKey = args['tema'];
+        _tituloTema = args['titulo'];
+        _argumentsLoaded = true;
+        _updateStream();
+      } else {
+        Future.microtask(() {
+          if (mounted) {
+            Navigator.pushReplacementNamed(context, '/content');
+          }
         });
       }
-    } else if (_temaKey == null &&
-        (args == null ||
-            !args.containsKey('tema') ||
-            !args.containsKey('titulo'))) {
-      Future.microtask(() {
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/content');
-        }
-      });
     }
   }
 
@@ -130,6 +129,8 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
       setState(() {
         _exercisesStream = query.snapshots();
         _currentPage = 0;
+        _allFetchedDocuments = [];
+        _paginatedAndFilteredDocuments = [];
       });
     }
   }
@@ -152,33 +153,42 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
     }
 
     int startIndex = _currentPage * _itemsPerPage;
-    startIndex = startIndex.clamp(
-      0,
-      filtered.isNotEmpty ? filtered.length - 1 : 0,
-    );
+    if (startIndex >= filtered.length && filtered.isNotEmpty) {
+      _currentPage = (filtered.length - 1) ~/ _itemsPerPage;
+      startIndex = _currentPage * _itemsPerPage;
+    } else if (filtered.isEmpty) {
+      _currentPage = 0;
+      startIndex = 0;
+    }
+
     int endIndex = startIndex + _itemsPerPage;
     endIndex = endIndex.clamp(startIndex, filtered.length);
 
-    _paginatedAndFilteredDocuments = filtered.sublist(startIndex, endIndex);
-
     if (mounted) {
-      setState(() {});
+      setState(() {
+        _paginatedAndFilteredDocuments = filtered.sublist(startIndex, endIndex);
+      });
     }
   }
 
   void _changePage(int newPage) {
-    List<DocumentSnapshot> currentlyFiltered =
-        _allFetchedDocuments.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          final titulo = (data['Titulo'] as String? ?? '').toLowerCase();
-          final descripcion =
-              (data['DesEjercicio'] as String? ?? '').toLowerCase();
-          return _searchTerm.isEmpty ||
-              titulo.contains(_searchTerm) ||
-              descripcion.contains(_searchTerm);
-        }).toList();
+    List<DocumentSnapshot> currentlyFilteredTotal = List.from(
+      _allFetchedDocuments,
+    );
+    if (_searchTerm.isNotEmpty) {
+      currentlyFilteredTotal =
+          currentlyFilteredTotal.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final titulo = (data['Titulo'] as String? ?? '').toLowerCase();
+            final descripcion =
+                (data['DesEjercicio'] as String? ?? '').toLowerCase();
+            return titulo.contains(_searchTerm) ||
+                descripcion.contains(_searchTerm);
+          }).toList();
+    }
 
-    int totalPages = (currentlyFiltered.length / _itemsPerPage).ceil();
+    int totalPages = (currentlyFilteredTotal.length / _itemsPerPage).ceil();
+    if (totalPages == 0) totalPages = 1;
 
     if (newPage >= 0 && newPage < totalPages) {
       if (mounted) {
@@ -187,19 +197,6 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
           _applyClientSideFiltersAndPagination();
         });
       }
-    } else if (newPage < 0 && mounted) {
-      setState(() {
-        _currentPage = 0;
-        _applyClientSideFiltersAndPagination();
-      });
-    } else if ((newPage * _itemsPerPage) >= currentlyFiltered.length &&
-        mounted) {
-      int totalPagesCalculated =
-          (currentlyFiltered.length / _itemsPerPage).ceil();
-      setState(() {
-        _currentPage = totalPagesCalculated > 0 ? totalPagesCalculated - 1 : 0;
-        _applyClientSideFiltersAndPagination();
-      });
     }
   }
 
@@ -207,6 +204,7 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
     final theme = Theme.of(context);
     if (totalFilteredItems <= _itemsPerPage) return const SizedBox.shrink();
     int totalPages = (totalFilteredItems / _itemsPerPage).ceil();
+    if (totalPages <= 1) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(top: 16.0, bottom: 8.0),
@@ -254,6 +252,67 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
     );
   }
 
+  void _showLoginRequiredDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder:
+          (BuildContext dialogContext) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
+            ),
+            title: Text(
+              'Inicio de Sesión Requerido',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+            ),
+            content: Text(
+              'Para realizar esta acción, necesitas iniciar sesión.',
+              style: GoogleFonts.poppins(),
+            ),
+            actions: <Widget>[
+              TextButton(
+                child: Text(
+                  'Cancelar',
+                  style: GoogleFonts.poppins(
+                    color: Theme.of(dialogContext).colorScheme.secondary,
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                },
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(dialogContext).colorScheme.primary,
+                  foregroundColor:
+                      Theme.of(dialogContext).colorScheme.onPrimary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: Text('Iniciar Sesión', style: GoogleFonts.poppins()),
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  Navigator.pushNamed(context, '/login');
+                },
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _handleUploadNavigation() {
+    final isLoggedIn = FirebaseAuth.instance.currentUser != null;
+    if (!isLoggedIn) {
+      _showLoginRequiredDialog(context);
+    } else {
+      Navigator.pushNamed(
+        context,
+        '/exercise_upload',
+        arguments: {'tema': _temaKey},
+      );
+    }
+  }
+
   @override
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
@@ -264,15 +323,14 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final bool isScreenWide =
-        MediaQuery.of(context).size.width > 800; // Para responsividad general
+    final bool isScreenWide = MediaQuery.of(context).size.width > 800;
 
     if (_temaKey == null || _tituloTema == null) {
       return Scaffold(
         backgroundColor: const Color(0xFF036799),
         appBar: CustomAppBar(
           showBack: true,
-          titleText: _tituloTema ?? "Cargando...",
+          titleText: "Cargando Ejercicios...",
         ),
         body: const Center(
           child: CircularProgressIndicator(color: Colors.white),
@@ -282,12 +340,15 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
-      appBar: CustomAppBar(showBack: true, titleText: "Ejercicios"),
+      appBar: CustomAppBar(
+        showBack: true,
+        titleText: "Ejercicios de $_tituloTema",
+      ),
       body: Padding(
         padding: EdgeInsets.symmetric(
           horizontal: isScreenWide ? 32.0 : 12.0,
           vertical: 16.0,
-        ), // Padding ajustado
+        ),
         child: Container(
           padding: const EdgeInsets.all(16.0),
           decoration: BoxDecoration(
@@ -316,16 +377,14 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
                   ),
                 ),
               ),
-              // --- Barra de Herramientas: Búsqueda y Ordenamiento ---
               Container(
-                // Contenedor para la barra de herramientas para darle un fondo distinto
                 padding: const EdgeInsets.symmetric(
                   vertical: 8.0,
                   horizontal: 8.0,
                 ),
                 margin: const EdgeInsets.only(bottom: 12.0),
                 decoration: BoxDecoration(
-                  color: Colors.blueGrey.shade100, // Fondo más distintivo
+                  color: Colors.blueGrey.shade100,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -373,9 +432,7 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
                                     Icons.clear_rounded,
                                     color: theme.colorScheme.onSurfaceVariant,
                                   ),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                  },
+                                  onPressed: () => _searchController.clear(),
                                 )
                                 : null,
                       ),
@@ -429,13 +486,12 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
                   ],
                 ),
               ),
-
-              // --- Lista de Ejercicios ---
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
                   stream: _exercisesStream,
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
+                      _showCenteredUploadButton = false;
                       return Center(
                         child: Padding(
                           padding: const EdgeInsets.all(16.0),
@@ -451,6 +507,7 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
                     }
                     if (snapshot.connectionState == ConnectionState.waiting &&
                         _allFetchedDocuments.isEmpty) {
+                      _showCenteredUploadButton = false;
                       return Center(
                         child: CircularProgressIndicator(
                           color: theme.colorScheme.primary,
@@ -461,30 +518,84 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
                     if (snapshot.hasData) {
                       _allFetchedDocuments = snapshot.data!.docs;
                       WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) _applyClientSideFiltersAndPagination();
+                        if (mounted) {
+                          _applyClientSideFiltersAndPagination();
+                          setState(() {
+                            _showCenteredUploadButton =
+                                _allFetchedDocuments.isEmpty &&
+                                _searchTerm.isEmpty;
+                          });
+                        }
                       });
                     } else if (!snapshot.hasData &&
                         _allFetchedDocuments.isEmpty &&
                         snapshot.connectionState != ConnectionState.waiting) {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted)
-                          setState(() => _paginatedAndFilteredDocuments = []);
+                        if (mounted) {
+                          setState(() {
+                            _paginatedAndFilteredDocuments = [];
+                            _showCenteredUploadButton = true;
+                          });
+                        }
                       });
                     }
 
-                    if (_allFetchedDocuments.isEmpty &&
-                        _searchTerm.isEmpty &&
+                    if (_showCenteredUploadButton &&
                         snapshot.connectionState != ConnectionState.waiting) {
                       return Center(
                         child: Padding(
                           padding: const EdgeInsets.all(20.0),
-                          child: Text(
-                            'Aún no hay ejercicios para "${_tituloTema ?? "este tema"}".',
-                            style: GoogleFonts.poppins(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              fontSize: 16,
-                            ),
-                            textAlign: TextAlign.center,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.library_books_outlined,
+                                size: 70,
+                                color: theme.colorScheme.onSurfaceVariant
+                                    .withOpacity(0.5),
+                              ),
+                              const SizedBox(height: 20),
+                              Text(
+                                'Aún no hay ejercicios para "${_tituloTema ?? "este tema"}".',
+                                style: GoogleFonts.poppins(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                '¡Sé el primero en contribuir!',
+                                style: GoogleFonts.poppins(
+                                  color: theme.colorScheme.onSurfaceVariant
+                                      .withOpacity(0.8),
+                                  fontSize: 14,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 25),
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.add_circle_outline),
+                                label: const Text('Subir Nuevo Ejercicio'),
+                                onPressed: _handleUploadNavigation,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: theme.colorScheme.primary,
+                                  foregroundColor: theme.colorScheme.onPrimary,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 12,
+                                  ),
+                                  textStyle: GoogleFonts.poppins(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       );
@@ -520,7 +631,8 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
                       );
                     }
                     if (_paginatedAndFilteredDocuments.isEmpty &&
-                        snapshot.connectionState == ConnectionState.waiting) {
+                        snapshot.connectionState == ConnectionState.waiting &&
+                        _allFetchedDocuments.isNotEmpty) {
                       return const Center(child: CircularProgressIndicator());
                     }
 
@@ -534,8 +646,7 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
                               final doc = _paginatedAndFilteredDocuments[index];
                               final data = doc.data() as Map<String, dynamic>;
                               final bool isCurrentlyWide =
-                                  MediaQuery.of(context).size.width >
-                                  700; // Ajustado para responsividad del item
+                                  MediaQuery.of(context).size.width > 700;
 
                               return Card(
                                 elevation: 2,
@@ -546,10 +657,7 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                color:
-                                    theme
-                                        .colorScheme
-                                        .surfaceContainerHigh, // Un color de tarjeta que contraste un poco más
+                                color: theme.colorScheme.surfaceContainerHigh,
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(12),
                                   onTap: () async {
@@ -588,7 +696,6 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
                                                 fontSize:
                                                     isCurrentlyWide ? 16.5 : 15,
                                                 prepararLatex: prepararLaTeX,
-                                                // Los parámetros de color y peso dependerán de tu CustomLatexText
                                               ),
                                               const SizedBox(height: 5),
                                               if (data['DesEjercicio'] !=
@@ -640,7 +747,6 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Tooltip(
-                                              // Tooltip para las estrellas
                                               message:
                                                   'Calificación: ${(data['CalPromedio'] is num) ? (data['CalPromedio'] as num).toStringAsFixed(1) : "N/A"} / 5',
                                               child: CustomStarRating(
@@ -650,14 +756,8 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
                                                                 as num)
                                                             .toDouble()
                                                         : 0.0,
-                                                size:
-                                                    isCurrentlyWide
-                                                        ? 21
-                                                        : 19, // Estrellas un poco más grandes
-                                                color:
-                                                    Colors
-                                                        .amber
-                                                        .shade700, // Color de estrella intenso
+                                                size: isCurrentlyWide ? 21 : 19,
+                                                color: Colors.amber.shade700,
                                               ),
                                             ),
                                             const SizedBox(height: 8),
@@ -762,6 +862,16 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
           ),
         ),
       ),
+      floatingActionButton:
+          (_temaKey != null && !_showCenteredUploadButton)
+              ? FloatingActionButton.extended(
+                onPressed: _handleUploadNavigation,
+                label: const Text('Subir Ejercicio'),
+                icon: const Icon(Icons.add),
+                backgroundColor: theme.colorScheme.primaryContainer,
+                foregroundColor: theme.colorScheme.onPrimaryContainer,
+              )
+              : null,
     );
   }
 }

@@ -1,12 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:study_connect/services/local_notification_service.dart'; // Asegúrate de que este servicio esté configurado
+import 'package:study_connect/services/local_notification_service.dart';
 import 'package:study_connect/utils/utils.dart'; // Para prepararLaTeX
 import 'package:study_connect/widgets/widgets.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Importar Firebase Auth
 
 // Opciones de ordenamiento para Materiales
 enum MaterialSortOptions {
+  // Renombrado de SortOptions
   mejorCalificados,
   peorCalificados,
   tituloAZ,
@@ -16,6 +18,7 @@ enum MaterialSortOptions {
 }
 
 extension MaterialSortOptionsExtension on MaterialSortOptions {
+  // Renombrado de SortOptionsExtension
   String get displayName {
     switch (this) {
       case MaterialSortOptions.mejorCalificados:
@@ -35,26 +38,32 @@ extension MaterialSortOptionsExtension on MaterialSortOptions {
 }
 
 class MaterialListPage extends StatefulWidget {
+  // Renombrado de ExerciseListPage
   const MaterialListPage({super.key});
 
   @override
-  State<MaterialListPage> createState() => _MaterialListPageState();
+  State<MaterialListPage> createState() => _MaterialListPageState(); // Renombrado
 }
 
 class _MaterialListPageState extends State<MaterialListPage> {
+  // Renombrado
   String? _temaKey;
   String? _tituloTema;
 
   final TextEditingController _searchController = TextEditingController();
   String _searchTerm = "";
-  MaterialSortOptions _currentSortOption = MaterialSortOptions.mejorCalificados;
+  MaterialSortOptions _currentSortOption =
+      MaterialSortOptions.mejorCalificados; // Usar MaterialSortOptions
 
-  Stream<QuerySnapshot>? _materialsStream; // Cambiado de _exercisesStream
+  Stream<QuerySnapshot>? _materialsStream; // Renombrado de _exercisesStream
 
   int _currentPage = 0;
   final int _itemsPerPage = 10;
   List<DocumentSnapshot> _allFetchedDocuments = [];
   List<DocumentSnapshot> _paginatedAndFilteredDocuments = [];
+
+  bool _showCenteredUploadButton = false;
+  bool _argumentsLoaded = false;
 
   @override
   void initState() {
@@ -65,27 +74,22 @@ class _MaterialListPageState extends State<MaterialListPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final args = ModalRoute.of(context)?.settings.arguments as Map?;
-    if (_temaKey == null &&
-        args != null &&
-        args.containsKey('tema') &&
-        args.containsKey('titulo')) {
-      if (mounted) {
-        setState(() {
-          _temaKey = args['tema'];
-          _tituloTema = args['titulo'];
-          _updateStream();
+    if (!_argumentsLoaded) {
+      final args = ModalRoute.of(context)?.settings.arguments as Map?;
+      if (args != null &&
+          args.containsKey('tema') &&
+          args.containsKey('titulo')) {
+        _temaKey = args['tema'];
+        _tituloTema = args['titulo'];
+        _argumentsLoaded = true;
+        _updateStream();
+      } else {
+        Future.microtask(() {
+          if (mounted) {
+            Navigator.pushReplacementNamed(context, '/content');
+          }
         });
       }
-    } else if (_temaKey == null &&
-        (args == null ||
-            !args.containsKey('tema') ||
-            !args.containsKey('titulo'))) {
-      Future.microtask(() {
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/content');
-        }
-      });
     }
   }
 
@@ -101,13 +105,14 @@ class _MaterialListPageState extends State<MaterialListPage> {
 
   void _updateStream() {
     if (_temaKey == null) return;
-    // CAMBIO: Query para la colección de materiales
+    // Adaptado para la colección de materiales y sus campos
     Query query = FirebaseFirestore.instance
-        .collection('materiales') // Colección principal de materiales
+        .collection('materiales') // Colección de Materiales
         .doc(_temaKey)
-        .collection('Mat$_temaKey'); // Subcolección de materiales por tema
+        .collection(
+          'Mat$_temaKey',
+        ); // Subcolección de Materiales (según tu código original de MaterialList)
 
-    // Asegúrate de que los campos de ordenamiento existan en tus documentos de materiales
     switch (_currentSortOption) {
       case MaterialSortOptions.masRecientes:
         query = query.orderBy('fechaCreacion', descending: true);
@@ -116,26 +121,36 @@ class _MaterialListPageState extends State<MaterialListPage> {
         query = query.orderBy('fechaCreacion', descending: false);
         break;
       case MaterialSortOptions.mejorCalificados:
-        // CAMBIO: Nombre del campo para calificación promedio
-        query = query.orderBy('calificacionPromedio', descending: true);
+        query = query.orderBy(
+          'calificacionPromedio',
+          descending: true,
+        ); // Campo para materiales
         break;
       case MaterialSortOptions.peorCalificados:
-        // CAMBIO: Nombre del campo para calificación promedio
-        query = query.orderBy('calificacionPromedio', descending: false);
+        query = query.orderBy(
+          'calificacionPromedio',
+          descending: false,
+        ); // Campo para materiales
         break;
       case MaterialSortOptions.tituloAZ:
-        // CAMBIO: Nombre del campo para título
-        query = query.orderBy('titulo', descending: false);
+        query = query.orderBy(
+          'titulo',
+          descending: false,
+        ); // Campo para materiales
         break;
       case MaterialSortOptions.tituloZA:
-        // CAMBIO: Nombre del campo para título
-        query = query.orderBy('titulo', descending: true);
+        query = query.orderBy(
+          'titulo',
+          descending: true,
+        ); // Campo para materiales
         break;
     }
     if (mounted) {
       setState(() {
-        _materialsStream = query.snapshots(); // Cambiado
+        _materialsStream = query.snapshots(); // Asignar a _materialsStream
         _currentPage = 0;
+        _allFetchedDocuments = [];
+        _paginatedAndFilteredDocuments = [];
       });
     }
   }
@@ -149,45 +164,53 @@ class _MaterialListPageState extends State<MaterialListPage> {
       filtered =
           filtered.where((doc) {
             final data = doc.data() as Map<String, dynamic>;
-            // CAMBIO: Usa los campos relevantes de 'materiales' para la búsqueda
+            // Adaptado para campos de materiales
             final titulo = (data['titulo'] as String? ?? '').toLowerCase();
             final descripcion =
-                (data['descripcion'] as String? ?? '')
-                    .toLowerCase(); // Asumiendo campo 'descripcion'
+                (data['descripcion'] as String? ?? '').toLowerCase();
             return titulo.contains(_searchTerm) ||
                 descripcion.contains(_searchTerm);
           }).toList();
     }
 
     int startIndex = _currentPage * _itemsPerPage;
-    startIndex = startIndex.clamp(
-      0,
-      filtered.isNotEmpty ? filtered.length - 1 : 0,
-    );
+    if (startIndex >= filtered.length && filtered.isNotEmpty) {
+      _currentPage = (filtered.length - 1) ~/ _itemsPerPage;
+      startIndex = _currentPage * _itemsPerPage;
+    } else if (filtered.isEmpty) {
+      _currentPage = 0;
+      startIndex = 0;
+    }
+
     int endIndex = startIndex + _itemsPerPage;
     endIndex = endIndex.clamp(startIndex, filtered.length);
 
-    _paginatedAndFilteredDocuments = filtered.sublist(startIndex, endIndex);
-
     if (mounted) {
-      setState(() {});
+      setState(() {
+        _paginatedAndFilteredDocuments = filtered.sublist(startIndex, endIndex);
+      });
     }
   }
 
   void _changePage(int newPage) {
-    List<DocumentSnapshot> currentlyFiltered =
-        _allFetchedDocuments.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          // CAMBIO: Adaptar campos para filtrado en paginación
-          final titulo = (data['titulo'] as String? ?? '').toLowerCase();
-          final descripcion =
-              (data['descripcion'] as String? ?? '').toLowerCase();
-          return _searchTerm.isEmpty ||
-              titulo.contains(_searchTerm) ||
-              descripcion.contains(_searchTerm);
-        }).toList();
+    List<DocumentSnapshot> currentlyFilteredTotal = List.from(
+      _allFetchedDocuments,
+    );
+    if (_searchTerm.isNotEmpty) {
+      currentlyFilteredTotal =
+          currentlyFilteredTotal.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            // Adaptado para campos de materiales
+            final titulo = (data['titulo'] as String? ?? '').toLowerCase();
+            final descripcion =
+                (data['descripcion'] as String? ?? '').toLowerCase();
+            return titulo.contains(_searchTerm) ||
+                descripcion.contains(_searchTerm);
+          }).toList();
+    }
 
-    int totalPages = (currentlyFiltered.length / _itemsPerPage).ceil();
+    int totalPages = (currentlyFilteredTotal.length / _itemsPerPage).ceil();
+    if (totalPages == 0) totalPages = 1;
 
     if (newPage >= 0 && newPage < totalPages) {
       if (mounted) {
@@ -196,19 +219,6 @@ class _MaterialListPageState extends State<MaterialListPage> {
           _applyClientSideFiltersAndPagination();
         });
       }
-    } else if (newPage < 0 && mounted) {
-      setState(() {
-        _currentPage = 0;
-        _applyClientSideFiltersAndPagination();
-      });
-    } else if ((newPage * _itemsPerPage) >= currentlyFiltered.length &&
-        mounted) {
-      int totalPagesCalculated =
-          (currentlyFiltered.length / _itemsPerPage).ceil();
-      setState(() {
-        _currentPage = totalPagesCalculated > 0 ? totalPagesCalculated - 1 : 0;
-        _applyClientSideFiltersAndPagination();
-      });
     }
   }
 
@@ -216,6 +226,7 @@ class _MaterialListPageState extends State<MaterialListPage> {
     final theme = Theme.of(context);
     if (totalFilteredItems <= _itemsPerPage) return const SizedBox.shrink();
     int totalPages = (totalFilteredItems / _itemsPerPage).ceil();
+    if (totalPages <= 1) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(top: 16.0, bottom: 8.0),
@@ -263,6 +274,68 @@ class _MaterialListPageState extends State<MaterialListPage> {
     );
   }
 
+  void _showLoginRequiredDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder:
+          (BuildContext dialogContext) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
+            ),
+            title: Text(
+              'Inicio de Sesión Requerido',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+            ),
+            content: Text(
+              'Para realizar esta acción, necesitas iniciar sesión.',
+              style: GoogleFonts.poppins(),
+            ),
+            actions: <Widget>[
+              TextButton(
+                child: Text(
+                  'Cancelar',
+                  style: GoogleFonts.poppins(
+                    color: Theme.of(dialogContext).colorScheme.secondary,
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                },
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(dialogContext).colorScheme.primary,
+                  foregroundColor:
+                      Theme.of(dialogContext).colorScheme.onPrimary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: Text('Iniciar Sesión', style: GoogleFonts.poppins()),
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  Navigator.pushNamed(context, '/login');
+                },
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _handleUploadNavigation() {
+    final isLoggedIn = FirebaseAuth.instance.currentUser != null;
+    if (!isLoggedIn) {
+      _showLoginRequiredDialog(context);
+    } else {
+      // Ruta para subir material
+      Navigator.pushNamed(
+        context,
+        '/upload_material',
+        arguments: {'tema': _temaKey},
+      );
+    }
+  }
+
   @override
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
@@ -273,15 +346,14 @@ class _MaterialListPageState extends State<MaterialListPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final bool isScreenWide =
-        MediaQuery.of(context).size.width > 800; // Para responsividad general
+    final bool isScreenWide = MediaQuery.of(context).size.width > 800;
 
     if (_temaKey == null || _tituloTema == null) {
       return Scaffold(
         backgroundColor: const Color(0xFF036799),
         appBar: CustomAppBar(
           showBack: true,
-          titleText: _tituloTema ?? "Cargando Materiales...", // CAMBIO
+          titleText: "Cargando Materiales...", // Texto adaptado
         ),
         body: const Center(
           child: CircularProgressIndicator(color: Colors.white),
@@ -293,13 +365,13 @@ class _MaterialListPageState extends State<MaterialListPage> {
       backgroundColor: const Color(0xFF036799),
       appBar: CustomAppBar(
         showBack: true,
-        titleText: "Material de Apoyo",
-      ), // CAMBIO
+        titleText: "Materiales de $_tituloTema", // Texto adaptado
+      ),
       body: Padding(
         padding: EdgeInsets.symmetric(
           horizontal: isScreenWide ? 32.0 : 12.0,
           vertical: 16.0,
-        ), // Padding ajustado
+        ),
         child: Container(
           padding: const EdgeInsets.all(16.0),
           decoration: BoxDecoration(
@@ -328,7 +400,6 @@ class _MaterialListPageState extends State<MaterialListPage> {
                   ),
                 ),
               ),
-              // --- Barra de Herramientas: Búsqueda y Ordenamiento ---
               Container(
                 padding: const EdgeInsets.symmetric(
                   vertical: 8.0,
@@ -336,7 +407,7 @@ class _MaterialListPageState extends State<MaterialListPage> {
                 ),
                 margin: const EdgeInsets.only(bottom: 12.0),
                 decoration: BoxDecoration(
-                  color: Colors.blueGrey.shade100, // Fondo más distintivo
+                  color: Colors.blueGrey.shade100,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -348,7 +419,7 @@ class _MaterialListPageState extends State<MaterialListPage> {
                         fontSize: 14.5,
                       ),
                       decoration: InputDecoration(
-                        hintText: 'Buscar material...', // CAMBIO
+                        hintText: 'Buscar material...', // Texto adaptado
                         hintStyle: GoogleFonts.poppins(
                           color: theme.colorScheme.onSurfaceVariant.withOpacity(
                             0.6,
@@ -384,9 +455,7 @@ class _MaterialListPageState extends State<MaterialListPage> {
                                     Icons.clear_rounded,
                                     color: theme.colorScheme.onSurfaceVariant,
                                   ),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                  },
+                                  onPressed: () => _searchController.clear(),
                                 )
                                 : null,
                       ),
@@ -402,7 +471,7 @@ class _MaterialListPageState extends State<MaterialListPage> {
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<MaterialSortOptions>(
-                          // CAMBIO
+                          // Usar MaterialSortOptions
                           value: _currentSortOption,
                           isExpanded: true,
                           dropdownColor:
@@ -419,9 +488,9 @@ class _MaterialListPageState extends State<MaterialListPage> {
                               MaterialSortOptions.values.map((
                                 MaterialSortOptions option,
                               ) {
-                                // CAMBIO
+                                // Usar MaterialSortOptions
                                 return DropdownMenuItem<MaterialSortOptions>(
-                                  // CAMBIO
+                                  // Usar MaterialSortOptions
                                   value: option,
                                   child: Text(
                                     option.displayName,
@@ -432,7 +501,7 @@ class _MaterialListPageState extends State<MaterialListPage> {
                                 );
                               }).toList(),
                           onChanged: (MaterialSortOptions? newValue) {
-                            // CAMBIO
+                            // Usar MaterialSortOptions
                             if (newValue != null && mounted) {
                               setState(() {
                                 _currentSortOption = newValue;
@@ -446,18 +515,17 @@ class _MaterialListPageState extends State<MaterialListPage> {
                   ],
                 ),
               ),
-
-              // --- Lista de Materiales ---
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
-                  stream: _materialsStream, // CAMBIO
+                  stream: _materialsStream, // Usar _materialsStream
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
+                      _showCenteredUploadButton = false;
                       return Center(
                         child: Padding(
                           padding: const EdgeInsets.all(16.0),
                           child: Text(
-                            'Error al cargar materiales: ${snapshot.error}.\nVerifica tu conexión y la configuración de Firestore.', // CAMBIO
+                            'Error al cargar materiales: ${snapshot.error}.\nVerifica tu conexión y la configuración de Firestore.', // Texto adaptado
                             style: GoogleFonts.poppins(
                               color: theme.colorScheme.error,
                             ),
@@ -468,6 +536,7 @@ class _MaterialListPageState extends State<MaterialListPage> {
                     }
                     if (snapshot.connectionState == ConnectionState.waiting &&
                         _allFetchedDocuments.isEmpty) {
+                      _showCenteredUploadButton = false;
                       return Center(
                         child: CircularProgressIndicator(
                           color: theme.colorScheme.primary,
@@ -478,31 +547,88 @@ class _MaterialListPageState extends State<MaterialListPage> {
                     if (snapshot.hasData) {
                       _allFetchedDocuments = snapshot.data!.docs;
                       WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) _applyClientSideFiltersAndPagination();
+                        if (mounted) {
+                          _applyClientSideFiltersAndPagination();
+                          setState(() {
+                            _showCenteredUploadButton =
+                                _allFetchedDocuments.isEmpty &&
+                                _searchTerm.isEmpty;
+                          });
+                        }
                       });
                     } else if (!snapshot.hasData &&
                         _allFetchedDocuments.isEmpty &&
                         snapshot.connectionState != ConnectionState.waiting) {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         if (mounted) {
-                          setState(() => _paginatedAndFilteredDocuments = []);
+                          setState(() {
+                            _paginatedAndFilteredDocuments = [];
+                            _showCenteredUploadButton = true;
+                          });
                         }
                       });
                     }
 
-                    if (_allFetchedDocuments.isEmpty &&
-                        _searchTerm.isEmpty &&
+                    if (_showCenteredUploadButton &&
                         snapshot.connectionState != ConnectionState.waiting) {
                       return Center(
                         child: Padding(
                           padding: const EdgeInsets.all(20.0),
-                          child: Text(
-                            'Aún no hay materiales para "${_tituloTema ?? "este tema"}".', // CAMBIO
-                            style: GoogleFonts.poppins(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              fontSize: 16,
-                            ),
-                            textAlign: TextAlign.center,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                // Manteniendo el icono de ExerciseList o cambiar si se desea
+                                Icons
+                                    .library_books_outlined, // o Icons.menu_book_outlined si prefieres para materiales
+                                size: 70,
+                                color: theme.colorScheme.onSurfaceVariant
+                                    .withOpacity(0.5),
+                              ),
+                              const SizedBox(height: 20),
+                              Text(
+                                'Aún no hay materiales para "${_tituloTema ?? "este tema"}".', // Texto adaptado
+                                style: GoogleFonts.poppins(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                '¡Sé el primero en contribuir!',
+                                style: GoogleFonts.poppins(
+                                  color: theme.colorScheme.onSurfaceVariant
+                                      .withOpacity(0.8),
+                                  fontSize: 14,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 25),
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.add_circle_outline),
+                                label: const Text(
+                                  'Subir Nuevo Material',
+                                ), // Texto adaptado
+                                onPressed: _handleUploadNavigation,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: theme.colorScheme.primary,
+                                  foregroundColor: theme.colorScheme.onPrimary,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 12,
+                                  ),
+                                  textStyle: GoogleFonts.poppins(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       );
@@ -514,7 +640,7 @@ class _MaterialListPageState extends State<MaterialListPage> {
                         child: Padding(
                           padding: const EdgeInsets.all(20.0),
                           child: Text(
-                            'No se encontraron materiales para "$_searchTerm" en "${_tituloTema ?? "este tema"}".', // CAMBIO
+                            'No se encontraron materiales para "$_searchTerm" en "${_tituloTema ?? "este tema"}".', // Texto adaptado
                             style: GoogleFonts.poppins(
                               color: theme.colorScheme.onSurfaceVariant,
                               fontSize: 16,
@@ -528,11 +654,9 @@ class _MaterialListPageState extends State<MaterialListPage> {
                         _searchTerm.isEmpty &&
                         _allFetchedDocuments.isNotEmpty &&
                         snapshot.connectionState != ConnectionState.waiting) {
-                      // Esto puede ocurrir si _applyClientSideFiltersAndPagination no encuentra nada para la página actual
-                      // pero hay documentos en general.
                       return Center(
                         child: Text(
-                          'No hay más materiales en esta página.', // CAMBIO
+                          'No hay más materiales en esta página.', // Texto adaptado
                           style: GoogleFonts.poppins(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
@@ -540,7 +664,8 @@ class _MaterialListPageState extends State<MaterialListPage> {
                       );
                     }
                     if (_paginatedAndFilteredDocuments.isEmpty &&
-                        snapshot.connectionState == ConnectionState.waiting) {
+                        snapshot.connectionState == ConnectionState.waiting &&
+                        _allFetchedDocuments.isNotEmpty) {
                       return const Center(child: CircularProgressIndicator());
                     }
 
@@ -554,10 +679,10 @@ class _MaterialListPageState extends State<MaterialListPage> {
                               final doc = _paginatedAndFilteredDocuments[index];
                               final data = doc.data() as Map<String, dynamic>;
                               final bool isCurrentlyWide =
-                                  MediaQuery.of(context).size.width >
-                                  700; // Ajustado para responsividad del item
+                                  MediaQuery.of(context).size.width > 700;
 
                               return Card(
+                                // Diseño de Card idéntico a ExerciseListPage
                                 elevation: 2,
                                 margin: const EdgeInsets.symmetric(
                                   vertical: 5.0,
@@ -570,22 +695,22 @@ class _MaterialListPageState extends State<MaterialListPage> {
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(12),
                                   onTap: () async {
+                                    // Navegar a la vista de material
                                     final result = await Navigator.pushNamed(
                                       context,
-                                      '/material_view', // CAMBIO: Ruta para vista de material
+                                      '/material_view', // Ruta para vista de material
                                       arguments: {
                                         'tema': _temaKey,
-                                        'materialId':
-                                            doc.id, // CAMBIO: ID del material
+                                        'materialId': doc.id, // ID de material
                                         'tituloTema': _tituloTema,
                                       },
                                     );
                                     if (result == 'eliminado' && mounted) {
                                       LocalNotificationService.show(
-                                        // CAMBIO
-                                        title: 'Material eliminado',
+                                        title:
+                                            'Material eliminado', // Texto adaptado
                                         body:
-                                            'El material fue eliminado correctamente.',
+                                            'El material fue eliminado correctamente.', // Texto adaptado
                                       );
                                     }
                                   },
@@ -601,7 +726,7 @@ class _MaterialListPageState extends State<MaterialListPage> {
                                                 CrossAxisAlignment.start,
                                             children: [
                                               CustomLatexText(
-                                                // CAMBIO: campo 'titulo'
+                                                // Usar campo 'titulo'
                                                 contenido:
                                                     data['titulo'] ??
                                                     'Sin Título',
@@ -610,7 +735,7 @@ class _MaterialListPageState extends State<MaterialListPage> {
                                                 prepararLatex: prepararLaTeX,
                                               ),
                                               const SizedBox(height: 5),
-                                              // CAMBIO: campo 'descripcion'
+                                              // Usar campo 'descripcion'
                                               if (data['descripcion'] != null &&
                                                   (data['descripcion']
                                                           as String)
@@ -633,7 +758,7 @@ class _MaterialListPageState extends State<MaterialListPage> {
                                                 ),
                                                 const SizedBox(height: 6),
                                               ],
-                                              // CAMBIO: campo 'autorNombre'
+                                              // Usar campo 'autorNombre'
                                               Text(
                                                 "Autor: ${data['autorNombre'] ?? 'Anónimo'}",
                                                 style: GoogleFonts.poppins(
@@ -660,11 +785,10 @@ class _MaterialListPageState extends State<MaterialListPage> {
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Tooltip(
-                                              // CAMBIO: campo 'calificacionPromedio'
+                                              // Usar campo 'calificacionPromedio'
                                               message:
                                                   'Calificación: ${(data['calificacionPromedio'] is num) ? (data['calificacionPromedio'] as num).toStringAsFixed(1) : "N/A"} / 5',
                                               child: CustomStarRating(
-                                                // CAMBIO: campo 'calificacionPromedio'
                                                 valor:
                                                     (data['calificacionPromedio']
                                                             is num)
@@ -681,23 +805,23 @@ class _MaterialListPageState extends State<MaterialListPage> {
                                               onPressed: () async {
                                                 final result =
                                                     await Navigator.pushNamed(
-                                                      // CAMBIO
                                                       context,
-                                                      '/material_view',
+                                                      '/material_view', // Ruta para vista de material
                                                       arguments: {
                                                         'tema': _temaKey,
-                                                        'materialId': doc.id,
+                                                        'materialId':
+                                                            doc.id, // ID de material
                                                         'tituloTema':
                                                             _tituloTema,
                                                       },
                                                     );
-                                                if (result ==
-                                                        'eliminado' && // CAMBIO
+                                                if (result == 'eliminado' &&
                                                     mounted) {
                                                   LocalNotificationService.show(
-                                                    title: 'Material eliminado',
+                                                    title:
+                                                        'Material eliminado', // Texto adaptado
                                                     body:
-                                                        'El material fue eliminado correctamente.',
+                                                        'El material fue eliminado correctamente.', // Texto adaptado
                                                   );
                                                 }
                                               },
@@ -758,9 +882,9 @@ class _MaterialListPageState extends State<MaterialListPage> {
                           ),
                         ),
                         _buildPaginationControls(
-                          // CAMBIO: Adaptar campos para conteo de filtrados en paginación
                           _allFetchedDocuments.where((doc) {
                             final data = doc.data() as Map<String, dynamic>;
+                            // Adaptado para campos de materiales
                             final titulo =
                                 (data['titulo'] as String? ?? '').toLowerCase();
                             final descripcion =
@@ -780,6 +904,16 @@ class _MaterialListPageState extends State<MaterialListPage> {
           ),
         ),
       ),
+      floatingActionButton:
+          (_temaKey != null && !_showCenteredUploadButton)
+              ? FloatingActionButton.extended(
+                onPressed: _handleUploadNavigation,
+                label: const Text('Subir Material'), // Texto adaptado
+                icon: const Icon(Icons.add),
+                backgroundColor: theme.colorScheme.primaryContainer,
+                foregroundColor: theme.colorScheme.onPrimaryContainer,
+              )
+              : null,
     );
   }
 }
