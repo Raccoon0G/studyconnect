@@ -1454,7 +1454,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                               foto.isNotEmpty
                                                   ? NetworkImage(foto)
                                                   : const AssetImage(
-                                                        'assets/images/avatar1.png',
+                                                        'assets/images/avatar1.webp',
                                                       )
                                                       as ImageProvider,
                                         ),
@@ -2233,7 +2233,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                             displayGroupPhoto.isNotEmpty)
                                         ? NetworkImage(displayGroupPhoto)
                                         : const AssetImage(
-                                              'assets/images/avatar_grupo_default.png',
+                                              'assets/images/avatar1.webp',
                                             )
                                             as ImageProvider,
                                 backgroundColor: Colors.grey.shade300,
@@ -2498,7 +2498,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                           fotoMiembroUrl.isNotEmpty)
                                       ? NetworkImage(fotoMiembroUrl)
                                       : const AssetImage(
-                                            'assets/images/avatar1.png',
+                                            'assets/images/avatar1.webp',
                                           )
                                           as ImageProvider,
                             ),
@@ -2740,9 +2740,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                         backgroundImage:
                             groupImageDialogBytes != null
                                 ? MemoryImage(groupImageDialogBytes!)
-                                : const AssetImage(
-                                      'assets/images/avatar_grupo_default.png',
-                                    )
+                                : const AssetImage('assets/images/avatar1.webp')
                                     as ImageProvider,
                         backgroundColor: Colors.grey[200],
                         child:
@@ -2857,7 +2855,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                       (foto != null && foto.isNotEmpty)
                                           ? NetworkImage(foto)
                                           : const AssetImage(
-                                                'assets/images/avatar1.png',
+                                                'assets/images/avatar1.webp',
                                               )
                                               as ImageProvider,
                                 ),
@@ -3311,7 +3309,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                               foto.isNotEmpty
                                                   ? NetworkImage(foto)
                                                   : const AssetImage(
-                                                        'assets/images/avatar1.png',
+                                                        'assets/images/avatar1.webp',
                                                       )
                                                       as ImageProvider,
                                         ),
@@ -3506,7 +3504,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                               foto.isNotEmpty
                                   ? NetworkImage(foto)
                                   : const AssetImage(
-                                        'assets/images/avatar1.png',
+                                        'assets/images/avatar1.webp',
                                       )
                                       as ImageProvider,
                         ),
@@ -3834,7 +3832,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                   photoUrl?.isNotEmpty == true
                                       ? NetworkImage(photoUrl!)
                                       : const AssetImage(
-                                            'assets/images/avatar1.png',
+                                            'assets/images/avatar1.webp',
                                           )
                                           as ImageProvider,
                             ),
@@ -4102,7 +4100,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                           fotoGrupoUrl.isNotEmpty)
                                       ? NetworkImage(fotoGrupoUrl)
                                       : const AssetImage(
-                                            'assets/images/avatar_grupo_default.png',
+                                            'assets/images/avatar1.webp',
                                           )
                                           as ImageProvider,
                             ),
@@ -4263,7 +4261,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
               backgroundImage:
                   (fotoUrl != null && fotoUrl.isNotEmpty)
                       ? NetworkImage(fotoUrl)
-                      : const AssetImage('assets/images/avatar1.png')
+                      : const AssetImage('assets/images/avatar1.webp')
                           as ImageProvider,
             ),
             const SizedBox(width: 10),

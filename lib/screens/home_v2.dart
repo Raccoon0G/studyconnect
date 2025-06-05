@@ -832,7 +832,7 @@ class _HomePageState extends State<HomePage> {
                               foto.startsWith('http'))
                           ? NetworkImage(foto)
                           : const AssetImage(
-                            'assets/images/avatar_placeholder.png',
+                            'assets/images/avatar1.webp',
                           ); // Asegúrate de tener esta imagen
 
                   return _avatarMiniRanking(
