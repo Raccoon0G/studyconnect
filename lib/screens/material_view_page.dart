@@ -2,7 +2,7 @@
 import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:typed_data';
-import 'dart:ui_web' as ui;
+import 'dart:ui_web' as ui; // Asegúrate que esto es ui_web y no dart:ui
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -50,6 +50,8 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
   List<Map<String, dynamic>> versiones = [];
   String? versionSeleccionada;
 
+  final Set<String> _registeredViewFactories = {};
+
   Map<String, List<Map<String, dynamic>>> agruparArchivosPorTipo(
     List archivos,
   ) {
@@ -64,16 +66,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     return agrupados;
   }
 
-  // bool get esAutor {
-  //   if (materialData == null) return false;
-  //   final autorId = materialData!['autorId'];
-  //   final currentUser = FirebaseAuth.instance.currentUser;
-  //   return autorId != null && currentUser != null && autorId == currentUser.uid;
-  // }
-
   String obtenerNombreTema(String key) {
-    // Usamos el mapa definido en la columna izquierda.
-    // Lo ideal sería tener este mapa en un lugar central (utils) para no repetirlo.
     final Map<String, String> nombresTemas = {
       'FnAlg': 'Funciones algebraicas y trascendentes',
       'Lim': 'Límites de funciones y continuidad',
@@ -109,6 +102,17 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
       setState(() {
         materialData = doc.data();
+        if (version.exists && version.data() != null) {
+          pasos = List<String>.from(version.data()!['PasosEjer'] ?? []);
+          descripciones = List<String>.from(version.data()!['DescPasos'] ?? []);
+          materialData!['archivos'] = List<Map<String, dynamic>>.from(
+            version.data()!['archivos'] ?? [],
+          );
+          materialData!['descripcion'] = version.data()!['Descripcion'] ?? '';
+        } else {
+          pasos = [];
+          descripciones = [];
+        }
       });
 
       final versionesSnap =
@@ -159,14 +163,18 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     if (versionDoc.exists) {
       final versionData = versionDoc.data();
       setState(() {
-        // Aquí se actualizan solo los archivos y la descripción
         materialData = {
-          ...?materialData, // Mantén los demás datos (titulo, autor, etc.)
+          ...?materialData,
           'archivos': List<Map<String, dynamic>>.from(
             versionData?['archivos'] ?? [],
           ),
           'descripcion': versionData?['Descripcion'] ?? '',
+          'PasosEjer': List<String>.from(versionData?['PasosEjer'] ?? []),
+          'DescPasos': List<String>.from(versionData?['DescPasos'] ?? []),
         };
+        pasos = List<String>.from(versionData?['PasosEjer'] ?? []);
+        descripciones = List<String>.from(versionData?['DescPasos'] ?? []);
+        versionSeleccionada = versionId;
       });
     }
   }
@@ -203,13 +211,10 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         await doc.reference.delete();
       }
 
-      await _cargarTodo(); // recarga TODO (material + comentarios)
+      await _cargarTodo();
 
-      // 🎯 Mostrar SnackBar bonito
       if (mounted) {
-        // Verificamos si el widget está montado
         showFeedbackDialogAndSnackbar(
-          //  Mostrar el diálogo y Snackbar de éxito al eliminar
           context: context,
           titulo: '¡Éxito!',
           mensaje: 'Comentario elimnado correctamente.',
@@ -217,12 +222,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
           snackbarMessage: '✅ ¡Comentario Eliminado!',
           snackbarSuccess: true,
         );
-        //Opcion 1 para mostrar snackbar mas facil sin tanto clic
-        // showCustomSnackbar(
-        // context: context,
-        // message: ' Comentario eliminado con éxito',
-        // success: true,
-        // );
       }
     } catch (e) {
       if (mounted) {
@@ -234,11 +233,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
           snackbarMessage: 'Error al eliminar.',
           snackbarSuccess: false,
         );
-        // showCustomSnackbar(
-        //   context: context,
-        //   message: 'Error al eliminar comentario',
-        //   success: false,
-        // );
       }
     }
   }
@@ -268,29 +262,46 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
       if (!docSnap.exists) throw Exception('Material no encontrado');
 
+      final String versionActualId =
+          docSnap.data()?['versionActual'] ??
+          (versionesSnap.docs.isNotEmpty ? versionesSnap.docs.first.id : null);
+
+      Map<String, dynamic> versionDataActual = {};
+      if (versionActualId != null) {
+        final versionActualDoc =
+            await docRef.collection('Versiones').doc(versionActualId).get();
+        if (versionActualDoc.exists) {
+          versionDataActual = versionActualDoc.data()!;
+        }
+      }
+
       setState(() {
-        // datos
-        materialData = docSnap.data()!;
+        materialData = {
+          ...docSnap.data()!,
+          'archivos': List<Map<String, dynamic>>.from(
+            versionDataActual['archivos'] ?? [],
+          ),
+          'descripcion': versionDataActual['Descripcion'] ?? '',
+          'PasosEjer': List<String>.from(versionDataActual['PasosEjer'] ?? []),
+          'DescPasos': List<String>.from(versionDataActual['DescPasos'] ?? []),
+        };
 
-        // comentarios
+        pasos = List<String>.from(versionDataActual['PasosEjer'] ?? []);
+        descripciones = List<String>.from(versionDataActual['DescPasos'] ?? []);
+
         comentarios = comentariosSnap.docs.map((d) => d.data()).toList();
-
-        // versiones  mapeamos id + fecha
         versiones =
             versionesSnap.docs
                 .map((d) => {'id': d.id, 'fecha': d['Fecha'] as Timestamp})
                 .toList();
-
-        // valor inicial del dropdown
-        versionSeleccionada =
-            versiones.isNotEmpty ? versiones.first['id'] : null;
+        versionSeleccionada = versionActualId;
       });
     } catch (e) {
+      print("Error en _cargarTodo: $e");
       _mostrarError('Error al cargar datos', e.toString());
     }
   }
 
-  ///  Muestra menú modal con opciones para compartir
   void _showMaterialSharingOptions() {
     showModalBottomSheet(
       context: context,
@@ -330,7 +341,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                   }
                 },
               ),
-
               ListTile(
                 leading: const Icon(
                   Icons.image_outlined,
@@ -365,7 +375,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     );
   }
 
-  ///  Función central para compartir
   Future<void> _shareMaterial({bool withImage = false}) async {
     if (materialData == null) {
       showCustomSnackbar(
@@ -384,9 +393,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
     try {
       final titulo = materialData!['titulo'] ?? 'Material interesante';
-      final nombreTema = obtenerNombreTema(
-        widget.tema,
-      ); // ✅ Usando la función corregida
+      final nombreTema = obtenerNombreTema(widget.tema);
 
       final url =
           'https://study-connect.app/material/${widget.tema}/${widget.materialId}';
@@ -414,7 +421,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
       }
 
       if (!mounted) return;
-      Navigator.pop(context); // Cierra diálogo de carga
+      Navigator.pop(context);
 
       if (imageFile != null) {
         await Share.shareXFiles(
@@ -439,7 +446,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     }
   }
 
-  ///  Función para copiar enlace
   void _copyMaterialLinkToClipboard() {
     if (materialData == null) return;
     final url =
@@ -453,7 +459,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     });
   }
 
-  ///  Función para conectar con Facebook
   Future<void> _connectToFacebook() async {
     if (!mounted) return;
     final firebaseUser = FirebaseAuth.instance.currentUser;
@@ -497,7 +502,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     }
   }
 
-  ///  Función para publicar directamente en Facebook
   Future<void> _postMaterialDirectlyToFacebook() async {
     if (!mounted) return;
     final firebaseUser = FirebaseAuth.instance.currentUser;
@@ -527,7 +531,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
     if (userToken == null) {
       if (!mounted) return;
-      //  Corregido: sin 'duration' ni 'action'
       showCustomSnackbar(
         context: context,
         message:
@@ -566,9 +569,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         );
         return;
       }
-      //TODO Checar implementacion con api
-      final String pageId =
-          "ID_DE_LA_PAGINA_FACEBOOK_DEL_USUARIO"; // Reemplazar
+      final String pageId = "ID_DE_LA_PAGINA_FACEBOOK_DEL_USUARIO";
       if (pageId == "ID_DE_LA_PAGINA_FACEBOOK_DEL_USUARIO") {
         if (!mounted) return;
         Navigator.pop(context);
@@ -586,7 +587,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
       );
       final tituloMaterial = materialData!['titulo'] ?? 'Material de Estudio';
       final texto =
-          '¡Nuevo material en Study Connect! "$tituloMaterial" sobre ${obtenerNombreTema(widget.tema)}. #StudyConnectMaterial'; // ✅ Usando la función corregida
+          '¡Nuevo material en Study Connect! "$tituloMaterial" sobre ${obtenerNombreTema(widget.tema)}. #StudyConnectMaterial';
 
       request.fields['caption'] = texto;
       request.fields['access_token'] = userToken;
@@ -630,9 +631,13 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     }
   }
 
-  Future<String?> obtenerTituloVideoYoutube(String url) async {
-    final videoId =
-        Uri.parse(url).queryParameters['v'] ?? Uri.parse(url).pathSegments.last;
+  Future<String?> obtenerTituloVideoYoutube(String videoIdParam) async {
+    final videoId = videoIdParam;
+
+    if (videoId.isEmpty) {
+      print('Error: videoId está vacío en obtenerTituloVideoYoutube.');
+      return null;
+    }
 
     final apiUrl =
         'https://www.googleapis.com/youtube/v3/videos?part=snippet&id=$videoId&key=$youtubeApiKey';
@@ -658,11 +663,10 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     final nombre = archivo['nombre'] ?? 'Archivo';
     final url =
         tipo == 'link' ? archivo['contenido'] ?? '' : archivo['url'] ?? '';
-
-    final extension = (archivo['extension'] ?? '').toString().toLowerCase();
-    final bool esPdf = extension == 'pdf';
-    final bool esMp3 = extension == 'mp3';
-    final bool esMp4 = extension == 'mp4';
+    final bool esMp3 =
+        (archivo['extension'] ?? '').toString().toLowerCase() == 'mp3';
+    final bool esMp4 =
+        (archivo['extension'] ?? '').toString().toLowerCase() == 'mp4';
 
     final dimensiones = obtenerDimensionesMultimedia(screenWidth);
 
@@ -709,19 +713,59 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(dimensiones['radio']),
+              ),
               child: Center(
                 child: Image.network(
                   url,
                   fit: BoxFit.contain,
-                  height: obtenerDimensionesMultimedia(screenWidth)['altura'],
+                  height: dimensiones['altura'],
+                  width: double.infinity,
+                  loadingBuilder: (
+                    BuildContext context,
+                    Widget child,
+                    ImageChunkEvent? loadingProgress,
+                  ) {
+                    if (loadingProgress == null) return child;
+                    return SizedBox(
+                      height: dimensiones['altura'],
+                      width: double.infinity,
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          value:
+                              loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded /
+                                      loadingProgress.expectedTotalBytes!
+                                  : null,
+                        ),
+                      ),
+                    );
+                  },
+                  errorBuilder: (
+                    BuildContext context,
+                    Object exception,
+                    StackTrace? stackTrace,
+                  ) {
+                    return Container(
+                      height: dimensiones['altura'],
+                      width: double.infinity,
+                      color: Colors.grey[200],
+                      child: Center(
+                        child: Icon(
+                          Icons.broken_image,
+                          color: Colors.grey[400],
+                          size: 48,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
-
             ListTile(
               leading: const Icon(Icons.image, color: Colors.blue),
-              title: Text(nombre),
+              title: Text(nombre, overflow: TextOverflow.ellipsis),
               trailing: IconButton(
                 icon: const Icon(Icons.open_in_new),
                 onPressed: () => html.window.open(url, '_blank'),
@@ -734,99 +778,260 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
     if (tipo == 'video' || esMp4) {
       final viewId = 'video-${url.hashCode}';
-      ui.platformViewRegistry.registerViewFactory(viewId, (int viewId) {
-        final video =
-            html.VideoElement()
-              ..src = url
-              ..controls = true
-              ..style.width = '100%';
-        return video;
-      });
 
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ListTile(
-            leading: const Icon(Icons.videocam, color: Colors.orange),
-            title: Text(nombre),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: dimensiones['altura'],
-            child: HtmlElementView(viewType: viewId),
-          ),
-        ],
+      if (!_registeredViewFactories.contains(viewId)) {
+        ui.platformViewRegistry.registerViewFactory(viewId, (int viewId) {
+          final container =
+              html.DivElement()
+                ..style.width = '100%'
+                ..style.height = '100%'
+                ..style.backgroundColor = 'black'
+                ..style.display = 'flex'
+                ..style.alignItems = 'center'
+                ..style.justifyContent = 'center';
+
+          final videoElement =
+              html.VideoElement()
+                ..src = url
+                ..controls = true
+                ..autoplay = false
+                ..style.width = '100%'
+                ..style.height = 'auto'
+                ..style.maxWidth = '100%'
+                ..style.maxHeight = '100%';
+
+          container.append(videoElement);
+          return container;
+        });
+        _registeredViewFactories.add(viewId);
+      }
+
+      return Card(
+        margin: EdgeInsets.symmetric(vertical: dimensiones['margen']),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(dimensiones['radio']),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.videocam, color: Colors.orange),
+              title: Text(nombre, overflow: TextOverflow.ellipsis),
+              trailing: IconButton(
+                icon: const Icon(
+                  Icons.open_in_new_rounded,
+                  color: Colors.blueGrey,
+                ),
+                tooltip: "Abrir en nueva pestaña",
+                onPressed: () => html.window.open(url, '_blank'),
+              ),
+            ),
+            Container(
+              height: dimensiones['altura'],
+              width: double.infinity,
+              color: Colors.black,
+              child: HtmlElementView(viewType: viewId),
+            ),
+          ],
+        ),
       );
     }
 
     if (tipo == 'audio' || esMp3) {
       final viewId = 'audio-${url.hashCode}';
-      ui.platformViewRegistry.registerViewFactory(viewId, (int viewId) {
-        final audio =
-            html.AudioElement()
-              ..src = url
-              ..controls = true
-              ..style.width = '100%';
-        return audio;
-      });
 
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ListTile(
-            leading: const Icon(Icons.audiotrack, color: Colors.pink),
-            title: Text(nombre),
-          ),
-          const SizedBox(height: 8),
-          HtmlElementView(viewType: viewId),
-        ],
+      if (!_registeredViewFactories.contains(viewId)) {
+        ui.platformViewRegistry.registerViewFactory(viewId, (int viewId) {
+          final audio =
+              html.AudioElement()
+                ..src = url
+                ..controls = true
+                ..style.width = '100%';
+          return audio;
+        });
+        _registeredViewFactories.add(viewId);
+      }
+
+      return Card(
+        margin: EdgeInsets.symmetric(vertical: dimensiones['margen'] / 2),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(dimensiones['radio'] / 1.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.audiotrack, color: Colors.pink),
+              title: Text(nombre, overflow: TextOverflow.ellipsis),
+              trailing: IconButton(
+                icon: const Icon(
+                  Icons.open_in_new_rounded,
+                  color: Colors.blueGrey,
+                ),
+                tooltip: "Abrir en nueva pestaña",
+                onPressed: () => html.window.open(url, '_blank'),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 8.0,
+              ),
+              child: SizedBox(
+                height: 50,
+                child: HtmlElementView(viewType: viewId),
+              ),
+            ),
+          ],
+        ),
       );
     }
 
     if (tipo == 'link') {
-      final isYoutube = url.contains('youtube.com') || url.contains('youtu.be');
+      final isYoutubeUrlPattern = RegExp(
+        r'youtube\.com/watch\?v=|youtu\.be/|googleusercontent\.com/youtube\.com/\d+',
+      );
+      final bool isYoutube = isYoutubeUrlPattern.hasMatch(url);
+
       if (isYoutube) {
-        final videoId =
-            Uri.parse(url).queryParameters['v'] ??
-            Uri.parse(url).pathSegments.last;
-        final thumbnailUrl = 'https://img.youtube.com/vi/$videoId/0.jpg';
+        String videoId = '';
+        try {
+          final Uri uri = Uri.parse(url);
+          if (uri.host.contains('youtube.com') &&
+              uri.queryParameters.containsKey('v')) {
+            videoId = uri.queryParameters['v']!;
+          } else if (uri.host.contains('youtu.be')) {
+            videoId = uri.pathSegments.isNotEmpty ? uri.pathSegments.last : '';
+          } else if (uri.host.contains('googleusercontent.com') &&
+              uri.path.contains('youtube.com')) {
+            final potentialId = uri.pathSegments.lastWhere(
+              (s) => s.length == 11 && !s.contains('.'),
+              orElse: () => '',
+            );
+            if (potentialId.isNotEmpty) {
+              videoId = potentialId;
+            } else if (uri.queryParameters.containsKey('v')) {
+              videoId = uri.queryParameters['v']!;
+            }
+          }
+
+          if (videoId.isNotEmpty) {
+            if (videoId.contains('?')) videoId = videoId.split('?').first;
+            if (videoId.contains('&')) videoId = videoId.split('&').first;
+            if (videoId.contains('#')) videoId = videoId.split('#').first;
+          }
+        } catch (e) {
+          print("Error extrayendo videoId de URL ($url): $e");
+          videoId = '';
+        }
+
+        final String thumbnailUrl;
+        if (RegExp(r"^[a-zA-Z0-9_-]{11}$").hasMatch(videoId)) {
+          thumbnailUrl = 'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
+        } else {
+          thumbnailUrl =
+              'https://via.placeholder.com/480x360.png?text=Enlace+YouTube';
+          if (url.isNotEmpty && videoId.isNotEmpty) {
+            print(
+              "Miniatura YT: videoId ('$videoId') extraído de '$url' no parece válido (no tiene 11 caracteres).",
+            );
+          } else if (url.isNotEmpty && videoId.isEmpty) {
+            print("Miniatura YT: No se pudo extraer videoId de '$url'.");
+          }
+        }
+
         return FutureBuilder<String?>(
-          future: obtenerTituloVideoYoutube(url),
+          future: obtenerTituloVideoYoutube(videoId),
           builder: (context, snapshot) {
-            final tituloVideo = snapshot.data ?? 'Video de YouTube';
+            final tituloVideo =
+                snapshot.data ??
+                (snapshot.connectionState == ConnectionState.waiting
+                    ? "Cargando título..."
+                    : (videoId.isNotEmpty ? 'Video de YouTube' : 'Enlace'));
+
             return Card(
               margin: EdgeInsets.symmetric(vertical: dimensiones['margen']),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(dimensiones['radio']),
               ),
+              clipBehavior: Clip.antiAlias,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(dimensiones['radio']),
-                    ),
-                    child: Image.network(
-                      thumbnailUrl,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      height: dimensiones['altura'],
-                    ),
+                  Image.network(
+                    thumbnailUrl,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: dimensiones['altura'] * 0.8,
+                    loadingBuilder: (
+                      BuildContext context,
+                      Widget child,
+                      ImageChunkEvent? loadingProgress,
+                    ) {
+                      if (loadingProgress == null) return child;
+                      return Container(
+                        height: dimensiones['altura'] * 0.8,
+                        width: double.infinity,
+                        color: Colors.grey[800],
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            color: Colors.white54,
+                          ),
+                        ),
+                      );
+                    },
+                    errorBuilder: (
+                      BuildContext context,
+                      Object exception,
+                      StackTrace? stackTrace,
+                    ) {
+                      print(
+                        "Error al cargar miniatura de YouTube para videoId '$videoId' desde '$thumbnailUrl': $exception",
+                      );
+                      return Container(
+                        height: dimensiones['altura'] * 0.8,
+                        width: double.infinity,
+                        color: Colors.grey[300],
+                        child: Center(
+                          child: Icon(
+                            Icons.ondemand_video,
+                            color: Colors.grey[500],
+                            size: 48,
+                            semanticLabel: "Error al cargar miniatura",
+                          ),
+                        ),
+                      );
+                    },
                   ),
                   ListTile(
                     leading: const Icon(
-                      Icons.play_circle_fill,
+                      Icons.play_circle_fill_rounded,
                       color: Colors.red,
+                      size: 32,
                     ),
-                    title: Text(tituloVideo),
-                    subtitle: Text(url),
+                    title: Text(
+                      tituloVideo,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      url,
+                      style: TextStyle(fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     trailing: ElevatedButton.icon(
-                      icon: const Icon(Icons.open_in_new),
-                      label: const Text('Ver video'),
+                      icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                      label: const Text('Ver'),
                       onPressed: () => html.window.open(url, '_blank'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
+                        backgroundColor: Colors.red[700],
                         foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        textStyle: TextStyle(fontSize: 13),
                       ),
                     ),
                   ),
@@ -836,12 +1041,30 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
           },
         );
       } else {
-        return ListTile(
-          leading: const Icon(Icons.link, color: Colors.green),
-          title: Text(url),
-          trailing: IconButton(
-            icon: const Icon(Icons.open_in_new),
-            onPressed: () => html.window.open(url, '_blank'),
+        return Card(
+          margin: EdgeInsets.symmetric(vertical: dimensiones['margen'] / 2),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(dimensiones['radio'] / 1.5),
+          ),
+          child: ListTile(
+            leading: Icon(Icons.link_rounded, color: Colors.teal, size: 30),
+            title: Text(
+              nombre != 'Archivo' ? nombre : url,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle:
+                nombre != 'Archivo'
+                    ? Text(
+                      url,
+                      style: TextStyle(fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
+                    )
+                    : null,
+            trailing: IconButton(
+              icon: const Icon(Icons.open_in_new_rounded),
+              tooltip: "Abrir enlace",
+              onPressed: () => html.window.open(url, '_blank'),
+            ),
           ),
         );
       }
@@ -850,35 +1073,57 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     if (tipo == 'nota') {
       return Card(
         margin: EdgeInsets.symmetric(vertical: dimensiones['margen']),
-        color: const Color(0xFFF1F8E9),
+        color: const Color(0xFFFFF9C4),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(dimensiones['radio']),
+          side: BorderSide(color: Colors.amber[300]!, width: 1),
+        ),
         child: ListTile(
-          leading: const Icon(Icons.notes, color: Colors.purple),
-          title: Text(nombre),
+          leading: Icon(
+            Icons.notes_rounded,
+            color: Colors.orange[700],
+            size: 30,
+          ),
+          title: Text(nombre, style: TextStyle(fontWeight: FontWeight.w500)),
         ),
       );
     }
 
-    return ListTile(
-      leading: const Icon(Icons.insert_drive_file, color: Colors.grey),
-      title: Text(nombre),
-      trailing: IconButton(
-        icon: const Icon(Icons.open_in_new),
-        onPressed: () => html.window.open(url, '_blank'),
+    return Card(
+      margin: EdgeInsets.symmetric(vertical: dimensiones['margen'] / 2),
+      child: ListTile(
+        leading: const Icon(Icons.attach_file_rounded),
+        title: Text(nombre),
+        subtitle:
+            url.isNotEmpty
+                ? Text(
+                  url,
+                  style: TextStyle(fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                )
+                : null,
+        trailing:
+            url.isNotEmpty
+                ? IconButton(
+                  icon: const Icon(Icons.open_in_new_rounded),
+                  onPressed: () => html.window.open(url, '_blank'),
+                )
+                : null,
       ),
     );
   }
 
   Map<String, dynamic> obtenerDimensionesMultimedia(double width) {
     if (width <= 480) {
-      return {'altura': 180.0, 'margen': 8.0, 'radio': 12.0};
+      return {'altura': 200.0, 'margen': 8.0, 'radio': 10.0};
     } else if (width <= 800) {
-      return {'altura': 220.0, 'margen': 10.0, 'radio': 14.0};
+      return {'altura': 240.0, 'margen': 10.0, 'radio': 12.0};
     } else if (width <= 1200) {
-      return {'altura': 260.0, 'margen': 12.0, 'radio': 16.0};
+      return {'altura': 280.0, 'margen': 12.0, 'radio': 14.0};
     } else if (width <= 1900) {
-      return {'altura': 220.0, 'margen': 16.0, 'radio': 16.0};
+      return {'altura': 320.0, 'margen': 16.0, 'radio': 16.0};
     } else {
-      return {'altura': 200.0, 'margen': 20.0, 'radio': 20.0};
+      return {'altura': 350.0, 'margen': 20.0, 'radio': 18.0};
     }
   }
 
@@ -893,17 +1138,14 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     required bool esMovil,
   }) {
     final autor = ejercicioData['autorNombre'] ?? 'Anónimo';
-
     final fecha = (ejercicioData['FechMod'] as Timestamp?)?.toDate();
     final calificacion = calcularPromedioEstrellas(comentarios);
-
     final Map<String, String> nombresTemas = {
       'FnAlg': 'Funciones algebraicas y trascendentes',
       'Lim': 'Límites de funciones y continuidad',
       'Der': 'Derivada y optimización',
       'TecInteg': 'Técnicas de integración',
     };
-
     final currentUser = FirebaseAuth.instance.currentUser;
     final esAutor =
         currentUser != null &&
@@ -911,11 +1153,18 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         ejercicioData['autorId'] == currentUser.uid;
 
     return Container(
-      margin: const EdgeInsets.only(right: 16),
+      // margin: const EdgeInsets.only(right: 16), // Eliminado para que el SizedBox en Row controle el espacio
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF055B84),
         borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -927,7 +1176,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
             iconAlignment: Alignment.center,
             textColor: Colors.white,
             textSize: 20,
-            //maxWidthText: 335,
           ),
           const SizedBox(height: 8),
           InfoWithIcon(
@@ -937,7 +1185,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
             iconAlignment: Alignment.center,
             textColor: Colors.white,
             textSize: 17,
-            //maxWidthText: 280,
           ),
           const SizedBox(height: 8),
           InfoWithIcon(
@@ -957,17 +1204,13 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
             textColor: Colors.white,
             textSize: 17,
           ),
-
           const SizedBox(height: 8),
-
           if (versiones.isNotEmpty)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(
-                  0xFFF6F3FA,
-                ), // mismo color de fondo de tus Cards
+                color: const Color(0xFFF6F3FA),
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
@@ -984,9 +1227,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                   versionSeleccionada: versionSeleccionada,
                   versiones: versiones,
                   onChanged: (value) {
-                    setState(() {
-                      versionSeleccionada = value;
-                    });
                     _cargarVersionSeleccionada(value);
                   },
                 ),
@@ -1013,7 +1253,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
             textColor: Colors.white,
             textSize: 17,
           ),
-
           const SizedBox(height: 12),
           InfoWithIcon(
             icon: Icons.task_sharp,
@@ -1026,11 +1265,10 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
           const SizedBox(height: 8),
           CustomStarRating(
             valor: calificacion,
-            size: 30, // Puedes ajustar el tamaño si quieres
+            size: 30,
             color: Colors.amber,
             duration: const Duration(milliseconds: 800),
-          ), //promedio estrellas comentarios
-
+          ),
           const SizedBox(height: 8),
           Center(
             child: Text(
@@ -1038,7 +1276,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
               style: const TextStyle(color: Colors.white70, fontSize: 14),
             ),
           ),
-          const Divider(color: Colors.white54),
+          const Divider(color: Colors.white54, height: 20, thickness: 0.5),
           Center(
             child: Text(
               '${comentarios.length} comentario(s)',
@@ -1046,75 +1284,90 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
             ),
           ),
           const SizedBox(height: 18),
-
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 230, minHeight: 120),
+          SizedBox(
+            // Mantenido SizedBox para controlar altura explícitamente
+            height: esMovil ? 180 : 230,
+            width: double.infinity,
             child: const ExerciseCarousel(),
           ),
           const SizedBox(height: 16),
-
-          // dentro de _columnaIzquierda, usando el booleano 'esMovil' de la Solución 2
           if (esAutor)
-            Row(
-              // O Wrap, como en la Solución 1
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: _editarMaterial,
-                  icon: const Icon(Icons.edit, color: Colors.white),
-                  // Si es móvil, no muestra texto. Si es grande, sí.
-                  label:
-                      esMovil ? const SizedBox.shrink() : const Text("Editar"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
-                    // Agregamos padding para que el botón no sea tan pequeño sin texto
-                    padding: EdgeInsets.symmetric(
-                      horizontal: esMovil ? 12 : 16,
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Wrap(
+                // Mantenido Wrap para robustez de los botones
+                alignment: WrapAlignment.center,
+                spacing: esMovil ? 8.0 : 12.0,
+                runSpacing: 8.0,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _editarMaterial,
+                    icon: Icon(
+                      Icons.edit,
+                      color: Colors.white,
+                      size: esMovil ? 20 : 24,
+                    ),
+                    label:
+                        esMovil
+                            ? const SizedBox.shrink()
+                            : const Text("Editar"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueAccent,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: esMovil ? 10 : 16,
+                        vertical: esMovil ? 8 : 10,
+                      ),
+                      textStyle: TextStyle(fontSize: esMovil ? 12 : 14),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton.icon(
-                  onPressed: _agregarNuevaVersion,
-                  icon: const Icon(
-                    Icons.add_circle_outline,
-                    color: Colors.white,
-                  ),
-                  label:
-                      esMovil
-                          ? const SizedBox.shrink()
-                          : const Text("Nueva versión"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orangeAccent,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: esMovil ? 12 : 16,
+                  ElevatedButton.icon(
+                    onPressed: _agregarNuevaVersion,
+                    icon: Icon(
+                      Icons.add_circle_outline,
+                      color: Colors.white,
+                      size: esMovil ? 20 : 24,
+                    ),
+                    label:
+                        esMovil
+                            ? const SizedBox.shrink()
+                            : const Text("Nueva versión"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orangeAccent,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: esMovil ? 10 : 16,
+                        vertical: esMovil ? 8 : 10,
+                      ),
+                      textStyle: TextStyle(fontSize: esMovil ? 12 : 14),
                     ),
                   ),
-                ),
-
-                const SizedBox(width: 12),
-                // Dentro de _columnaIzquierda, en el Row de botones para el autor:
-                ElevatedButton.icon(
-                  // onPressed: _confirmarEliminarMaterial, // YA NO
-                  onPressed: () {
-                    // NUEVO
-                    _mostrarOpcionesEliminarMaterial(
-                      context,
-                    ); // Llamamos a la nueva función
-                  },
-                  icon: const Icon(Icons.delete, color: Colors.white),
-                  label:
-                      esMovil
-                          ? const SizedBox.shrink()
-                          : const Text("Eliminar"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.redAccent,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: esMovil ? 12 : 16,
-                    ),
+                  Builder(
+                    builder: (buttonContext) {
+                      return ElevatedButton.icon(
+                        onPressed: () {
+                          _mostrarOpcionesEliminarMaterial(buttonContext);
+                        },
+                        icon: Icon(
+                          Icons.delete,
+                          color: Colors.white,
+                          size: esMovil ? 20 : 24,
+                        ),
+                        label:
+                            esMovil
+                                ? const SizedBox.shrink()
+                                : const Text("Eliminar"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: esMovil ? 10 : 16,
+                            vertical: esMovil ? 8 : 10,
+                          ),
+                          textStyle: TextStyle(fontSize: esMovil ? 12 : 14),
+                        ),
+                      );
+                    },
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
         ],
       ),
@@ -1133,25 +1386,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     );
   }
 
-  // void _confirmarEliminarMaterial() async {
-  //   final confirm = await showCustomDialog<bool>(
-  //     context: context,
-  //     titulo: '¿Eliminar material?',
-  //     mensaje:
-  //         'Esta acción eliminará permanentemente este material y todas sus versiones. ¿Estás seguro?',
-  //     tipo: CustomDialogType.warning,
-  //     botones: [
-  //       DialogButton<bool>(texto: 'Cancelar', value: false),
-  //       DialogButton<bool>(texto: 'Eliminar', value: true),
-  //     ],
-  //   );
-  //   if (confirm == true) {
-  //     await _eliminarMaterial();
-  //   }
-  // }
-
   void _mostrarOpcionesEliminarMaterial(BuildContext buttonContext) {
-    // buttonContext es el context del botón
     if (materialData == null || versionSeleccionada == null) {
       showCustomSnackbar(
         context: context,
@@ -1163,61 +1398,57 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
     final RenderBox button = buttonContext.findRenderObject() as RenderBox;
     final Offset offset = button.localToGlobal(Offset.zero);
-    final screenWidth = MediaQuery.of(context).size.width;
-    final bool esMovil =
-        screenWidth <= 800; // Ajusta este breakpoint si es necesario
 
     final RelativeRect position = RelativeRect.fromLTRB(
-      esMovil
-          ? offset.dx - 100
-          : offset.dx, // Ajusta para móvil si es necesario
-      offset.dy + button.size.height,
-      esMovil
-          ? offset.dx - 100 + button.size.width
-          : offset.dx + button.size.width,
-      offset.dy + button.size.height * 2, // Un poco más de espacio vertical
+      offset.dx,
+      offset.dy + button.size.height + 5,
+      offset.dx + button.size.width,
+      offset.dy + button.size.height * 2,
     );
 
     showMenu<String>(
-      context: context, // Usamos el context general del State
+      context: context,
       position: position,
       color: Colors.white,
+      elevation: 8.0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       items: <PopupMenuEntry<String>>[
-        if (versiones.length > 1) // Solo mostrar si hay más de una versión
+        if (versiones.length > 1)
           PopupMenuItem<String>(
             value: 'version',
             child: ListTile(
               leading: Icon(
                 Icons.file_copy_outlined,
-                color: Colors.orangeAccent,
+                color: Colors.orangeAccent[700],
               ),
               title: Text(
                 'Eliminar esta versión (${versionSeleccionada ?? ""})',
+                style: TextStyle(fontSize: 15),
               ),
             ),
           ),
         PopupMenuItem<String>(
           value: 'material',
           child: ListTile(
-            leading: Icon(Icons.delete_forever, color: Colors.redAccent),
+            leading: Icon(
+              Icons.delete_forever_rounded,
+              color: Colors.redAccent[700],
+            ),
             title: Text(
               versiones.length <= 1
                   ? 'Eliminar material completo'
                   : 'Eliminar material (y todas sus versiones)',
+              style: TextStyle(fontSize: 15),
             ),
           ),
         ),
       ],
     ).then((String? value) {
-      if (value == null) return; // No se seleccionó nada
+      if (value == null) return;
 
       if (value == 'version') {
         _confirmarEliminarSoloVersionMaterial();
       } else if (value == 'material') {
-        // La función que ya tenías para eliminar todo el material
-        // _confirmarEliminarMaterial();
-        // Mejor llamamos a una función más específica para eliminar el material completo.
         _confirmarEliminarMaterialCompleto();
       }
     });
@@ -1268,7 +1499,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         .doc(versionSeleccionada);
 
     try {
-      // Muestra un diálogo de carga
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -1277,8 +1507,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
       await versionRef.delete();
 
-      // Si la versión eliminada era la 'versionActual' del material,
-      // se debe asignar la siguiente más reciente como 'versionActual'.
       if (materialData!['versionActual'] == versionSeleccionada) {
         final versionesRestantesSnap =
             await materialDocRef
@@ -1290,36 +1518,22 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
           final nuevaVersionActualDoc = versionesRestantesSnap.docs.first;
           await materialDocRef.update({
             'versionActual': nuevaVersionActualDoc.id,
-            'FechMod':
-                nuevaVersionActualDoc['Fecha'], // Actualiza la fecha de modificación del material
+            'FechMod': nuevaVersionActualDoc['Fecha'],
           });
-          // No es necesario setState para versionSeleccionada aquí si _cargarTodo lo maneja,
-          // pero podría ser útil para una actualización visual inmediata del dropdown.
-          // versionSeleccionada = nuevaVersionActualDoc.id;
         } else {
-          // Si no quedan versiones, se eliminó la última.
-          // En este caso, el material principal también debería eliminarse.
-          // Opcionalmente, puedes navegar o mostrar un mensaje.
-          // Por coherencia con ExerciseViewPage, si se elimina la última versión
-          // a través de "eliminar versión", idealmente se debería eliminar el material completo.
-          // O bien, esta opción ("Eliminar esta versión") no debería estar disponible si solo queda una.
-          // El `if (versiones.length > 1)` en `showMenu` ya previene esto.
-          // Si llegamos aquí y no hay versiones restantes, es un caso que idealmente
-          // se manejaría eliminando el material completo. Por ahora, solo actualizaremos.
-          await materialDocRef
-              .delete(); // Eliminar el material si no quedan versiones
-          if (mounted) Navigator.pop(context); // Cierra diálogo de carga
-          if (mounted) Navigator.pop(context, 'eliminado_completo'); // Regresa
+          await materialDocRef.delete();
+          if (mounted) Navigator.pop(context);
+          if (mounted) Navigator.pop(context, 'eliminado_completo');
           showCustomSnackbar(
             context: context,
             message: 'Material eliminado ya que no quedaban versiones.',
             success: true,
           );
-          return; // Salir temprano
+          return;
         }
       }
 
-      if (mounted) Navigator.pop(context); // Cierra diálogo de carga
+      if (mounted) Navigator.pop(context);
 
       showCustomSnackbar(
         context: context,
@@ -1327,16 +1541,15 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         success: true,
       );
 
-      await _cargarTodo(); // Recargar todos los datos
+      await _cargarTodo();
     } catch (e) {
-      if (mounted) Navigator.pop(context); // Cierra diálogo de carga
+      if (mounted) Navigator.pop(context);
       print('Error al eliminar versión del material: $e');
       _mostrarError('Error al eliminar versión', e.toString());
     }
   }
 
   void _confirmarEliminarMaterialCompleto() async {
-    // Renombrada de _confirmarEliminarMaterial
     final confirm = await showCustomDialog<bool>(
       context: context,
       titulo: '¿Eliminar Material Completo?',
@@ -1353,12 +1566,11 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
       ],
     );
     if (confirm == true) {
-      await _ejecutarEliminacionMaterialCompleto(); // Nueva función para la acción
+      await _ejecutarEliminacionMaterialCompleto();
     }
   }
 
   Future<void> _ejecutarEliminacionMaterialCompleto() async {
-    // Renombrada de _eliminarMaterial
     if (materialData == null) return;
 
     final materialDocRef = FirebaseFirestore.instance
@@ -1368,49 +1580,40 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         .doc(widget.materialId);
 
     try {
-      // Muestra un diálogo de carga
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (_) => const Center(child: CircularProgressIndicator()),
       );
 
-      // 1. Eliminar todas las versiones en la subcolección 'Versiones'
       final versionesSnap = await materialDocRef.collection('Versiones').get();
       for (final versionDoc in versionesSnap.docs) {
         await versionDoc.reference.delete();
       }
 
-      // 2. Eliminar el documento principal del material
       await materialDocRef.delete();
 
-      // 3. Eliminar los comentarios relacionados
       final comentariosSnap =
           await FirebaseFirestore.instance
               .collection('comentarios_materiales')
               .where('materialId', isEqualTo: widget.materialId)
-              .where(
-                'tema',
-                isEqualTo: widget.tema,
-              ) // Asegúrate de filtrar por tema también si es relevante
+              .where('tema', isEqualTo: widget.tema)
               .get();
       for (final comentarioDoc in comentariosSnap.docs) {
         await comentarioDoc.reference.delete();
       }
 
-      // 4. Actualizar contador de materiales del autor (si tienes uno)
       final autorId = materialData!['autorId'];
       if (autorId != null && autorId.toString().isNotEmpty) {
         final usuarioRef = FirebaseFirestore.instance
             .collection('usuarios')
             .doc(autorId);
-        // Suponiendo que tienes un campo 'materialesSubidos' o similar
         await usuarioRef.update({
           'materialesSubidos': FieldValue.increment(-1),
         });
       }
 
-      if (mounted) Navigator.pop(context); // Cierra diálogo de carga
+      if (mounted) Navigator.pop(context);
 
       showCustomSnackbar(
         context: context,
@@ -1418,10 +1621,9 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         success: true,
       );
 
-      // Regresa a la pantalla anterior o a la lista de materiales
       if (mounted) Navigator.pop(context, 'eliminado_completo');
     } catch (e) {
-      if (mounted) Navigator.pop(context); // Cierra diálogo de carga
+      if (mounted) Navigator.pop(context);
       print('Error al eliminar material completo: $e');
       _mostrarError('Error al eliminar material', e.toString());
     }
@@ -1436,13 +1638,13 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
           .doc(widget.materialId);
       await ref.delete();
 
-      // Elimina también los comentarios relacionados (opcional)
-      final comentarios =
+      final comentariosAssociated =
           await FirebaseFirestore.instance
               .collection('comentarios_materiales')
               .where('materialId', isEqualTo: widget.materialId)
+              .where('tema', isEqualTo: widget.tema)
               .get();
-      for (final c in comentarios.docs) {
+      for (final c in comentariosAssociated.docs) {
         await c.reference.delete();
       }
 
@@ -1452,7 +1654,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         success: true,
       );
 
-      Navigator.pop(context); // Regresa a la lista de materiales
+      Navigator.pop(context);
     } catch (e) {
       showCustomSnackbar(
         context: context,
@@ -1486,12 +1688,16 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     final Map<String, List<Map<String, dynamic>>> agrupados =
         agruparArchivosPorTipo(archivos);
     final Map<String, IconData> iconosTipo = {
-      'pdf': Icons.picture_as_pdf,
-      'image': Icons.image,
-      'audio': Icons.audiotrack,
-      'video': Icons.videocam,
-      'link': Icons.link,
-      'nota': Icons.notes,
+      'pdf': Icons.picture_as_pdf_rounded,
+      'image': Icons.image_rounded,
+      'audio': Icons.audiotrack_rounded,
+      'video': Icons.videocam_rounded,
+      'link': Icons.link_rounded,
+      'nota': Icons.notes_rounded,
+      'word': Icons.description_rounded,
+      'excel': Icons.table_chart_rounded,
+      'ppt': Icons.slideshow_rounded,
+      'otro': Icons.attach_file_rounded,
     };
     final Map<String, String> titulosTipo = {
       'pdf': '📄 Documentos PDF',
@@ -1500,6 +1706,10 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
       'video': '🎬 Videos',
       'link': '🔗 Enlaces',
       'nota': '📝 Notas',
+      'word': ' W Documentos Word',
+      'excel': '📊 Hojas de Cálculo',
+      'ppt': '💻 Presentaciones',
+      'otro': '📎 Otros Archivos',
     };
 
     final contenido = Column(
@@ -1508,116 +1718,135 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         Text(
           'Título del material:',
           style: TextStyle(
-            fontSize: screenWidth < 600 ? 16 : 18,
+            fontSize: screenWidth < 600 ? 17 : 20,
             fontWeight: FontWeight.bold,
+            color: Colors.black87,
           ),
         ),
-        const SizedBox(height: 10),
-        Card(
-          color: const Color(0xFFF6F3FA),
-          child: Padding(
-            padding: EdgeInsets.all(screenWidth < 600 ? 10 : 16),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: CustomLatexText(
-                contenido: titulo,
-                fontSize: screenWidth < 600 ? 18 : 22,
-                color: Colors.black,
-                prepararLatex: prepararLaTeX,
-              ),
-            ),
+        const SizedBox(height: 8),
+        Padding(
+          padding: EdgeInsets.symmetric(
+            vertical: 8.0,
+            horizontal: screenWidth < 600 ? 0 : 4,
+          ),
+          child: CustomLatexText(
+            contenido: titulo.isNotEmpty ? titulo : "Sin título",
+            fontSize: screenWidth < 600 ? 20 : 24,
+            color: Colors.black87,
+            prepararLatex: prepararLaTeX,
           ),
         ),
         const SizedBox(height: 16),
-        const Divider(color: Colors.black87),
-        const Text('Descripción del material:', style: TextStyle(fontSize: 18)),
-        const SizedBox(height: 10),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF6F3FA),
-            borderRadius: BorderRadius.circular(12),
+        const Divider(color: Colors.black54, thickness: 0.8),
+        Text(
+          'Descripción del material:',
+          style: TextStyle(
+            fontSize: screenWidth < 600 ? 16 : 18,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
           ),
+        ),
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
           child: Text(
-            dividirDescripcionEnLineas(descripcion),
-            style: const TextStyle(fontSize: 16),
+            dividirDescripcionEnLineas(
+              descripcion.isNotEmpty ? descripcion : "Sin descripción.",
+            ),
+            style: TextStyle(
+              fontSize: screenWidth < 600 ? 15 : 17,
+              height: 1.5,
+              color: Colors.black87,
+            ),
             textAlign: TextAlign.justify,
           ),
         ),
         const SizedBox(height: 20),
-        const Divider(color: Colors.black87),
-        const Text('Contenido:', style: TextStyle(fontSize: 18)),
+        const Divider(color: Colors.black54, thickness: 0.8),
+        Text(
+          'Contenido:',
+          style: TextStyle(
+            fontSize: screenWidth < 600 ? 17 : 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
         const SizedBox(height: 10),
-        ...agrupados.entries.map((entry) {
-          final tipo = entry.key;
-          final lista = entry.value;
-          return ExpansionTile(
-            initiallyExpanded: true,
-            leading: Icon(iconosTipo[tipo], color: Colors.black),
-            title: Text(
-              titulosTipo[tipo] ?? tipo,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+        if (agrupados.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20.0),
+            child: Center(
+              child: Text(
+                "Este material no tiene archivos adjuntos.",
+                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+              ),
             ),
-            children:
-                lista
-                    .map<Widget>(
-                      (archivo) => _buildVistaArchivo(archivo, screenWidth),
-                    )
-                    .toList(),
-          );
-        }).toList(),
+          )
+        else
+          ...agrupados.entries.map((entry) {
+            final tipo = entry.key;
+            final lista = entry.value;
+            return ExpansionTile(
+              initiallyExpanded: true,
+              leading: Icon(
+                iconosTipo[tipo] ?? Icons.attach_file_rounded,
+                color: Colors.blueGrey[700],
+                size: 28,
+              ),
+              title: Text(
+                titulosTipo[tipo] ??
+                    tipo.replaceFirst(tipo[0], tipo[0].toUpperCase()),
+                style: TextStyle(
+                  fontSize: screenWidth < 600 ? 16 : 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              childrenPadding: EdgeInsets.only(
+                left: screenWidth < 600 ? 8 : 16,
+                bottom: 8,
+              ),
+              children:
+                  lista
+                      .map<Widget>(
+                        (archivo) => _buildVistaArchivo(archivo, screenWidth),
+                      )
+                      .toList(),
+            );
+          }).toList(),
         const SizedBox(height: 20),
         CustomExpansionTileComentarios(
           comentarios: comentarios,
-          onEliminarComentario:
-              (c) => _eliminarComentario(
-                c,
-              ), // Asegúrate de que esta llamada sea correcta
+          onEliminarComentario: (c) => _eliminarComentario(c),
         ),
         const SizedBox(height: 40),
-
-        // ================== ✅ ESTA ES LA PARTE CORREGIDA ==================
         CustomFeedbackCard(
           accion: 'Calificar',
           numeroComentarios: comentarios.length,
           onCalificar: _mostrarDialogoCalificacion,
-          onCompartir:
-              _showMaterialSharingOptions, // Se llama a la función principal del BottomSheet
+          onCompartir: _showMaterialSharingOptions,
         ),
-
-        // ===================================================================
       ],
     );
 
-    if (esPantallaChica) {
-      return SingleChildScrollView(
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Container(
         padding: const EdgeInsets.all(16),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: contenido,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            ),
+          ],
         ),
-      );
-    } else {
-      return SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [contenido],
-          ),
-        ),
-      );
-    }
+        child: contenido,
+      ),
+    );
   }
 
   void _mostrarDialogoCalificacion() {
@@ -1662,7 +1891,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     void Function(int) setRating,
     bool enviando,
     void Function(bool) setEnviando,
-    BuildContext dialogContext, // <-- recibirlo aquí
+    BuildContext dialogContext,
   ) {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 500),
@@ -1671,7 +1900,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Cabecera
             Row(
               children: [
                 Expanded(
@@ -1691,16 +1919,12 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
               ],
             ),
             const SizedBox(height: 12),
-
-            // Rating
             CustomRatingWidget(
               rating: getRating(),
               onRatingChanged: (v) => setRating(v),
               enableHoverEffect: true,
             ),
             const SizedBox(height: 12),
-
-            // Comentario
             TextField(
               controller: controller,
               decoration: const InputDecoration(
@@ -1710,8 +1934,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
               maxLines: 2,
             ),
             const SizedBox(height: 12),
-
-            // Anónimo
             CheckboxListTile(
               value: getComoAnonimo(),
               onChanged: (v) => setComoAnonimo(v ?? false),
@@ -1720,8 +1942,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
               contentPadding: EdgeInsets.zero,
             ),
             const SizedBox(height: 16),
-
-            // Botones
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -1735,11 +1955,10 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                       enviando
                           ? null
                           : () async {
-                            // 1) Validación: si faltan campos, muestro el diálogo y salgo:
                             if (controller.text.trim().isEmpty ||
                                 getRating() == 0) {
                               await showCustomDialog(
-                                context: dialogContext, // contexto del diálogo
+                                context: dialogContext,
                                 titulo: 'Campos incompletos',
                                 mensaje:
                                     'Por favor escribe un comentario y selecciona una calificación.',
@@ -1760,10 +1979,8 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                                   ),
                                 ],
                               );
-                              return; // 2) aquí terminamos el onPressed sin seguir adelante
+                              return;
                             }
-
-                            // 3) Si pasa la validación, enviamos el comentario:
                             setEnviando(true);
                             await _enviarComentario(
                               controller.text.trim(),
@@ -1771,11 +1988,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                               getComoAnonimo(),
                             );
                             setEnviando(false);
-
-                            // 4) Cerramos el diálogo de calificación:
                             Navigator.of(dialogContext).pop();
-
-                            // 5) Y finalmente mostramos el snackbar de éxito:
                             showCustomSnackbar(
                               context: context,
                               message: '✅ Comentario enviado exitosamente.',
@@ -1818,7 +2031,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
             .get();
 
     final nombreUsuario = comoAnonimo ? 'Anónimo' : userData['Nombre'];
-    // Aquí obtenemos la URL de la foto (o null si no hay)
     final fotoUrl =
         (!comoAnonimo)
             ? (userData.data()?['FotoPerfil'] as String?) ?? user.photoURL
@@ -1861,7 +2073,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         .doc(widget.materialId)
         .update({'calificacionPromedio': promedio});
 
-    // 🔽 Obtener el UID del autor del material
     final materialDoc =
         await FirebaseFirestore.instance
             .collection('materiales')
@@ -1878,29 +2089,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
     await _cargarComentarios();
     await _cargarDatosDesdeFirestore();
-    //Opcion 1
-    // if (context.mounted) {
-    // Navigator.of(
-    // context,
-    // rootNavigator: true,
-    // ).pop(); // cerrar el AlertDialog de calificación
-    // }
-    // showFeedbackDialogAndSnackbar(
-    //   context: context,
-    //   titulo: '¡Éxito!',
-    //   mensaje: ' Comentario enviado exitosamente.',
-    //   tipo: CustomDialogType.error,
-    //   snackbarMessage: '✅ Comentario enviado exitosamente.',
-    //   snackbarSuccess: true,
-    // );
-    // Opcion 2
-    // await closeDialogAndShowSnackbar(
-    // context: context,
-    // message: '✅ Comentario enviado exitosamente.',
-    // success: true,
-    // );
 
-    // Opción 3 para mostrar snackbar más fácil sin tanto clic
     showCustomSnackbar(
       context: context,
       message: '✅ Comentario enviado exitosamente.',
@@ -1915,7 +2104,6 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
   ) async {
     final Uint8List? image = await _screenshotController.capture();
     if (image != null) {
-      // Descargar la imagen localmente
       final blob = html.Blob([image]);
       final urlBlob = html.Url.createObjectUrlFromBlob(blob);
 
@@ -1926,10 +2114,9 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
       html.Url.revokeObjectUrl(urlBlob);
 
-      // Después, compartir en Facebook
       final urlEjercicio = Uri.encodeComponent(
         'https://study-connect.app/material/$tema/$ejercicioId',
-      ); // CAMBIA aquí tu dominio real
+      );
       final quote = Uri.encodeComponent('¡Revisa este material: $titulo!');
       final facebookUrl =
           'https://www.facebook.com/sharer/sharer.php?u=$urlEjercicio&quote=$quote';
@@ -1938,63 +2125,18 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     }
   }
 
-  // Future<void> _compartirCapturaYSharePlus(
-  //   String titulo,
-  //   String tema,
-  //   String ejercicioId,
-  // ) async {
-  //   final Uint8List? image = await _screenshotController.capture();
-  //   if (image != null) {
-  //     final blob = html.Blob([image]);
-  //     final urlBlob = html.Url.createObjectUrlFromBlob(blob);
-
-  //     // Descargar la imagen
-  //     final link =
-  //         html.AnchorElement(href: urlBlob)
-  //           ..setAttribute('download', 'captura_material.png')
-  //           ..click();
-
-  //     html.Url.revokeObjectUrl(urlBlob);
-  //   }
-
-  //   final urlEjercicio =
-  //       'https://tuapp.com/$tema/$ejercicioId'; // CAMBIA por tu dominio real
-  //   await Share.share('📘 $titulo\n$urlEjercicio');
-  // }
-
-  // void compartirEnFacebook(String titulo, String tema, String ejercicioId) {
-  //   final url = Uri.encodeComponent(
-  //     'https://tuapp.com/$tema/$ejercicioId',
-  //   ); // <-- CAMBIA por tu dominio real
-  //   final quote = Uri.encodeComponent('¡Revisa este material: $titulo!');
-  //   final facebookUrl =
-  //       'https://www.facebook.com/sharer/sharer.php?u=$url&quote=$quote';
-  //   html.window.open(facebookUrl, '_blank');
-  // }
-
-  // void compartirGenerico(String titulo, String tema, String ejercicioId) {
-  //   final url =
-  //       'https://tuapp.com/$tema/$ejercicioId'; // <-- CAMBIA por tu dominio real
-  //   Share.share('$titulo\n$url');
-  // }
-
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
 
-    // 👇 NUEVA LÍNEA para validar que los datos ya se cargaron
     if (materialData == null) {
       return const Scaffold(
         backgroundColor: Color(0xFF036799),
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(child: CircularProgressIndicator(color: Colors.white)),
       );
     }
 
-    final bool esMovilMuyPequeno = screenWidth <= 480;
-    final bool esMovilGrande = screenWidth > 480 && screenWidth <= 800;
-    final bool esTabletOLaptopChica = screenWidth > 800 && screenWidth <= 1200;
-    final bool esLaptopGrande = screenWidth > 1200 && screenWidth <= 1900;
-    final bool esUltraWide = screenWidth > 1900;
+    final bool esMovil = screenWidth <= 800;
 
     return Scaffold(
       backgroundColor: const Color(0xFF036799),
@@ -2003,13 +2145,19 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         controller: _screenshotController,
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 2500),
-
+            constraints: const BoxConstraints(
+              maxWidth: 1920, // Ajustado para un ancho máximo razonable
+            ),
             child: LayoutBuilder(
               builder: (context, constraints) {
-                if (esMovilMuyPequeno || esMovilGrande) {
+                if (esMovil) {
                   return Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.fromLTRB(
+                      12, // Reducido padding para móviles
+                      12,
+                      12,
+                      0,
+                    ),
                     child: CustomScrollView(
                       slivers: [
                         SliverToBoxAdapter(
@@ -2021,57 +2169,63 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                             versionSeleccionada: versionSeleccionada,
                             comentarios: comentarios,
                             onVersionChanged: (newVersion) {
-                              setState(() {
-                                versionSeleccionada = newVersion;
-                              });
                               _cargarVersionSeleccionada(newVersion);
                             },
-                            esMovil: esMovilMuyPequeno || esMovilGrande,
+                            esMovil: true,
                           ),
                         ),
-                        SliverPadding(padding: const EdgeInsets.only(top: 20)),
+                        const SliverPadding(padding: EdgeInsets.only(top: 16)),
                         SliverToBoxAdapter(
                           child: _columnaDerecha(
                             materialData: materialData ?? {},
                             comentarios: comentarios,
-                            esPantallaChica: false,
+                            esPantallaChica:
+                                true, // Indicador para _columnaDerecha
                             screenWidth: screenWidth,
                           ),
+                        ),
+                        SliverPadding(
+                          padding: EdgeInsets.only(
+                            bottom: 16,
+                          ), // Espacio al final
                         ),
                       ],
                     ),
                   );
                 } else {
+                  // Layout para pantallas más grandes (tablets en horizontal, laptops, desktops)
                   return Padding(
-                    padding: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(
+                      24,
+                    ), // Padding general para desktop
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          flex: esTabletOLaptopChica ? 2 : 1,
-                          child: _columnaIzquierda(
-                            ejercicioData: materialData ?? {},
-                            tema: widget.tema,
-                            materialId: widget.materialId,
-                            versiones: versiones,
-                            versionSeleccionada: versionSeleccionada,
-                            comentarios: comentarios,
-                            onVersionChanged: (newVersion) {
-                              setState(() {
-                                versionSeleccionada = newVersion;
-                              });
-                              _cargarVersionSeleccionada(newVersion);
-                            },
-                            esMovil: esMovilMuyPequeno || esMovilGrande,
+                          flex: 1, // Columna izquierda toma 1 parte del espacio
+                          child: SingleChildScrollView(
+                            // Permite scroll si el contenido es alto
+                            child: _columnaIzquierda(
+                              ejercicioData: materialData ?? {},
+                              tema: widget.tema,
+                              materialId: widget.materialId,
+                              versiones: versiones,
+                              versionSeleccionada: versionSeleccionada,
+                              comentarios: comentarios,
+                              onVersionChanged: (newVersion) {
+                                _cargarVersionSeleccionada(newVersion);
+                              },
+                              esMovil: false, // No es móvil en este layout
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 20),
+                        const SizedBox(width: 24), // Espacio entre columnas
                         Expanded(
-                          flex: esTabletOLaptopChica ? 2 : 3,
+                          flex: 3, // Columna derecha toma 3 partes del espacio
                           child: _columnaDerecha(
                             materialData: materialData ?? {},
                             comentarios: comentarios,
-                            esPantallaChica: true,
+                            esPantallaChica: false, // No es pantalla chica
                             screenWidth: screenWidth,
                           ),
                         ),
