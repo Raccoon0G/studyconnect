@@ -23,9 +23,6 @@ import 'dart:io'; // Necesario para File
 import 'package:flutter/foundation.dart'
     show kIsWeb; // Para diferenciar entre web y móvil
 
-//  Para la integración con Facebook
-import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
-
 class MaterialViewPage extends StatefulWidget {
   final String tema;
   final String materialId;
