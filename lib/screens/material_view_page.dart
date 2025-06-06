@@ -166,11 +166,11 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
             versionData?['archivos'] ?? [],
           ),
           'descripcion': versionData?['Descripcion'] ?? '',
-          'PasosEjer': List<String>.from(versionData?['PasosEjer'] ?? []),
-          'DescPasos': List<String>.from(versionData?['DescPasos'] ?? []),
+          //'PasosEjer': List<String>.from(versionData?['PasosEjer'] ?? []),
+          //'DescPasos': List<String>.from(versionData?['DescPasos'] ?? []),
         };
-        pasos = List<String>.from(versionData?['PasosEjer'] ?? []);
-        descripciones = List<String>.from(versionData?['DescPasos'] ?? []);
+        //pasos = List<String>.from(versionData?['PasosEjer'] ?? []);
+        //descripciones = List<String>.from(versionData?['DescPasos'] ?? []);
         versionSeleccionada = versionId;
       });
     }
@@ -279,12 +279,12 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
             versionDataActual['archivos'] ?? [],
           ),
           'descripcion': versionDataActual['Descripcion'] ?? '',
-          'PasosEjer': List<String>.from(versionDataActual['PasosEjer'] ?? []),
-          'DescPasos': List<String>.from(versionDataActual['DescPasos'] ?? []),
+          //'PasosEjer': List<String>.from(versionDataActual['PasosEjer'] ?? []),
+          //'DescPasos': List<String>.from(versionDataActual['DescPasos'] ?? []),
         };
 
-        pasos = List<String>.from(versionDataActual['PasosEjer'] ?? []);
-        descripciones = List<String>.from(versionDataActual['DescPasos'] ?? []);
+        //pasos = List<String>.from(versionDataActual['PasosEjer'] ?? []);
+        // descripciones = List<String>.from(versionDataActual['DescPasos'] ?? []);
 
         comentarios = comentariosSnap.docs.map((d) => d.data()).toList();
         versiones =
@@ -1006,7 +1006,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
           const SizedBox(height: 8),
           InfoWithIcon(
             icon: Icons.assignment,
-            text: 'Ejercicio: $materialId',
+            text: 'Material: $materialId',
             alignment: MainAxisAlignment.center,
             iconAlignment: Alignment.center,
             textColor: Colors.white,
