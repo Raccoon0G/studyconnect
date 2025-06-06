@@ -420,23 +420,22 @@ class _HomePageState extends State<HomePage> {
             children: const [
               _Featurette(
                 icon: Icons.group_add_outlined,
-                text:
-                    'Únete a una comunidad de aprendizaje activa y solidaria.',
+                text: 'Únete a una comunidad de aprendizaje activa y solidaria',
               ),
               _Featurette(
                 icon: Icons.lightbulb_outline,
                 text:
-                    'Sube, comparte y aprende de una gran variedad de ejercicios.',
+                    'Sube, comparte y aprende de una gran variedad de ejercicios',
               ),
               _Featurette(
                 icon: Icons.military_tech_outlined,
                 text:
-                    'Compite sanamente y gana reconocimiento en nuestro ranking.',
+                    'Compite sanamente y gana reconocimiento en nuestro ranking',
               ),
               _Featurette(
                 icon: Icons.model_training_outlined,
                 text:
-                    'Pon a prueba tus conocimientos con autoevaluaciones por tema.',
+                    'Pon a prueba tus conocimientos con autoevaluaciones por tema',
               ),
             ],
           ),
