@@ -192,11 +192,11 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
           snackbarMessage: 'Error al eliminar.',
           snackbarSuccess: false,
         );
-        // showCustomSnackbar(
-        //   context: context,
-        //   message: 'Error al eliminar comentario',
-        //   success: false,
-        // );
+        showCustomSnackbar(
+          context: context,
+          message: 'Error al eliminar comentario',
+          success: false,
+        );
       }
     }
   }
@@ -259,164 +259,201 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     return nombresTemas[key] ?? key;
   }
 
-  Future<void> _confirmarEliminarEjercicio(
-    BuildContext context,
-    String tema,
-    String ejercicioId,
-  ) async {
-    final ejercicioRef = FirebaseFirestore.instance
-        .collection('calculo')
-        .doc(tema)
-        .collection('Ejer$tema')
-        .doc(ejercicioId);
-
-    final versionesRef = ejercicioRef.collection('Versiones');
-    final versionesSnap =
-        await versionesRef.orderBy('Fecha', descending: true).get();
-
-    if (versionesSnap.docs.length == 1) {
-      // SOLO UNA VERSIÓN: eliminar ejercicio completo
-      final confirmar = await showCustomDialog<bool>(
+  void _mostrarOpcionesEliminarEjercicio(BuildContext buttonContext) {
+    if (ejercicioData == null || versionSeleccionada == null) {
+      showCustomSnackbar(
         context: context,
-        titulo: 'Eliminar ejercicio completo',
-        mensaje:
-            'Este ejercicio tiene una única versión. ¿Deseas eliminarlo por completo?',
-        tipo: CustomDialogType.warning,
-        botones: [
-          DialogButton(texto: 'Cancelar', value: false),
-          DialogButton(texto: 'Eliminar', value: true),
-        ],
+        message: 'Datos del ejercicio no cargados completamente.',
+        success: false,
       );
-
-      if (confirmar == true) {
-        await versionesRef.doc(versionSeleccionada).delete();
-        await ejercicioRef.delete();
-
-        final comentariosSnap =
-            await FirebaseFirestore.instance
-                .collection('comentarios_ejercicios')
-                .where('ejercicioId', isEqualTo: ejercicioId)
-                .where('tema', isEqualTo: tema)
-                .get();
-        for (final c in comentariosSnap.docs) {
-          await c.reference.delete();
-        }
-
-        final autorId = ejercicioData?['AutorId'];
-        if (autorId != null && autorId.toString().isNotEmpty) {
-          final usuarioRef = FirebaseFirestore.instance
-              .collection('usuarios')
-              .doc(autorId);
-          await usuarioRef.update({'EjerSubidos': FieldValue.increment(-1)});
-        }
-
-        if (mounted) Navigator.pop(context, 'eliminado');
-      }
-    } else {
-      // MÁS DE UNA VERSIÓN: eliminar solo la seleccionada
-      final confirmar = await showCustomDialog<bool>(
-        context: context,
-        titulo: 'Eliminar versión del ejercicio',
-        mensaje:
-            '¿Deseas eliminar la versión seleccionada ($versionSeleccionada) del ejercicio?',
-        tipo: CustomDialogType.warning,
-        botones: [
-          DialogButton(texto: 'Cancelar', value: false),
-          DialogButton(texto: 'Eliminar versión', value: true),
-        ],
-      );
-
-      if (confirmar == true && versionSeleccionada != null) {
-        await versionesRef.doc(versionSeleccionada).delete();
-
-        // Si eliminaste la versión actual, asignar la siguiente más reciente
-        if (ejercicioData?['versionActual'] == versionSeleccionada) {
-          final nuevaVersion =
-              versionesSnap.docs
-                  .where((v) => v.id != versionSeleccionada)
-                  .first;
-          await ejercicioRef.update({
-            'versionActual': nuevaVersion.id,
-            'FechMod': nuevaVersion['Fecha'],
-          });
-          versionSeleccionada = nuevaVersion.id;
-        }
-
-        if (mounted) {
-          showCustomSnackbar(
-            context: context,
-            message: '✅ Versión eliminada correctamente.',
-            success: true,
-          );
-          await _cargarTodo();
-        }
-      }
+      return;
     }
+
+    final RenderBox button = buttonContext.findRenderObject() as RenderBox;
+    final Offset offset = button.localToGlobal(Offset.zero);
+
+    final RelativeRect position = RelativeRect.fromLTRB(
+      offset.dx,
+      offset.dy + button.size.height,
+      offset.dx + button.size.width,
+      offset.dy + button.size.height * 2,
+    );
+
+    showMenu<String>(
+      context: context,
+      position: position,
+      color: Colors.white,
+      elevation: 8.0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      items: <PopupMenuEntry<String>>[
+        if (versiones.length > 1)
+          PopupMenuItem<String>(
+            value: 'version',
+            child: ListTile(
+              leading: Icon(
+                Icons.file_copy_outlined,
+                color: Colors.orangeAccent[700],
+              ),
+              title: Text(
+                'Eliminar esta versión (${versionSeleccionada ?? ""})',
+                style: const TextStyle(fontSize: 15),
+              ),
+            ),
+          ),
+        PopupMenuItem<String>(
+          value: 'ejercicio',
+          child: ListTile(
+            leading: Icon(
+              Icons.delete_forever_rounded,
+              color: Colors.redAccent[700],
+            ),
+            title: Text(
+              versiones.length <= 1
+                  ? 'Eliminar ejercicio completo'
+                  : 'Eliminar ejercicio (y todas sus versiones)',
+              style: const TextStyle(fontSize: 15),
+            ),
+          ),
+        ),
+      ],
+    ).then((String? value) {
+      if (value == null) return;
+
+      if (value == 'version') {
+        _confirmarEliminarSoloVersion();
+      } else if (value == 'ejercicio') {
+        _confirmarEliminarEjercicioCompleto();
+      }
+    });
   }
 
-  Future<void> _eliminarSoloVersionSeleccionada(
-    BuildContext context,
-    String tema,
-    String ejercicioId,
-  ) async {
-    if (versionSeleccionada == null) return;
-    print('🧾 Versión a eliminar: $versionSeleccionada');
-
+  Future<void> _confirmarEliminarSoloVersion() async {
     final confirmar = await showCustomDialog<bool>(
       context: context,
-      titulo: 'Eliminar versión',
+      titulo: 'Eliminar Versión',
       mensaje:
-          '¿Seguro que deseas eliminar la versión "${versionSeleccionada ?? '(sin seleccionar)'}"?',
-
+          '¿Seguro que deseas eliminar la versión "$versionSeleccionada"? Esta acción no se puede deshacer.',
       tipo: CustomDialogType.warning,
       botones: [
         DialogButton(texto: 'Cancelar', value: false),
-        DialogButton(texto: 'Eliminar versión', value: true),
+        DialogButton(
+          texto: 'Eliminar Versión',
+          value: true,
+          textColor: Colors.red,
+        ),
       ],
     );
-
     if (confirmar == true) {
-      final ejercicioRef = FirebaseFirestore.instance
-          .collection('calculo')
-          .doc(tema)
-          .collection('Ejer$tema')
-          .doc(ejercicioId);
-
-      // Eliminar la versión seleccionada
-      await ejercicioRef
-          .collection('Versiones')
-          .doc(versionSeleccionada)
-          .delete();
-
-      // Actualizar versionActual si la que se eliminó es la actual
-      final doc = await ejercicioRef.get();
-      if (doc.exists && doc.data()?['versionActual'] == versionSeleccionada) {
-        final nuevasVersiones =
-            await ejercicioRef
-                .collection('Versiones')
-                .orderBy('Fecha', descending: true)
-                .get();
-
-        if (nuevasVersiones.docs.isNotEmpty) {
-          final nueva = nuevasVersiones.docs.first;
-          await ejercicioRef.update({
-            'versionActual': nueva.id,
-            'FechMod': nueva['Fecha'],
-          });
-          setState(() {
-            versionSeleccionada = nueva.id;
-          });
-        }
-      }
-
-      showCustomSnackbar(
-        context: context,
-        message: '✅ Versión eliminada correctamente.',
-        success: true,
-      );
-
-      await _cargarTodo();
+      await _ejecutarEliminarSoloVersion();
     }
+  }
+
+  Future<void> _ejecutarEliminarSoloVersion() async {
+    if (versionSeleccionada == null) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final ejercicioRef = FirebaseFirestore.instance
+        .collection('calculo')
+        .doc(widget.tema)
+        .collection('Ejer${widget.tema}')
+        .doc(widget.ejercicioId);
+    final versionesRef = ejercicioRef.collection('Versiones');
+
+    await versionesRef.doc(versionSeleccionada).delete();
+
+    if (ejercicioData?['versionActual'] == versionSeleccionada) {
+      final nuevasVersiones =
+          await versionesRef.orderBy('Fecha', descending: true).get();
+      if (nuevasVersiones.docs.isNotEmpty) {
+        final nueva = nuevasVersiones.docs.first;
+        await ejercicioRef.update({
+          'versionActual': nueva.id,
+          'FechMod': nueva['Fecha'],
+        });
+      }
+    }
+
+    if (mounted) Navigator.pop(context); // Cierra dialogo de carga
+
+    showCustomSnackbar(
+      context: context,
+      message: '✅ Versión eliminada correctamente.',
+      success: true,
+    );
+    await _cargarTodo();
+  }
+
+  Future<void> _confirmarEliminarEjercicioCompleto() async {
+    final confirmar = await showCustomDialog<bool>(
+      context: context,
+      titulo: 'Eliminar Ejercicio Completo',
+      mensaje:
+          'Esto eliminará el ejercicio y TODAS sus versiones de forma permanente. ¿Estás seguro?',
+      tipo: CustomDialogType.warning,
+      botones: [
+        DialogButton(texto: 'Cancelar', value: false),
+        DialogButton(
+          texto: 'Eliminar TODO',
+          value: true,
+          textColor: Colors.red,
+        ),
+      ],
+    );
+    if (confirmar == true) {
+      await _ejecutarEliminacionCompleta();
+    }
+  }
+
+  Future<void> _ejecutarEliminacionCompleta() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final ejercicioRef = FirebaseFirestore.instance
+        .collection('calculo')
+        .doc(widget.tema)
+        .collection('Ejer${widget.tema}')
+        .doc(widget.ejercicioId);
+
+    // Eliminar subcolección de versiones
+    final versionesSnap = await ejercicioRef.collection('Versiones').get();
+    for (final doc in versionesSnap.docs) {
+      await doc.reference.delete();
+    }
+
+    // Eliminar comentarios asociados
+    final comentariosSnap =
+        await FirebaseFirestore.instance
+            .collection('comentarios_ejercicios')
+            .where('ejercicioId', isEqualTo: widget.ejercicioId)
+            .where('tema', isEqualTo: widget.tema)
+            .get();
+    for (final doc in comentariosSnap.docs) {
+      await doc.reference.delete();
+    }
+
+    // Actualizar contador del usuario
+    final autorId = ejercicioData?['AutorId'];
+    if (autorId != null && autorId.toString().isNotEmpty) {
+      final usuarioRef = FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(autorId);
+      await usuarioRef.update({'EjerSubidos': FieldValue.increment(-1)});
+      await actualizarTodoCalculoDeUsuario(uid: autorId);
+    }
+
+    // Eliminar el documento principal del ejercicio
+    await ejercicioRef.delete();
+
+    if (mounted) Navigator.pop(context); // Cierra dialogo de carga
+    if (mounted) Navigator.pop(context, 'eliminado'); // Regresa de la página
   }
 
   Widget _columnaIzquierda({
@@ -650,29 +687,29 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                     },
                   ),
                   // --- Botón Eliminar (con PopupMenu) ---
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.delete, color: Colors.white),
-                    label: const Text("Eliminar"),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent,
-                      foregroundColor: Colors.white,
-                      shape: const StadiumBorder(),
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 16,
-                      ),
-                    ),
-                    onPressed: () {
-                      // Tu lógica para mostrar el menú de eliminación
-                      // ... se mantiene igual ...
+                  Builder(
+                    builder: (buttonContext) {
+                      return ElevatedButton.icon(
+                        icon: const Icon(Icons.delete, color: Colors.white),
+                        label: const Text("Eliminar"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent,
+                          foregroundColor: Colors.white,
+                          shape: const StadiumBorder(),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                            horizontal: 16,
+                          ),
+                        ),
+                        onPressed: () {
+                          _mostrarOpcionesEliminarEjercicio(buttonContext);
+                        },
+                      );
                     },
                   ),
                 ],
               ),
             ),
-          // =======================================================
-          //   FIN: SOLUCIÓN DE DESBORDAMIENTO CON Wrap
-          // =======================================================
         ],
       ),
     );
