@@ -1,121 +1,142 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class NotificationService {
-  // Crea notificacion para el usuario
   static Future<void> crearNotificacion({
     required String uidDestino,
-    required String tipo, // ej. 'mensaje', 'mensaje_grupo', 'agregado_grupo'
+    required String tipo,
     required String titulo,
     required String contenido,
-    required String referenciaId, // Este es el chatId
+    required String referenciaId,
     String? tema,
     String? uidEmisor,
     String? nombreEmisor,
   }) async {
-    // --- INICIO DE MODIFICACIÓN PARA CHATS SILENCIADOS ---
-    // Solo aplicamos la lógica de silencio para notificaciones de tipo 'mensaje' o 'mensaje_grupo'
-    // y si referenciaId (chatId) está presente.
-    // También podrías incluir 'agregado_grupo' si no quieres notificar si el chat donde te agregaron está silenciado,
-    // pero usualmente las notificaciones de "te agregaron a un grupo" se quieren recibir siempre.
-    if ((tipo == 'mensaje' || tipo == 'mensaje_grupo') &&
-        referenciaId.isNotEmpty) {
-      try {
-        final DocumentSnapshot chatDoc =
-            await FirebaseFirestore.instance
-                .collection('Chats')
-                .doc(referenciaId) // referenciaId es el chatId
-                .get();
-
-        if (chatDoc.exists) {
-          final Map<String, dynamic> chatData =
-              chatDoc.data() as Map<String, dynamic>;
-          // Manejo seguro del campo 'silenciadoPor', asumiendo que puede no existir o ser null.
-          final List<dynamic> silenciadoPorDinamico =
-              chatData['silenciadoPor'] as List<dynamic>? ?? [];
-          final List<String> silenciadoPorLista =
-              silenciadoPorDinamico.map((item) => item.toString()).toList();
-
-          if (silenciadoPorLista.contains(uidDestino)) {
-            // El usuario destino ha silenciado este chat, así que no creamos la notificación.
-            print(
-              'Notificación NO creada para $uidDestino del chat $referenciaId porque está silenciado.',
-            );
-            return; // Salimos de la función temprano
-          }
-        }
-      } catch (e) {
-        // Si hay un error al leer el chat (ej. no existe, problema de permisos),
-        // podríamos optar por enviar la notificación de todas formas o registrar el error.
-        // Por ahora, imprimimos el error y continuamos para crear la notificación.
-        print(
-          'Error al verificar estado de silencio para chat $referenciaId: $e. Se procederá a notificar.',
-        );
-      }
-    }
-    // --- FIN DE MODIFICACIÓN ---
-
-    // Si llegamos aquí, o no es un tipo de mensaje que se pueda silenciar,
-    // o el chat no está silenciado por el destinatario, o hubo un error al verificar.
-
     final notifRef =
         FirebaseFirestore.instance
             .collection('notificaciones')
             .doc(uidDestino)
             .collection('items')
-            .doc(); // Firestore genera un ID automáticamente
-
+            .doc();
     final data = <String, dynamic>{
-      // Especificar el tipo del mapa es buena práctica
-      'id': notifRef.id, // Guardamos el ID autogenerado
+      'id': notifRef.id,
       'tipo': tipo,
       'titulo': titulo,
       'contenido': contenido,
       'leido': false,
+      'archivada': false,
       'fecha': Timestamp.now(),
       'referenciaId': referenciaId,
       'uidEmisor': uidEmisor,
       'nombreEmisor': nombreEmisor,
     };
-
-    // Solo agrega el campo 'tema' si el tipo lo requiere y tema no es nulo
     if ((tipo == 'comentario' || tipo == 'calificacion') && tema != null) {
       data['tema'] = tema;
     }
-
     await notifRef.set(data);
-    print('Notificación creada para $uidDestino (referencia: $referenciaId).');
   }
 
-  /// Cuenta el total de notificaciones no leídas para un usuario.
-  static Future<int> contarNoLeidas(String uid) async {
-    final snap =
-        await FirebaseFirestore.instance
-            .collection('notificaciones')
-            .doc(uid)
-            .collection('items')
-            .where('leido', isEqualTo: false)
-            .get();
-    return snap.docs.length;
+  static Future<void> marcarComoLeida(String uid, String notifId) async {
+    await FirebaseFirestore.instance
+        .collection('notificaciones')
+        .doc(uid)
+        .collection('items')
+        .doc(notifId)
+        .update({'leido': true});
   }
 
-  /// Marca todas las notificaciones como leídas para un usuario.
   static Future<void> marcarTodasComoLeidas(String uid) async {
-    final batch = FirebaseFirestore.instance.batch();
-    final query =
-        await FirebaseFirestore.instance
-            .collection('notificaciones')
-            .doc(uid)
-            .collection('items')
-            .where('leido', isEqualTo: false)
-            .get();
+    print("--- PRUEBA DE DIAGNÓSTICO: BUSCANDO SOLO POR 'leido' ---");
+    try {
+      final query =
+          await FirebaseFirestore.instance
+              .collection('notificaciones')
+              .doc(uid)
+              .collection('items')
+              .where('leido', isEqualTo: false)
+              // .where('archivada', isEqualTo: false) // <-- HEMOS COMENTADO ESTA LÍNEA TEMPORALMENTE
+              .get();
 
-    for (final doc in query.docs) {
-      batch.update(doc.reference, {'leido': true});
+      // ESTA LÍNEA NOS DIRÁ LA VERDAD:
+      print(
+        "Prueba de diagnóstico encontró ${query.docs.length} notificaciones.",
+      );
+
+      if (query.docs.isEmpty) {
+        print(
+          "La consulta simple tampoco devolvió resultados. Esto es muy extraño.",
+        );
+        return;
+      }
+
+      final batch = FirebaseFirestore.instance.batch();
+      for (final doc in query.docs) {
+        batch.update(doc.reference, {'leido': true});
+      }
+      await batch.commit();
+      print("--- PRUEBA COMPLETADA EXITOSAMENTE ---");
+    } catch (e) {
+      print("¡ERROR en la prueba de diagnóstico'!: $e");
     }
-    await batch.commit();
   }
 
-  /// Stream en tiempo real de notificaciones para mostrar en una lista.
+  static Future<void> archivarNotificacion(
+    String uid,
+    String notifId,
+    bool archivar,
+  ) async {
+    await FirebaseFirestore.instance
+        .collection('notificaciones')
+        .doc(uid)
+        .collection('items')
+        .doc(notifId)
+        .update({'archivada': archivar, 'leido': true});
+  }
+
+  static Future<void> eliminarNotificacion(String uid, String notifId) async {
+    await FirebaseFirestore.instance
+        .collection('notificaciones')
+        .doc(uid)
+        .collection('items')
+        .doc(notifId)
+        .delete();
+  }
+
+  /// NUEVO: Elimina todas las notificaciones que ya fueron leídas pero no están archivadas.
+  static Future<void> eliminarTodasLeidas(String uid) async {
+    print("--- INTENTANDO ELIMINAR TODAS LAS LEÍDAS ---");
+    try {
+      final query =
+          await FirebaseFirestore.instance
+              .collection('notificaciones')
+              .doc(uid)
+              .collection('items')
+              .where('leido', isEqualTo: true)
+              //.where('archivada', isEqualTo: false)
+              .get();
+
+      // ESTA LÍNEA ES LA MÁS IMPORTANTE:
+      print(
+        "Consulta para 'Limpiar Todo' encontró ${query.docs.length} notificaciones.",
+      );
+
+      if (query.docs.isEmpty) {
+        print(
+          "La consulta no devolvió resultados. Causa probable: Índice incorrecto o no hay datos que coincidan.",
+        );
+        return;
+      }
+
+      final batch = FirebaseFirestore.instance.batch();
+      for (final doc in query.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+      print("--- BATCH 'ELIMINAR TODAS' COMPLETADO EXITOSAMENTE ---");
+    } catch (e) {
+      print("¡ERROR en 'eliminarTodasLeidas'!: $e");
+    }
+  }
+
   static Stream<List<Map<String, dynamic>>> obtenerNotificaciones(String uid) {
     return FirebaseFirestore.instance
         .collection('notificaciones')
@@ -132,8 +153,9 @@ class NotificationService {
                   'titulo': data['titulo'] ?? '',
                   'contenido': data['contenido'] ?? '',
                   'leido': data['leido'] ?? false,
+                  'archivada': data['archivada'] ?? false,
                   'tipo': data['tipo'] ?? '',
-                  'fecha': data['fecha'], // Timestamp, se formateará en la UI
+                  'fecha': data['fecha'],
                   'referenciaId': data['referenciaId'] ?? '',
                   'tema': data['tema'],
                   'uidEmisor': data['uidEmisor'],
