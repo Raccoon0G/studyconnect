@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:html' as html;
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -14,6 +15,13 @@ import 'package:study_connect/widgets/widgets.dart';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:mime/mime.dart';
+
+import 'dart:convert'; // Para jsonDecode en la API de YouTube
+import 'package:http/http.dart' as http; // Para la API de YouTube
+import 'package:url_launcher/url_launcher.dart'; // Para abrir enlaces
+import 'dart:ui_web'
+    as ui; // Para platformViewRegistry en web (reproductores de video/audio)
+import 'package:study_connect/config/secrets.dart'; // Asegúrate que youtubeApiKey está aquí
 
 class ChatHomePage extends StatefulWidget {
   const ChatHomePage({super.key});
@@ -50,6 +58,8 @@ class _ChatHomePageState extends State<ChatHomePage> {
   String? _nombreArchivoSeleccionado;
   String? _mimeTypeSeleccionado;
   String _tipoContenidoAEnviar = "texto";
+  final Set<String> _registeredViewFactories = {};
+  bool _isCurrentChatGroup = false;
 
   @override
   void initState() {
@@ -68,6 +78,57 @@ class _ChatHomePageState extends State<ChatHomePage> {
     _groupNameController.dispose();
     _debounceTimer?.cancel();
     super.dispose();
+  }
+
+  String? _extractYoutubeId(String url) {
+    if (!url.contains("http") && !url.contains("www.")) {
+      return null;
+    }
+    // Expresión regular robusta para varios formatos de URL de YouTube
+    RegExp regExp = RegExp(
+      r"^.*(?:(?:youtu\.be\/|v\/|vi\/|u\/\w\/|embed\/|shorts\/)|(?:(?:watch)?\?v(?:i)?=|\&v(?:i)?=))([^#\&\?]*).*",
+      caseSensitive: false,
+      multiLine: false,
+    );
+    final match = regExp.firstMatch(url);
+    if (match != null &&
+        match.group(1) != null &&
+        match.group(1)!.length == 11) {
+      return match.group(1); // El ID del video
+    }
+    return null;
+  }
+
+  Future<Map<String, String>?> _fetchYoutubeVideoDetails(String videoId) async {
+    // Asegúrate de que 'youtubeApiKey' esté definida en tu archivo secrets.dart
+    final apiUrl =
+        'https://www.googleapis.com/youtube/v3/videos?part=snippet&id=$videoId&key=$youtubeApiKey';
+    try {
+      final response = await http.get(Uri.parse(apiUrl));
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        final items = json['items'];
+        if (items != null && items.isNotEmpty) {
+          final snippet = items[0]['snippet'];
+          return {
+            'title': snippet['title'] as String? ?? 'Video de YouTube',
+            // Intentamos obtener la miniatura de alta calidad, si no, una por defecto o la estándar.
+            'thumbnail':
+                snippet['thumbnails']?['high']?['url'] as String? ??
+                snippet['thumbnails']?['medium']?['url'] as String? ??
+                snippet['thumbnails']?['standard']?['url']
+                    as String? ?? // Agregada standard como opción
+                snippet['thumbnails']?['default']?['url'] as String? ??
+                '',
+          };
+        }
+      }
+      print('Error API YouTube: ${response.statusCode} - ${response.body}');
+      return null;
+    } catch (e) {
+      print('Error al obtener detalles del video de YouTube: $e');
+      return null;
+    }
   }
 
   Future<void> _seleccionarImagen() async {
@@ -255,6 +316,10 @@ class _ChatHomePageState extends State<ChatHomePage> {
         'rar',
       ],
     );
+  }
+
+  Future<void> _seleccionarVideo() async {
+    await _seleccionarArchivoGenerico(FileType.video);
   }
 
   Future<void> _seleccionarAudio() async {
@@ -501,6 +566,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
     setState(() {
       filtro = '';
       _busquedaController.clear();
+      _isCurrentChatGroup = false;
       if (!isLargeScreen) {
         // Solo oculta la lista en pantallas pequeñas
         _showList = false;
@@ -510,169 +576,14 @@ class _ChatHomePageState extends State<ChatHomePage> {
     });
   }
 
-  // void _enviarMensaje() async {
-  //   // 0. Verificaciones iniciales
-  //   if (chatIdSeleccionado == null || mensaje.trim().isEmpty) return;
-
-  //   final now = Timestamp.now();
-  //   final String mensajeActual = mensaje.trim();
-
-  //   // Limpiar UI inmediatamente
-  //   _mensajeController.clear();
-  //   setState(() {
-  //     mensaje = '';
-  //   });
-
-  //   // 1. Añadir el nuevo mensaje a la subcolección 'Mensajes'
-  //   await FirebaseFirestore.instance
-  //       .collection('Chats')
-  //       .doc(chatIdSeleccionado)
-  //       .collection('Mensajes')
-  //       .add({
-  //         'AutorID': uid,
-  //         'Contenido': mensajeActual,
-  //         'Fecha': now,
-  //         'reacciones': {},
-  //         'editado': false,
-  //         'eliminado': false,
-  //         'leidoPor': [uid],
-  //       });
-
-  //   // 2. Preparar la actualización del documento principal del Chat
-  //   final DocumentReference chatDocRef = FirebaseFirestore.instance
-  //       .collection('Chats')
-  //       .doc(chatIdSeleccionado!);
-  //   final DocumentSnapshot chatSnapshot = await chatDocRef.get();
-
-  //   Map<String, dynamic> chatUpdateData = {
-  //     'typing.$uid': false,
-  //     'lastMessageAt': now,
-  //     'lastMessage': mensajeActual,
-  //   };
-
-  //   List<String> uidsDestinatariosNotificacion = [];
-  //   bool esNotificacionDeGrupo = false;
-  //   String nombreGrupoParaNotificacion = '';
-
-  //   if (chatSnapshot.exists) {
-  //     final Map<String, dynamic> chatData =
-  //         chatSnapshot.data() as Map<String, dynamic>;
-
-  //     final List<String> memberIds = List<String>.from(chatData['ids'] ?? []);
-  //     Map<String, dynamic> currentUnreadCounts = Map<String, dynamic>.from(
-  //       chatData['unreadCounts'] ?? {},
-  //     );
-  //     for (String memberId in memberIds) {
-  //       if (memberId != uid) {
-  //         currentUnreadCounts[memberId] =
-  //             (currentUnreadCounts[memberId] as int? ?? 0) + 1;
-  //         // Solo añadir a destinatarios de notificación si no es el usuario actual
-  //         if (!uidsDestinatariosNotificacion.contains(memberId)) {
-  //           uidsDestinatariosNotificacion.add(memberId);
-  //         }
-  //       }
-  //     }
-  //     chatUpdateData['unreadCounts'] = currentUnreadCounts;
-
-  //     esNotificacionDeGrupo = (chatData['isGroup'] as bool?) ?? false;
-  //     if (esNotificacionDeGrupo) {
-  //       nombreGrupoParaNotificacion = chatData['groupName'] ?? 'el grupo';
-  //       // Los destinatarios de grupo ya se llenaron en el bucle anterior.
-  //     } else {
-  //       // Para chat 1 a 1, aseguramos que el destinatario sea el otro miembro.
-  //       // La lista memberIds debería tener 2 UIDs para un chat 1a1.
-  //       final Iterable<String> otrosIdsFiltrados = memberIds.where(
-  //         (id) => id != uid,
-  //       );
-  //       final String? idOtroDelChat =
-  //           otrosIdsFiltrados.isNotEmpty ? otrosIdsFiltrados.first : null;
-
-  //       if (idOtroDelChat != null) {
-  //         // Limpiamos y añadimos solo al otro usuario para 1a1
-  //         uidsDestinatariosNotificacion = [idOtroDelChat];
-  //       } else {
-  //         uidsDestinatariosNotificacion =
-  //             []; // Seguridad: no hay otro usuario claro
-  //       }
-  //     }
-
-  //     final List<dynamic> ocultoParaDinamico =
-  //         chatData['ocultoPara'] as List<dynamic>? ?? [];
-  //     final List<String> ocultoParaLista =
-  //         ocultoParaDinamico.map((item) => item.toString()).toList();
-
-  //     if (ocultoParaLista.contains(uid)) {
-  //       chatUpdateData['ocultoPara'] = FieldValue.arrayRemove([uid]);
-  //       print(
-  //         "Chat $chatIdSeleccionado des-ocultado para $uid porque envió un mensaje.",
-  //       );
-  //     }
-  //   } else {
-  //     // Documento del chat NO existe (raro si _iniciarChat o creación de grupo funciona bien)
-  //     print(
-  //       "Advertencia: Enviando mensaje a un chatId '$chatIdSeleccionado' que no existe. _iniciarChat debería haberlo creado.",
-  //     );
-  //     if (otroUid != null && otroUid != uid) {
-  //       // Asumimos 1a1 basado en la variable de estado 'otroUid'
-  //       chatUpdateData['ids'] = [uid, otroUid!];
-  //       chatUpdateData['isGroup'] = false;
-  //       chatUpdateData['unreadCounts'] = {otroUid!: 1, uid: 0};
-  //       uidsDestinatariosNotificacion = [otroUid!];
-  //       esNotificacionDeGrupo = false;
-  //     }
-  //     // No se puede determinar 'ocultoPara' aquí si el chat no existe.
-  //   }
-
-  //   await chatDocRef.set(chatUpdateData, SetOptions(merge: true));
-
-  //   // 3. Crear notificaciones
-  //   if (nombreUsuario != null && uidsDestinatariosNotificacion.isNotEmpty) {
-  //     for (String destinatarioId in uidsDestinatariosNotificacion) {
-  //       // Asegurarse de no enviar notificación al emisor si por error estuviera en la lista
-  //       if (destinatarioId == uid) continue;
-
-  //       String tituloNotificacion;
-  //       if (esNotificacionDeGrupo) {
-  //         tituloNotificacion = '$nombreUsuario @ $nombreGrupoParaNotificacion';
-  //       } else {
-  //         tituloNotificacion = 'Nuevo mensaje de $nombreUsuario';
-  //       }
-
-  //       await NotificationService.crearNotificacion(
-  //         uidDestino: destinatarioId,
-  //         tipo: esNotificacionDeGrupo ? 'mensaje_grupo' : 'mensaje',
-  //         titulo: tituloNotificacion,
-  //         contenido:
-  //             mensajeActual.length > 40
-  //                 ? '${mensajeActual.substring(0, 40)}...'
-  //                 : mensajeActual,
-  //         referenciaId: chatIdSeleccionado!,
-  //         uidEmisor: uid,
-  //         nombreEmisor: nombreUsuario!,
-  //       );
-  //     }
-  //   } else if (nombreUsuario == null) {
-  //     print(
-  //       "Advertencia: nombreUsuario es null, no se pueden enviar notificaciones personalizadas.",
-  //     );
-  //   }
-
-  //   // 4. Auto-scroll
-  //   WidgetsBinding.instance.addPostFrameCallback((_) {
-  //     if (_scrollController.hasClients) {
-  //       _scrollController.animateTo(
-  //         0.0,
-  //         duration: const Duration(milliseconds: 300),
-  //         curve: Curves.easeOut,
-  //       );
-  //     }
-  //   });
-  // }
-
   void _enviarMensaje() async {
-    if (chatIdSeleccionado == null) return;
+    if (chatIdSeleccionado == null) {
+      print("Error: No hay chatIdSeleccionado para enviar mensaje.");
+      return;
+    }
 
     final String mensajeDeTextoActual = _mensajeController.text.trim();
+    final String? videoIdDetectado = _extractYoutubeId(mensajeDeTextoActual);
 
     if (_archivoSeleccionadoBytes == null && mensajeDeTextoActual.isEmpty) {
       // No hay nada que enviar
@@ -695,36 +606,53 @@ class _ChatHomePageState extends State<ChatHomePage> {
       'editado': false,
       'eliminado': false,
       'leidoPor': [uid],
-      'Contenido':
-          mensajeDeTextoActual, // Texto que acompaña al archivo o el mensaje de texto solo
+      'Contenido': mensajeDeTextoActual, // Por defecto es el texto
     };
 
     String lastMessagePreview = mensajeDeTextoActual;
-    String tipoContenidoFinal = "texto";
+    String tipoContenidoFinalParaFirestore = "texto"; // Tipo por defecto
 
-    if (_archivoSeleccionadoBytes != null &&
-        _nombreArchivoSeleccionado != null) {
-      tipoContenidoFinal =
-          _tipoContenidoAEnviar; // "imagen", "video", "documento", "audio", "gif"
+    // Guardar estado actual de los campos de entrada antes de limpiar
+    final tempMensajeControllerText = _mensajeController.text;
+    final tempArchivoBytes = _archivoSeleccionadoBytes;
+    final tempNombreArchivo = _nombreArchivoSeleccionado;
+    final tempMimeType = _mimeTypeSeleccionado;
+    final tempTipoContenidoDetectado =
+        _tipoContenidoAEnviar; // El tipo detectado por el file picker
+
+    // Limpiar UI inmediatamente
+    _mensajeController.clear();
+    if (mounted) {
+      setState(() {
+        mensaje = ''; // Si usas una variable 'mensaje' para el TextField
+        _archivoSeleccionadoBytes = null;
+        _nombreArchivoSeleccionado = null;
+        _mimeTypeSeleccionado = null;
+        _tipoContenidoAEnviar =
+            "texto"; // Resetear el tipo para la próxima selección
+      });
+    }
+
+    // Prioridad: Archivo adjunto
+    if (tempArchivoBytes != null && tempNombreArchivo != null) {
+      tipoContenidoFinalParaFirestore =
+          tempTipoContenidoDetectado; // Usar el tipo detectado
       try {
         final String urlContenido = await _subirArchivoMultimedia(
-          _archivoSeleccionadoBytes!,
-          _nombreArchivoSeleccionado!,
-          _mimeTypeSeleccionado, // Puede ser null
+          tempArchivoBytes,
+          tempNombreArchivo,
+          tempMimeType,
           chatIdSeleccionado!,
           nuevoMensajeId,
         );
-
-        datosMensaje['tipoContenido'] = tipoContenidoFinal;
+        datosMensaje['tipoContenido'] = tipoContenidoFinalParaFirestore;
         datosMensaje['urlContenido'] = urlContenido;
-        datosMensaje['nombreArchivo'] = _nombreArchivoSeleccionado;
+        datosMensaje['nombreArchivo'] = tempNombreArchivo;
         datosMensaje['mimeType'] =
-            _mimeTypeSeleccionado ??
-            lookupMimeType(
-              _nombreArchivoSeleccionado!,
-            ); // Usa mime package como fallback
+            tempMimeType ??
+            lookupMimeType(tempNombreArchivo); // Fallback de MIME
 
-        switch (tipoContenidoFinal) {
+        switch (tipoContenidoFinalParaFirestore) {
           case "imagen":
             lastMessagePreview = "📷 Imagen";
             break;
@@ -737,62 +665,80 @@ class _ChatHomePageState extends State<ChatHomePage> {
           case "audio":
             lastMessagePreview = "🎵 Audio";
             break;
-          case "documento":
-            lastMessagePreview =
-                "📄 ${_nombreArchivoSeleccionado ?? "Documento"}";
-            break;
-          default: // "texto" u otros desconocidos
-            lastMessagePreview = mensajeDeTextoActual;
+          default: // "documento" u otros
+            lastMessagePreview = "📄 ${tempNombreArchivo}";
         }
-        if (mensajeDeTextoActual.isNotEmpty && tipoContenidoFinal != "texto") {
+        // Si hay texto (caption) Y un archivo, el preview lo refleja
+        if (mensajeDeTextoActual.isNotEmpty &&
+            tipoContenidoFinalParaFirestore != "texto") {
           lastMessagePreview += ": $mensajeDeTextoActual";
         }
-      } catch (e, s) {
+      } catch (e) {
         print("Error al subir archivo multimedia: $e");
-        print("Stack trace: $s");
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Error al enviar archivo: ${e.toString()}')),
           );
         }
+        // Restaurar campos si la subida falla para que el usuario no pierda lo que intentaba enviar
+        _mensajeController.text = tempMensajeControllerText;
+        if (mounted) {
+          setState(() {
+            _archivoSeleccionadoBytes = tempArchivoBytes;
+            _nombreArchivoSeleccionado = tempNombreArchivo;
+            _mimeTypeSeleccionado = tempMimeType;
+            _tipoContenidoAEnviar = tempTipoContenidoDetectado;
+          });
+        }
         return;
       }
-    } else {
-      // Solo es mensaje de texto
-      datosMensaje['tipoContenido'] = "texto";
-      lastMessagePreview = mensajeDeTextoActual;
+    }
+    // Si no hay archivo, pero el texto es un enlace de YouTube
+    else if (videoIdDetectado != null) {
+      final details = await _fetchYoutubeVideoDetails(videoIdDetectado);
+      if (details != null) {
+        tipoContenidoFinalParaFirestore = 'youtube_link';
+        datosMensaje['tipoContenido'] = tipoContenidoFinalParaFirestore;
+        datosMensaje['youtubeVideoId'] = videoIdDetectado;
+        datosMensaje['youtubeTitle'] = details['title'];
+        datosMensaje['youtubeThumbnail'] = details['thumbnail'];
+        // 'Contenido' ya tiene la URL original de YouTube
+        lastMessagePreview = "▶️ Video: ${details['title']}";
+      } else {
+        // Si no se pudieron obtener los detalles, se envía como texto normal
+        tipoContenidoFinalParaFirestore = 'texto';
+        datosMensaje['tipoContenido'] = tipoContenidoFinalParaFirestore;
+        // lastMessagePreview ya es mensajeDeTextoActual
+      }
+    }
+    // Si no hay archivo y no es enlace de YouTube, es solo texto
+    else {
+      tipoContenidoFinalParaFirestore = "texto";
+      datosMensaje['tipoContenido'] = tipoContenidoFinalParaFirestore;
+      // lastMessagePreview ya es mensajeDeTextoActual
     }
 
-    // Limpiar UI inmediatamente después de preparar los datos del mensaje
-    _mensajeController.clear();
-    final String mensajeEnviadoConExito =
-        mensaje; // Guardar para usar en notificación si es necesario
-    setState(() {
-      mensaje = '';
-      _archivoSeleccionadoBytes = null;
-      _nombreArchivoSeleccionado = null;
-      _mimeTypeSeleccionado = null;
-      _tipoContenidoAEnviar = "texto";
-    });
-
-    // 1. Añadir el nuevo mensaje a la subcolección 'Mensajes'
+    // Añadir el nuevo mensaje a la subcolección 'Mensajes'
     await FirebaseFirestore.instance
         .collection('Chats')
         .doc(chatIdSeleccionado!)
         .collection('Mensajes')
-        .doc(nuevoMensajeId)
+        .doc(nuevoMensajeId) // Usar el ID pregenerado
         .set(datosMensaje);
 
-    // 2. Preparar la actualización del documento principal del Chat
+    // Actualizar el documento principal del Chat (lastMessage, unreadCounts, etc.)
     final DocumentReference chatDocRef = FirebaseFirestore.instance
         .collection('Chats')
         .doc(chatIdSeleccionado!);
     final DocumentSnapshot chatSnapshot = await chatDocRef.get();
 
     Map<String, dynamic> chatUpdateData = {
-      'typing.$uid': false, // El usuario actual deja de escribir
-      'lastMessageAt': now, // O 'lastActivityAt' según tu modelo
+      'typing.$uid': false,
+      'lastMessageAt': now,
       'lastMessage': lastMessagePreview,
+      'lastMessageSenderId': uid, // Guardar quién envió el último mensaje
+      'lastMessageType':
+          tipoContenidoFinalParaFirestore, // Guardar el tipo del último mensaje
     };
 
     List<String> uidsDestinatariosNotificacion = [];
@@ -800,9 +746,8 @@ class _ChatHomePageState extends State<ChatHomePage> {
     String nombreGrupoParaNotificacion = '';
 
     if (chatSnapshot.exists) {
-      final Map<String, dynamic> chatData =
-          chatSnapshot.data() as Map<String, dynamic>;
-      final List<String> memberIds = List<String>.from(chatData['ids'] ?? []);
+      final chatData = chatSnapshot.data() as Map<String, dynamic>;
+      final memberIds = List<String>.from(chatData['ids'] ?? []);
       Map<String, dynamic> currentUnreadCounts = Map<String, dynamic>.from(
         chatData['unreadCounts'] ?? {},
       );
@@ -817,21 +762,9 @@ class _ChatHomePageState extends State<ChatHomePage> {
         }
       }
       chatUpdateData['unreadCounts'] = currentUnreadCounts;
-
       esNotificacionDeGrupo = (chatData['isGroup'] as bool?) ?? false;
       if (esNotificacionDeGrupo) {
         nombreGrupoParaNotificacion = chatData['groupName'] ?? 'el grupo';
-      } else {
-        final Iterable<String> otrosIdsFiltrados = memberIds.where(
-          (id) => id != uid,
-        );
-        final String? idOtroDelChat =
-            otrosIdsFiltrados.isNotEmpty ? otrosIdsFiltrados.first : null;
-        if (idOtroDelChat != null) {
-          uidsDestinatariosNotificacion = [idOtroDelChat];
-        } else {
-          uidsDestinatariosNotificacion = [];
-        }
       }
 
       final List<dynamic> ocultoParaDinamico =
@@ -842,49 +775,65 @@ class _ChatHomePageState extends State<ChatHomePage> {
         chatUpdateData['ocultoPara'] = FieldValue.arrayRemove([uid]);
       }
     } else {
-      // Si el chat no existe (debería haber sido creado por _iniciarChat o al crear grupo)
-      if (otroUid != null &&
-          otroUid != uid &&
-          !esNotificacionDeGrupo /* Asumiendo que no es grupo si no existe */ ) {
+      // Si el chat no existe (escenario de primer mensaje en un chat 1a1 que no fue pre-creado)
+      if (otroUid != null && otroUid != uid && !esNotificacionDeGrupo) {
+        // Asumiendo que si 'otroUid' está seteado, no es grupo
         chatUpdateData['ids'] = [uid, otroUid!];
-        chatUpdateData['isGroup'] = false; // Asumiendo 1a1
-        chatUpdateData['unreadCounts'] = {otroUid!: 1, uid: 0};
+        chatUpdateData['isGroup'] = false;
+        chatUpdateData['unreadCounts'] = {
+          otroUid!: 1,
+          uid: 0,
+        }; // El otro usuario tiene 1 no leído
         uidsDestinatariosNotificacion = [otroUid!];
       }
-      // Para un grupo nuevo que se crea y se envía el primer mensaje,
-      // la lógica de creación de grupo ya debería haber establecido 'ids' y 'isGroup'.
     }
 
     await chatDocRef.set(chatUpdateData, SetOptions(merge: true));
 
-    // 3. Crear notificaciones
+    // Lógica de notificaciones (ajustada)
     if (nombreUsuario != null && uidsDestinatariosNotificacion.isNotEmpty) {
+      String nombreEmisorNotif = nombreUsuario!; // Ya está cargado en initState
+      String tituloNotif;
+      String cuerpoNotif =
+          lastMessagePreview.length > 100
+              ? '${lastMessagePreview.substring(0, 97)}...'
+              : lastMessagePreview;
+
+      if (esNotificacionDeGrupo) {
+        tituloNotif = '$nombreEmisorNotif @ $nombreGrupoParaNotificacion';
+      } else {
+        tituloNotif = 'Nuevo mensaje de $nombreEmisorNotif';
+      }
+
       for (String destinatarioId in uidsDestinatariosNotificacion) {
-        if (destinatarioId == uid) continue;
+        if (destinatarioId == uid)
+          continue; // No enviarse notificación a sí mismo
 
-        String tituloNotificacion;
-        if (esNotificacionDeGrupo) {
-          tituloNotificacion = '$nombreUsuario @ $nombreGrupoParaNotificacion';
-        } else {
-          tituloNotificacion = 'Nuevo mensaje de $nombreUsuario';
+        // Antes de enviar, verificar si el chat está silenciado para el destinatario
+        final chatDocParaSilencio =
+            await FirebaseFirestore.instance
+                .collection('Chats')
+                .doc(chatIdSeleccionado!)
+                .get();
+        if (chatDocParaSilencio.exists) {
+          final chatDataSilencio =
+              chatDocParaSilencio.data() as Map<String, dynamic>;
+          final List<String> silenciadoPorLista = List<String>.from(
+            chatDataSilencio['silenciadoPor'] ?? [],
+          );
+          if (!silenciadoPorLista.contains(destinatarioId)) {
+            // Solo enviar si NO está silenciado para este destinatario
+            await NotificationService.crearNotificacion(
+              uidDestino: destinatarioId,
+              tipo: esNotificacionDeGrupo ? 'mensaje_grupo' : 'mensaje',
+              titulo: tituloNotif,
+              contenido: cuerpoNotif,
+              referenciaId: chatIdSeleccionado!,
+              uidEmisor: uid,
+              nombreEmisor: nombreEmisorNotif,
+            );
+          }
         }
-
-        String contenidoNotificacion =
-            lastMessagePreview; // Usar la vista previa del mensaje
-        // Puedes acortar 'contenidoNotificacion' si es muy largo para la notificación.
-        // String contenidoCorto = contenidoNotificacion.length > 40
-        //    ? '${contenidoNotificacion.substring(0, 40)}...'
-        //    : contenidoNotificacion;
-
-        await NotificationService.crearNotificacion(
-          uidDestino: destinatarioId,
-          tipo: esNotificacionDeGrupo ? 'mensaje_grupo' : 'mensaje',
-          titulo: tituloNotificacion,
-          contenido: contenidoNotificacion, // O 'contenidoCorto'
-          referenciaId: chatIdSeleccionado!,
-          uidEmisor: uid,
-          nombreEmisor: nombreUsuario!,
-        );
       }
     } else if (nombreUsuario == null) {
       print(
@@ -892,17 +841,398 @@ class _ChatHomePageState extends State<ChatHomePage> {
       );
     }
 
-    // 4. Auto-scroll
+    // Auto-scroll al final de la lista
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
-          0.0,
+          0.0, // Ya que la lista está invertida, 0.0 es el "final" (lo más reciente)
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
       }
     });
   }
+
+  Widget _buildVideoPlayerWeb(String url, {double maxHeight = 300}) {
+    // Para web
+    final viewId = 'video_player_web_$url';
+    if (!_registeredViewFactories.contains(viewId)) {
+      _registeredViewFactories.add(viewId);
+      ui.platformViewRegistry.registerViewFactory(viewId, (int viewId) {
+        return html.VideoElement()
+          ..src = url
+          ..controls = true
+          ..style.width = '100%'
+          ..style.height =
+              '100%' // Se ajustará por el AspectRatio o el maxHeight
+          ..style.borderRadius = '8px'; // Un poco de redondeo
+      });
+    }
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: AspectRatio(
+        aspectRatio: 16 / 9, // Proporción común para video
+        child: HtmlElementView(viewType: viewId),
+      ),
+    );
+  }
+
+  Widget _buildAudioPlayerWeb(String url, String fileName, bool isMine) {
+    // Para web
+    final viewId = 'audio_player_web_$url';
+    if (!_registeredViewFactories.contains(viewId)) {
+      _registeredViewFactories.add(viewId);
+      ui.platformViewRegistry.registerViewFactory(viewId, (int viewId) {
+        return html.AudioElement()
+          ..src = url
+          ..controls = true
+          ..style.width = '100%'; // Ocupa el ancho disponible
+      });
+    }
+    // No necesitamos la columna con el nombre aquí, ya que ChatBubbleCustom lo manejará
+    return SizedBox(
+      height: 50, // Altura estándar para controles de audio HTML
+      child: HtmlElementView(viewType: viewId),
+    );
+  }
+
+  Widget _buildYoutubePreview(Map<String, dynamic> messageData, bool isMine) {
+    final String videoId = messageData['youtubeVideoId'] ?? '';
+    final String title = messageData['youtubeTitle'] ?? 'Video de YouTube';
+    final String? thumbnailUrl = messageData['youtubeThumbnail'];
+    // La URL original ya está en messageData['Contenido']
+    final String originalUrl =
+        messageData['Contenido'] ?? 'https://www.youtube.com/watch?v=$videoId';
+
+    return GestureDetector(
+      onTap: () async {
+        if (await canLaunchUrl(Uri.parse(originalUrl))) {
+          await launchUrl(
+            Uri.parse(originalUrl),
+            mode: LaunchMode.externalApplication,
+          );
+        } else {
+          print('No se pudo abrir la URL: $originalUrl');
+        }
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (thumbnailUrl != null && thumbnailUrl.isNotEmpty)
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(8),
+                  ), // Ajusta según el radio de tu burbuja
+                  child: CachedNetworkImage(
+                    // Usar CachedNetworkImage
+                    imageUrl: thumbnailUrl,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    placeholder:
+                        (context, url) => AspectRatio(
+                          aspectRatio: 16 / 9,
+                          child: Container(
+                            color: Colors.grey[300],
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  isMine
+                                      ? Colors.white
+                                      : Theme.of(context).primaryColor,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    errorWidget:
+                        (context, url, error) => AspectRatio(
+                          aspectRatio: 16 / 9,
+                          child: Container(
+                            color: Colors.grey[300],
+                            child: Icon(
+                              Icons.ondemand_video,
+                              size: 40,
+                              color: isMine ? Colors.white54 : Colors.black54,
+                            ),
+                          ),
+                        ),
+                  ),
+                ),
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow,
+                    color: Colors.white,
+                    size: 32,
+                  ),
+                ),
+              ],
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              8.0,
+              8.0,
+              8.0,
+              4.0,
+            ), // Ajusta el padding
+            child: Text(
+              title,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: isMine ? Colors.white : Colors.black87,
+                fontSize: 13,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  // void _enviarMensaje() async {
+  //   if (chatIdSeleccionado == null) return;
+
+  //   final String mensajeDeTextoActual = _mensajeController.text.trim();
+
+  //   if (_archivoSeleccionadoBytes == null && mensajeDeTextoActual.isEmpty) {
+  //     // No hay nada que enviar
+  //     return;
+  //   }
+
+  //   final now = Timestamp.now();
+  //   final String nuevoMensajeId =
+  //       FirebaseFirestore.instance
+  //           .collection('Chats')
+  //           .doc(chatIdSeleccionado!)
+  //           .collection('Mensajes')
+  //           .doc()
+  //           .id;
+
+  //   Map<String, dynamic> datosMensaje = {
+  //     'AutorID': uid,
+  //     'Fecha': now,
+  //     'reacciones': {},
+  //     'editado': false,
+  //     'eliminado': false,
+  //     'leidoPor': [uid],
+  //     'Contenido':
+  //         mensajeDeTextoActual, // Texto que acompaña al archivo o el mensaje de texto solo
+  //   };
+
+  //   String lastMessagePreview = mensajeDeTextoActual;
+  //   String tipoContenidoFinal = "texto";
+
+  //   if (_archivoSeleccionadoBytes != null &&
+  //       _nombreArchivoSeleccionado != null) {
+  //     tipoContenidoFinal =
+  //         _tipoContenidoAEnviar; // "imagen", "video", "documento", "audio", "gif"
+  //     try {
+  //       final String urlContenido = await _subirArchivoMultimedia(
+  //         _archivoSeleccionadoBytes!,
+  //         _nombreArchivoSeleccionado!,
+  //         _mimeTypeSeleccionado, // Puede ser null
+  //         chatIdSeleccionado!,
+  //         nuevoMensajeId,
+  //       );
+
+  //       datosMensaje['tipoContenido'] = tipoContenidoFinal;
+  //       datosMensaje['urlContenido'] = urlContenido;
+  //       datosMensaje['nombreArchivo'] = _nombreArchivoSeleccionado;
+  //       datosMensaje['mimeType'] =
+  //           _mimeTypeSeleccionado ??
+  //           lookupMimeType(
+  //             _nombreArchivoSeleccionado!,
+  //           ); // Usa mime package como fallback
+
+  //       switch (tipoContenidoFinal) {
+  //         case "imagen":
+  //           lastMessagePreview = "📷 Imagen";
+  //           break;
+  //         case "gif":
+  //           lastMessagePreview = "📷 GIF";
+  //           break;
+  //         case "video":
+  //           lastMessagePreview = "🎬 Video";
+  //           break;
+  //         case "audio":
+  //           lastMessagePreview = "🎵 Audio";
+  //           break;
+  //         case "documento":
+  //           lastMessagePreview =
+  //               "📄 ${_nombreArchivoSeleccionado ?? "Documento"}";
+  //           break;
+  //         default: // "texto" u otros desconocidos
+  //           lastMessagePreview = mensajeDeTextoActual;
+  //       }
+  //       if (mensajeDeTextoActual.isNotEmpty && tipoContenidoFinal != "texto") {
+  //         lastMessagePreview += ": $mensajeDeTextoActual";
+  //       }
+  //     } catch (e, s) {
+  //       print("Error al subir archivo multimedia: $e");
+  //       print("Stack trace: $s");
+  //       if (mounted) {
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //           SnackBar(content: Text('Error al enviar archivo: ${e.toString()}')),
+  //         );
+  //       }
+  //       return;
+  //     }
+  //   } else {
+  //     // Solo es mensaje de texto
+  //     datosMensaje['tipoContenido'] = "texto";
+  //     lastMessagePreview = mensajeDeTextoActual;
+  //   }
+
+  //   // Limpiar UI inmediatamente después de preparar los datos del mensaje
+  //   _mensajeController.clear();
+  //   final String mensajeEnviadoConExito =
+  //       mensaje; // Guardar para usar en notificación si es necesario
+  //   setState(() {
+  //     mensaje = '';
+  //     _archivoSeleccionadoBytes = null;
+  //     _nombreArchivoSeleccionado = null;
+  //     _mimeTypeSeleccionado = null;
+  //     _tipoContenidoAEnviar = "texto";
+  //   });
+
+  //   // 1. Añadir el nuevo mensaje a la subcolección 'Mensajes'
+  //   await FirebaseFirestore.instance
+  //       .collection('Chats')
+  //       .doc(chatIdSeleccionado!)
+  //       .collection('Mensajes')
+  //       .doc(nuevoMensajeId)
+  //       .set(datosMensaje);
+
+  //   // 2. Preparar la actualización del documento principal del Chat
+  //   final DocumentReference chatDocRef = FirebaseFirestore.instance
+  //       .collection('Chats')
+  //       .doc(chatIdSeleccionado!);
+  //   final DocumentSnapshot chatSnapshot = await chatDocRef.get();
+
+  //   Map<String, dynamic> chatUpdateData = {
+  //     'typing.$uid': false, // El usuario actual deja de escribir
+  //     'lastMessageAt': now, // O 'lastActivityAt' según tu modelo
+  //     'lastMessage': lastMessagePreview,
+  //   };
+
+  //   List<String> uidsDestinatariosNotificacion = [];
+  //   bool esNotificacionDeGrupo = false;
+  //   String nombreGrupoParaNotificacion = '';
+
+  //   if (chatSnapshot.exists) {
+  //     final Map<String, dynamic> chatData =
+  //         chatSnapshot.data() as Map<String, dynamic>;
+  //     final List<String> memberIds = List<String>.from(chatData['ids'] ?? []);
+  //     Map<String, dynamic> currentUnreadCounts = Map<String, dynamic>.from(
+  //       chatData['unreadCounts'] ?? {},
+  //     );
+
+  //     for (String memberId in memberIds) {
+  //       if (memberId != uid) {
+  //         currentUnreadCounts[memberId] =
+  //             (currentUnreadCounts[memberId] as int? ?? 0) + 1;
+  //         if (!uidsDestinatariosNotificacion.contains(memberId)) {
+  //           uidsDestinatariosNotificacion.add(memberId);
+  //         }
+  //       }
+  //     }
+  //     chatUpdateData['unreadCounts'] = currentUnreadCounts;
+
+  //     esNotificacionDeGrupo = (chatData['isGroup'] as bool?) ?? false;
+  //     if (esNotificacionDeGrupo) {
+  //       nombreGrupoParaNotificacion = chatData['groupName'] ?? 'el grupo';
+  //     } else {
+  //       final Iterable<String> otrosIdsFiltrados = memberIds.where(
+  //         (id) => id != uid,
+  //       );
+  //       final String? idOtroDelChat =
+  //           otrosIdsFiltrados.isNotEmpty ? otrosIdsFiltrados.first : null;
+  //       if (idOtroDelChat != null) {
+  //         uidsDestinatariosNotificacion = [idOtroDelChat];
+  //       } else {
+  //         uidsDestinatariosNotificacion = [];
+  //       }
+  //     }
+
+  //     final List<dynamic> ocultoParaDinamico =
+  //         chatData['ocultoPara'] as List<dynamic>? ?? [];
+  //     final List<String> ocultoParaLista =
+  //         ocultoParaDinamico.map((item) => item.toString()).toList();
+  //     if (ocultoParaLista.contains(uid)) {
+  //       chatUpdateData['ocultoPara'] = FieldValue.arrayRemove([uid]);
+  //     }
+  //   } else {
+  //     // Si el chat no existe (debería haber sido creado por _iniciarChat o al crear grupo)
+  //     if (otroUid != null &&
+  //         otroUid != uid &&
+  //         !esNotificacionDeGrupo /* Asumiendo que no es grupo si no existe */ ) {
+  //       chatUpdateData['ids'] = [uid, otroUid!];
+  //       chatUpdateData['isGroup'] = false; // Asumiendo 1a1
+  //       chatUpdateData['unreadCounts'] = {otroUid!: 1, uid: 0};
+  //       uidsDestinatariosNotificacion = [otroUid!];
+  //     }
+  //     // Para un grupo nuevo que se crea y se envía el primer mensaje,
+  //     // la lógica de creación de grupo ya debería haber establecido 'ids' y 'isGroup'.
+  //   }
+
+  //   await chatDocRef.set(chatUpdateData, SetOptions(merge: true));
+
+  //   // 3. Crear notificaciones
+  //   if (nombreUsuario != null && uidsDestinatariosNotificacion.isNotEmpty) {
+  //     for (String destinatarioId in uidsDestinatariosNotificacion) {
+  //       if (destinatarioId == uid) continue;
+
+  //       String tituloNotificacion;
+  //       if (esNotificacionDeGrupo) {
+  //         tituloNotificacion = '$nombreUsuario @ $nombreGrupoParaNotificacion';
+  //       } else {
+  //         tituloNotificacion = 'Nuevo mensaje de $nombreUsuario';
+  //       }
+
+  //       String contenidoNotificacion =
+  //           lastMessagePreview; // Usar la vista previa del mensaje
+  //       // Puedes acortar 'contenidoNotificacion' si es muy largo para la notificación.
+  //       // String contenidoCorto = contenidoNotificacion.length > 40
+  //       //    ? '${contenidoNotificacion.substring(0, 40)}...'
+  //       //    : contenidoNotificacion;
+
+  //       await NotificationService.crearNotificacion(
+  //         uidDestino: destinatarioId,
+  //         tipo: esNotificacionDeGrupo ? 'mensaje_grupo' : 'mensaje',
+  //         titulo: tituloNotificacion,
+  //         contenido: contenidoNotificacion, // O 'contenidoCorto'
+  //         referenciaId: chatIdSeleccionado!,
+  //         uidEmisor: uid,
+  //         nombreEmisor: nombreUsuario!,
+  //       );
+  //     }
+  //   } else if (nombreUsuario == null) {
+  //     print(
+  //       "Advertencia: nombreUsuario es null, no se pueden enviar notificaciones personalizadas.",
+  //     );
+  //   }
+
+  //   // 4. Auto-scroll
+  //   WidgetsBinding.instance.addPostFrameCallback((_) {
+  //     if (_scrollController.hasClients) {
+  //       _scrollController.animateTo(
+  //         0.0,
+  //         duration: const Duration(milliseconds: 300),
+  //         curve: Curves.easeOut,
+  //       );
+  //     }
+  //   });
+  // }
 
   void _editarMensaje(String mensajeId, String contenido, Timestamp fecha) {
     final diferencia = DateTime.now().difference(fecha.toDate());
@@ -2973,6 +3303,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                             }
                             if (mounted) Navigator.of(dialogContext).pop();
                             setState(() {
+                              _isCurrentChatGroup = true;
                               chatIdSeleccionado = newChatId;
                               otroUid = null;
                               if (MediaQuery.of(context).size.width < 720.0)
@@ -3741,11 +4072,19 @@ class _ChatHomePageState extends State<ChatHomePage> {
                 builder: (context, hoveredValue, _) {
                   final isHovered = hoveredValue == chatId;
                   return MouseRegion(
-                    onEnter: (_) => hoveredChatId.value = chatId,
-                    onExit: (_) => hoveredChatId.value = null,
-                    cursor: SystemMouseCursors.click,
+                    // ... (tu MouseRegion existente) ...
                     child: GestureDetector(
                       onTap: () {
+                        // ---- INICIO DE MODIFICACIÓN EN onTap ----
+                        final dataChat =
+                            chatDoc.data()!
+                                as Map<
+                                  String,
+                                  dynamic
+                                >; // Asegúrate de tener acceso a los datos del chatDoc
+                        final bool esEsteChatUnGrupo =
+                            (dataChat['isGroup'] as bool?) ?? false;
+
                         if (chatId.isNotEmpty &&
                             uid.isNotEmpty &&
                             !estaArchivadoItem &&
@@ -3753,12 +4092,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                           FirebaseFirestore.instance
                               .collection('Chats')
                               .doc(chatId)
-                              .update({'unreadCounts.$uid': 0})
-                              .catchError(
-                                (e) => print(
-                                  "Error al actualizar unreadCounts para $chatId: $e",
-                                ),
-                              );
+                              .update({'unreadCounts.$uid': 0});
                         }
 
                         final screenWidth =
@@ -3767,24 +4101,37 @@ class _ChatHomePageState extends State<ChatHomePage> {
                         final bool currentIsLargeScreen =
                             screenWidth >= tabletBreakpoint;
 
-                        if (isGroup) {
-                          setState(() {
-                            chatIdSeleccionado = chatId;
-                            otroUid =
-                                null; // Para grupos, otroUid no es relevante
-                            if (!currentIsLargeScreen) {
-                              _showList = false;
-                            }
-                          });
-                        } else {
-                          if (otherIdForChat != null &&
-                              otherIdForChat.isNotEmpty) {
-                            _iniciarChat(
-                              otherIdForChat,
-                              isLargeScreen: currentIsLargeScreen,
+                        setState(() {
+                          // <--- IMPORTANTE: Envuelve las actualizaciones de estado en setState
+                          _isCurrentChatGroup =
+                              esEsteChatUnGrupo; // <--- ACTUALIZA LA VARIABLE DE ESTADO
+                          chatIdSeleccionado = chatId;
+
+                          if (esEsteChatUnGrupo) {
+                            otroUid = null;
+                          } else {
+                            // Tu lógica existente para obtener otherIdForChat para chats 1 a 1
+                            final List<dynamic> idsDynamicOnTap =
+                                dataChat['ids'] ?? [];
+                            final List<String> idsParticipantesOnTap =
+                                List<String>.from(idsDynamicOnTap);
+                            otroUid = idsParticipantesOnTap.firstWhere(
+                              (id) => id != uid,
+                              orElse: () => '',
                             );
+                            if (otroUid!.isNotEmpty &&
+                                !cacheUsuarios.containsKey(otroUid)) {
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (mounted) _obtenerUsuario(otroUid!);
+                              });
+                            }
                           }
-                        }
+
+                          if (!currentIsLargeScreen) {
+                            _showList = false;
+                          }
+                        });
+                        // ---- FIN DE MODIFICACIÓN EN onTap ----
                       },
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 250),
@@ -4339,7 +4686,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
               .collection('Chats')
               .doc(chatIdSeleccionado)
               .collection('Mensajes')
-              .orderBy('Fecha')
+              .orderBy('Fecha', descending: true) // Los más nuevos primero
               .snapshots(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
@@ -4350,7 +4697,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Text(
-                "Aún no hay mensajes en este chat. ¡Sé el primero en enviar uno!",
+                "Aún no hay mensajes. ¡Envía el primero!",
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey[600]),
               ),
@@ -4358,20 +4705,22 @@ class _ChatHomePageState extends State<ChatHomePage> {
           );
         }
 
-        List<Future<void>> updateFutures = [];
-        for (var doc in snap.data!.docs) {
+        final messages = snap.data!.docs; // Ya vienen ordenados por Firebase
+
+        // Marcar mensajes como leídos
+        for (var doc in messages) {
+          // Ya no es necesario 'inv' aquí
           final data = doc.data() as Map<String, dynamic>;
           final autorIdMensaje = data['AutorID'] as String?;
           if (autorIdMensaje != null && autorIdMensaje != uid) {
             final leidoPor = List<String>.from(data['leidoPor'] ?? []);
             if (!leidoPor.contains(uid)) {
-              updateFutures.add(
-                doc.reference.update({
-                  'leidoPor': FieldValue.arrayUnion([uid]),
-                }),
-              );
+              doc.reference.update({
+                'leidoPor': FieldValue.arrayUnion([uid]),
+              });
             }
           }
+          // Lógica para resetear el 'typing' del otro usuario si envía un mensaje
           if (otroUid != null &&
               autorIdMensaje == otroUid &&
               chatIdSeleccionado != null) {
@@ -4389,36 +4738,20 @@ class _ChatHomePageState extends State<ChatHomePage> {
                       FirebaseFirestore.instance
                           .collection('Chats')
                           .doc(chatIdSeleccionado!)
-                          .update({'typing.$otroUid': false})
-                          .catchError(
-                            (e) => print("Error al limpiar typing: $e"),
-                          );
+                          .update({'typing.$otroUid': false});
                     }
                   }
                 });
           }
         }
 
-        final List<DocumentSnapshot> inv = snap.data!.docs.reversed.toList();
-
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_scrollController.hasClients &&
-              _scrollController.position.maxScrollExtent > 0) {
-            _scrollController.animateTo(
-              0.0,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOut,
-            );
-          }
-        });
-
         return ListView.builder(
           controller: _scrollController,
-          reverse: true,
+          reverse: true, // Muestra los mensajes de abajo hacia arriba
           padding: const EdgeInsets.all(12.0),
-          itemCount: inv.length,
+          itemCount: messages.length,
           itemBuilder: (context, i) {
-            final docMsg = inv[i];
+            final docMsg = messages[i];
             final dataMsg = docMsg.data() as Map<String, dynamic>;
             final bool esMio = dataMsg['AutorID'] == uid;
             final Timestamp fechaTimestamp =
@@ -4426,41 +4759,41 @@ class _ChatHomePageState extends State<ChatHomePage> {
             final DateTime fecha = fechaTimestamp.toDate();
 
             bool showDateSeparator = false;
-            if (i == inv.length - 1) {
+            if (i == messages.length - 1) {
+              // El mensaje más "antiguo" en la lista invertida
               showDateSeparator = true;
             } else {
-              final Timestamp nextTs =
-                  (inv[i + 1].data() as Map<String, dynamic>)['Fecha']
+              final Timestamp prevTs =
+                  (messages[i + 1].data() as Map<String, dynamic>)['Fecha']
                       as Timestamp? ??
                   Timestamp.now();
               final DateTime d1 = fecha;
-              final DateTime d2 = nextTs.toDate();
+              final DateTime d2 = prevTs.toDate();
               showDateSeparator =
                   d1.year != d2.year ||
                   d1.month != d2.month ||
                   d1.day != d2.day;
             }
 
-            final List<String> leidoPor = List<String>.from(
-              dataMsg['leidoPor'] ?? [],
-            );
-            final bool readByPeer =
-                otroUid != null && leidoPor.contains(otroUid!);
+            final String tipoContenido =
+                dataMsg['tipoContenido'] as String? ?? 'texto';
+            final String? urlContenido = dataMsg['urlContenido'] as String?;
+            final String? nombreArchivo = dataMsg['nombreArchivo'] as String?;
+            final String? textoDelMensaje = dataMsg['Contenido'] as String?;
+
             final String? autorId = dataMsg['AutorID'] as String?;
             Map<String, String>? autorInfo =
                 autorId != null ? cacheUsuarios[autorId] : null;
-
             if (autorId != null &&
                 autorId != 'sistema' &&
                 autorInfo == null &&
-                mounted) {
+                mounted &&
+                !cacheUsuarios.containsKey(autorId)) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted && !cacheUsuarios.containsKey(autorId)) {
+                if (mounted && !cacheUsuarios.containsKey(autorId))
                   _obtenerUsuario(autorId);
-                }
               });
             }
-
             final String nombreAutorParaMostrar =
                 autorInfo?['nombre'] ??
                 (autorId == 'sistema'
@@ -4469,115 +4802,73 @@ class _ChatHomePageState extends State<ChatHomePage> {
                         ? (nombreUsuario ?? 'Tú')
                         : 'Cargando...'));
             final String? urlAvatarParaMostrar = autorInfo?['foto'];
-
-            // --- Definición correcta de las variables ---
-            final String tipoContenido =
-                dataMsg['tipoContenido'] as String? ?? 'texto';
-            final String? urlContenido = dataMsg['urlContenido'] as String?;
-            final String? nombreArchivo = dataMsg['nombreArchivo'] as String?;
-            final String? textoDelMensaje =
-                dataMsg['Contenido']
-                    as String?; // El campo 'Contenido' se usa para el texto/caption
-            final String? mimeType =
-                dataMsg['mimeType']
-                    as String?; // Añadido por si lo necesitas en ChatBubbleCustom
-            // --- Fin de la definición ---
-
-            final bool estaCargandoInfoAutor =
-                autorId != null &&
-                autorId != 'sistema' &&
-                autorId != uid &&
-                autorInfo == null;
-
-            final int totalMensajes = inv.length;
-            final bool isGroupChat =
-                dataMsg['isGroup']
-                    as bool? ?? // Verificar si el mensaje tiene la propiedad isGroup
-                (chatIdSeleccionado != null &&
-                    cacheUsuarios[chatIdSeleccionado!]?['isGroup'] ==
-                        'true'); // Fallback si no está en dataMsg
+            // Esto sigue siendo una estimación. Idealmente, `isGroup` debería estar en el estado `_ChatHomePageState` o ser fácilmente accesible desde el documento del chat.
 
             final bool showName =
-                (isGroupChat && // Solo en grupos
-                    !esMio && // Solo para mensajes de otros
-                    (i ==
-                            totalMensajes -
-                                1 || // Si es el último mensaje en la lista (el más "nuevo" visualmente después de invertir)
-                        (i < totalMensajes - 1 &&
-                            (inv[i + 1].data()
-                                    as Map<String, dynamic>)['AutorID'] !=
-                                autorId) || // El mensaje anterior es de otro autor
-                        showDateSeparator) // O si es el primer mensaje después de un separador de fecha
+                _isCurrentChatGroup && // <--- USA LA VARIABLE DE ESTADO
+                !esMio &&
+                (i == 0 || // Si es el primer mensaje en la lista (el más nuevo visualmente)
+                    (i > 0 &&
+                        (messages[i - 1].data()
+                                as Map<String, dynamic>)['AutorID'] !=
+                            autorId) || // El mensaje "anterior" es de otro autor
+                    showDateSeparator // O si es el primer mensaje después de un separador de fecha
                     );
 
             return Column(
               crossAxisAlignment:
                   esMio ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
-                if (showDateSeparator) DateSeparator(fecha),
-                if (estaCargandoInfoAutor)
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      vertical: 4.0,
-                      horizontal: esMio ? 0 : 8.0,
-                    ),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Text(
-                          '...',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ),
-                    ),
-                  )
-                else
-                  ChatBubbleCustom(
-                    isMine: esMio,
-                    read: readByPeer,
-                    avatarUrl: urlAvatarParaMostrar ?? '',
-                    authorName: nombreAutorParaMostrar,
-                    text:
-                        textoDelMensaje, // Este es el caption o el texto del mensaje
-                    time: fecha,
-                    edited: dataMsg['editado'] as bool? ?? false,
-                    deleted: dataMsg['eliminado'] as bool? ?? false,
-                    reactions: Map<String, int>.from(
-                      dataMsg['reacciones'] ?? {},
-                    ),
-                    showName:
-                        showName &&
-                        nombreAutorParaMostrar.isNotEmpty &&
-                        nombreAutorParaMostrar != 'Cargando...',
+                if (showDateSeparator)
+                  DateSeparator(fecha), // Tu widget DateSeparator
+                ChatBubbleCustom(
+                  isMine: esMio,
 
-                    // Nuevos parámetros pasados correctamente
-                    tipoContenido: tipoContenido,
-                    urlContenido: urlContenido,
-                    nombreArchivo: nombreArchivo,
+                  // Pasa el mensajeId y chatId si tu ChatBubbleCustom los necesita para alguna acción
+                  // messageId: docMsg.id,
+                  // chatId: chatIdSeleccionado!,
+                  avatarUrl: urlAvatarParaMostrar ?? '',
+                  authorName: nombreAutorParaMostrar,
+                  showName:
+                      showName, // Tu lógica para mostrar el nombre en grupos
+                  time: fecha,
+                  read:
+                      (dataMsg['leidoPor'] as List? ?? []).length > 1 &&
+                      otroUid != null &&
+                      (dataMsg['leidoPor'] as List).contains(otroUid),
+                  edited: dataMsg['editado'] as bool? ?? false,
+                  deleted:
+                      dataMsg['eliminado'] as bool? ??
+                      false || tipoContenido == 'texto_eliminado',
+                  reactions: Map<String, int>.from(dataMsg['reacciones'] ?? {}),
 
-                    // mimeType: mimeType, // Descomenta si lo añades y usas en ChatBubbleCustom
-                    onEdit:
-                        (esMio && tipoContenido == 'texto')
-                            ? () => _editarMensaje(
-                              docMsg.id,
-                              textoDelMensaje ?? '',
-                              fechaTimestamp,
-                            )
-                            : null,
-                    onDelete: esMio ? () => _eliminarMensaje(docMsg.id) : null,
-                    onReact: () => _reaccionarMensaje(docMsg.id),
-                  ),
+                  // CAMPOS CLAVE PARA EL CONTENIDO
+                  tipoContenido: tipoContenido,
+                  text:
+                      textoDelMensaje, // Siempre pasa el texto (puede ser caption o el mensaje en sí)
+                  urlContenido:
+                      urlContenido, // URL para imagen, video, audio, doc
+                  nombreArchivo:
+                      nombreArchivo, // Nombre para audio, doc, video (opcional)
+                  // NUEVOS CAMPOS PARA YOUTUBE (solo se usan si tipoContenido es 'youtube_link')
+                  youtubeVideoId: dataMsg['youtubeVideoId'] as String?,
+                  youtubeTitle: dataMsg['youtubeTitle'] as String?,
+                  youtubeThumbnail: dataMsg['youtubeThumbnail'] as String?,
+
+                  onEdit:
+                      (esMio &&
+                              (tipoContenido == 'texto' ||
+                                  tipoContenido ==
+                                      'youtube_link' /*Solo si quieres editar la URL*/ ))
+                          ? () => _editarMensaje(
+                            docMsg.id,
+                            textoDelMensaje ?? '',
+                            fechaTimestamp,
+                          )
+                          : null,
+                  onDelete: esMio ? () => _eliminarMensaje(docMsg.id) : null,
+                  onReact: () => _reaccionarMensaje(docMsg.id),
+                ),
               ],
             );
           },
@@ -4621,14 +4912,21 @@ class _ChatHomePageState extends State<ChatHomePage> {
                       child: Wrap(
                         children: <Widget>[
                           ListTile(
-                            leading: const Icon(Icons.photo_library),
-                            title: const Text('Galería (Imagen/Video)'),
+                            leading: const Icon(
+                              Icons.image,
+                            ), // O Icons.photo_library
+                            title: const Text('Imagen/GIF'),
                             onTap: () {
                               Navigator.of(context).pop();
-                              _seleccionarImagen(); // Mantenemos tu función original para imágenes/videos vía html.FileUploadInputElement
-                              // Si quieres usar file_picker para imágenes/videos también,
-                              // llamarías a: _seleccionarArchivoGenerico(FileType.media);
-                              // o _seleccionarArchivoGenerico(FileType.image); y _seleccionarArchivoGenerico(FileType.video);
+                              _seleccionarImagen(); // Llama a tu función para imágenes/GIFs
+                            },
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.videocam),
+                            title: const Text('Video'),
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              _seleccionarVideo(); // Llama a la nueva función
                             },
                           ),
                           ListTile(
@@ -4636,7 +4934,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                             title: const Text('Audio'),
                             onTap: () {
                               Navigator.of(context).pop();
-                              _seleccionarAudio(); // <--- MODIFICADO
+                              _seleccionarAudio(); // Llama a la nueva función
                             },
                           ),
                           ListTile(
@@ -4644,7 +4942,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                             title: const Text('Documento'),
                             onTap: () {
                               Navigator.of(context).pop();
-                              _seleccionarDocumento(); // <--- MODIFICADO
+                              _seleccionarDocumento(); // Tu función existente
                             },
                           ),
                         ],
