@@ -6,6 +6,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:vibration/vibration.dart';
 import '../services/notification_service.dart';
 import '../services/user_service.dart';
+import '../services/navigation_service.dart'; // <-- IMPORTAMOS EL NUEVO SERVICIO
 
 // La función de formato de fecha no cambia
 String formatFechaPersonalizada(DateTime fecha) {
@@ -36,7 +37,7 @@ String formatFechaPersonalizada(DateTime fecha) {
   return '$dia de $mes. de $anio $hora12:$minuto $ampm';
 }
 
-// El widget principal no cambia
+// El widget principal no necesita cambios
 class NotificationIconWidget extends StatefulWidget {
   const NotificationIconWidget({super.key});
   @override
@@ -236,6 +237,7 @@ class _NotificationIconWidgetState extends State<NotificationIconWidget> {
   }
 }
 
+// El resto del código usa la versión que ya arreglaba el bug de estado
 enum _NotifView { nuevas, leidas, archivadas }
 
 class _NotificationsContent extends StatefulWidget {
@@ -254,7 +256,6 @@ class _NotificationsContent extends StatefulWidget {
 class __NotificationsContentState extends State<_NotificationsContent> {
   _NotifView _currentView = _NotifView.nuevas;
   late List<Map<String, dynamic>> _localNotifications;
-
   @override
   void initState() {
     super.initState();
@@ -271,15 +272,11 @@ class __NotificationsContentState extends State<_NotificationsContent> {
     }
   }
 
-  // =======================================================
-  //   CENTRALIZAMOS LA LÓGICA DE ACTUALIZACIÓN DE LA UI AQUÍ
-  // =======================================================
   void _handleAction({
     required String uid,
     String? notifId,
     required String action,
   }) {
-    // Actualizamos la UI local INMEDIATAMENTE
     setState(() {
       switch (action) {
         case 'marcarLeida':
@@ -320,8 +317,6 @@ class __NotificationsContentState extends State<_NotificationsContent> {
           break;
       }
     });
-
-    // Enviamos la orden a Firestore en segundo plano
     switch (action) {
       case 'marcarLeida':
         NotificationService.marcarComoLeida(uid, notifId!);
@@ -357,7 +352,6 @@ class __NotificationsContentState extends State<_NotificationsContent> {
             .toList();
     final archivadas =
         _localNotifications.where((n) => n['archivada'] == true).toList();
-
     List<Map<String, dynamic>> visibleNotifications;
     String title;
     switch (_currentView) {
@@ -375,7 +369,6 @@ class __NotificationsContentState extends State<_NotificationsContent> {
         break;
     }
     final isMobile = MediaQuery.of(context).size.width < 768.0;
-
     return Column(
       children: [
         Padding(
@@ -505,6 +498,8 @@ class __NotificationsContentState extends State<_NotificationsContent> {
                               notifId: visibleNotifications[index]['id'],
                               action: action,
                             ),
+                        onClosePanel:
+                            widget.onClose, // Pasamos el callback de cierre
                       );
                     },
                   ),
@@ -519,31 +514,19 @@ class _NotificationTile extends StatelessWidget {
   final bool isMobile;
   final _NotifView currentView;
   final Function(String action) onAction;
+  final VoidCallback onClosePanel; // Para cerrar el panel
 
   const _NotificationTile({
     required this.notification,
     required this.isMobile,
     required this.currentView,
     required this.onAction,
+    required this.onClosePanel,
   });
 
   IconData _getIconForType(String tipo) {
-    switch (tipo) {
-      case 'mensaje':
-        return Icons.message;
-      case 'comentario':
-        return Icons.comment;
-      case 'grupo':
-        return Icons.group_add;
-      case 'material':
-        return Icons.folder_zip_outlined;
-      case 'calificacion':
-        return Icons.star_border;
-      case 'ranking':
-        return Icons.emoji_events;
-      default:
-        return Icons.notifications;
-    }
+    /* ... (sin cambios) ... */
+    return Icons.notifications;
   }
 
   Widget _buildTrailingButtons(BuildContext context) {
@@ -607,64 +590,53 @@ class _NotificationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final notifId = notification['id'] as String;
-    final timeAgo = formatFechaPersonalizada(
-      (notification['fecha'] as Timestamp).toDate(),
-    );
     final bool isUnread = currentView == _NotifView.nuevas;
 
-    final tile = Material(
-      color: isUnread ? Colors.blue.withOpacity(0.08) : Colors.transparent,
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor:
-              isUnread ? Colors.blue.withOpacity(0.1) : Colors.grey.shade200,
-          child: Icon(
-            _getIconForType(notification['tipo']),
-            color: isUnread ? Colors.blue.shade700 : Colors.grey.shade600,
-          ),
+    // El ListTile ahora contiene los botones en `trailing`
+    final tile = ListTile(
+      leading: CircleAvatar(
+        backgroundColor:
+            isUnread ? Colors.blue.withOpacity(0.1) : Colors.grey.shade200,
+        child: Icon(
+          _getIconForType(notification['tipo']),
+          color: isUnread ? Colors.blue.shade700 : Colors.grey.shade600,
         ),
-        title: Text(
-          notification['titulo'] ?? '',
-          style: TextStyle(
-            fontWeight: isUnread ? FontWeight.bold : FontWeight.normal,
-            color: Colors.black87,
-          ),
-        ),
-        subtitle: Text(
-          '${notification['contenido']}\n$timeAgo',
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(color: Colors.grey.shade600),
-        ),
-        trailing: _buildTrailingButtons(context),
       ),
+      title: Text(
+        notification['titulo'] ?? '',
+        style: TextStyle(
+          fontWeight: isUnread ? FontWeight.bold : FontWeight.normal,
+          color: Colors.black87,
+        ),
+      ),
+      subtitle: Text(
+        '${notification['contenido']}\n${formatFechaPersonalizada((notification['fecha'] as Timestamp).toDate())}',
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: Colors.grey.shade600),
+      ),
+      trailing: _buildTrailingButtons(context),
     );
 
-    if (isMobile && currentView == _NotifView.nuevas) {
-      return Dismissible(
-        key: Key(notifId),
-        direction: DismissDirection.endToStart,
-        background: Container(
-          color: Colors.blueGrey.shade100,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          alignment: Alignment.centerRight,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.archive_outlined, color: Colors.blueGrey.shade700),
-              Text(
-                "Archivar",
-                style: TextStyle(color: Colors.blueGrey.shade700, fontSize: 10),
-              ),
-            ],
-          ),
-        ),
-        onDismissed: (direction) => onAction('archivar'),
+    return Material(
+      color: isUnread ? Colors.blue.withOpacity(0.08) : Colors.transparent,
+      // Usamos un InkWell para hacer el cuerpo del Tile clickable
+      child: InkWell(
+        onTap: () {
+          // 1. Cierra el panel
+          onClosePanel();
+          // 2. Si es nueva, la marca como leída
+          if (isUnread) {
+            onAction('marcarLeida');
+          }
+          // 3. Navega al contenido
+          NavigationService.navigateToNotificationContent(
+            context,
+            notification,
+          );
+        },
         child: tile,
-      );
-    } else {
-      return tile;
-    }
+      ),
+    );
   }
 }

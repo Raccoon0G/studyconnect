@@ -20,8 +20,9 @@ import 'package:study_connect/config/secrets.dart';
 //  Para la funcionalidad de compartir avanzada
 import 'package:path_provider/path_provider.dart'; // Necesario para guardar imagen en móvil
 import 'dart:io'; // Necesario para File
-import 'package:flutter/foundation.dart'
-    show kIsWeb; // Para diferenciar entre web y móvil
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+import '../services/services.dart'; // Para diferenciar entre web y móvil
 
 class MaterialViewPage extends StatefulWidget {
   final String tema;
@@ -1902,6 +1903,38 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
 
     if (autorId != null && autorId is String && autorId.trim().isNotEmpty) {
       await actualizarTodoCalculoDeUsuario(uid: autorId);
+    }
+
+    if (autorId != null && autorId != user.uid) {
+      final nombreEmisor =
+          comoAnonimo ? 'Alguien' : userData['Nombre'] ?? 'Alguien';
+      final tituloMaterial = materialData?['titulo'] ?? 'tu material';
+
+      // 1. Notificación por la calificación
+      // Usamos el tipo 'material' que el NavigationService ya sabe cómo manejar.
+      await NotificationService.crearNotificacion(
+        uidDestino: autorId,
+        tipo: 'material',
+        titulo: '$nombreEmisor ha calificado tu material',
+        contenido: 'Le ha dado $rating estrellas a "$tituloMaterial".',
+        referenciaId: widget.materialId,
+        tema: widget.tema,
+        uidEmisor: user.uid,
+        nombreEmisor: nombreEmisor,
+      );
+
+      // 2. Notificación por el comentario
+      await NotificationService.crearNotificacion(
+        uidDestino: autorId,
+        tipo: 'material',
+        titulo: '$nombreEmisor comentó en tu material',
+        contenido:
+            texto, // El contenido de la notificación es el comentario mismo
+        referenciaId: widget.materialId,
+        tema: widget.tema,
+        uidEmisor: user.uid,
+        nombreEmisor: nombreEmisor,
+      );
     }
 
     await _cargarComentarios();
