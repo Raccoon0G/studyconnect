@@ -908,7 +908,7 @@ class _MaterialListPageState extends State<MaterialListPage> {
           (_temaKey != null && !_showCenteredUploadButton)
               ? FloatingActionButton.extended(
                 onPressed: _handleUploadNavigation,
-                label: const Text('Subir Material'), // Texto adaptado
+                label: const Text('Agregar'), // Texto adaptado
                 icon: const Icon(Icons.add),
                 backgroundColor: theme.colorScheme.primaryContainer,
                 foregroundColor: theme.colorScheme.onPrimaryContainer,

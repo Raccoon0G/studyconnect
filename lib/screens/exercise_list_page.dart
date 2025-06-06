@@ -866,7 +866,7 @@ class _ExerciseListPageState extends State<ExerciseListPage> {
           (_temaKey != null && !_showCenteredUploadButton)
               ? FloatingActionButton.extended(
                 onPressed: _handleUploadNavigation,
-                label: const Text('Subir Ejercicio'),
+                label: const Text('Agregar'),
                 icon: const Icon(Icons.add),
                 backgroundColor: theme.colorScheme.primaryContainer,
                 foregroundColor: theme.colorScheme.onPrimaryContainer,
