@@ -540,6 +540,8 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
   // --- FIN DE HELPERS DE MEDIA ---
 
   @override
+  // En tu archivo chat_bubble.dart, dentro de la clase _ChatBubbleCustomState
+  @override
   Widget build(BuildContext context) {
     Color bubbleBackgroundColor =
         widget.deleted
@@ -548,51 +550,111 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
             ? Theme.of(context).colorScheme.primary
             : const Color(0xFFE7E7ED);
 
-    EdgeInsets contentPadding = const EdgeInsets.all(10);
-    bool hasMedia =
-        widget.tipoContenido == 'imagen' ||
-        widget.tipoContenido == 'gif' ||
-        widget.tipoContenido == 'video' ||
-        widget.tipoContenido == 'youtube_link';
+    EdgeInsets contentPadding = const EdgeInsets.symmetric(
+      horizontal: 12,
+      vertical: 8,
+    );
+    bool hasMediaWithoutCaption =
+        (widget.tipoContenido == 'imagen' ||
+            widget.tipoContenido == 'gif' ||
+            widget.tipoContenido == 'video') &&
+        (widget.text == null || widget.text!.trim().isEmpty);
+    bool isSpecialMedia =
+        widget.tipoContenido == 'youtube_link' ||
+        widget.tipoContenido == 'audio' ||
+        widget.tipoContenido == 'video';
 
-    if (hasMedia) {
-      contentPadding =
-          widget.text == null || widget.text!.trim().isEmpty
-              ? const EdgeInsets.all(3)
-              : const EdgeInsets.fromLTRB(3, 3, 3, 8);
-    } else if (widget.tipoContenido == 'audio') {
-      contentPadding = const EdgeInsets.symmetric(horizontal: 6, vertical: 4);
+    if (isSpecialMedia) {
+      contentPadding = EdgeInsets.zero; // El widget interno maneja su padding
+    } else if (hasMediaWithoutCaption) {
+      contentPadding = const EdgeInsets.all(
+        3,
+      ); // Menos padding para solo imagen
     }
 
-    // =======================================================================
-    // AQUI ESTÁ LA ESTRUCTURA VISUAL CORREGIDA, BASADA EN TU CÓDIGO ORIGINAL
-    // =======================================================================
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
       child: Row(
         mainAxisAlignment:
             widget.isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment:
-            CrossAxisAlignment
-                .start, // <-- CLAVE: Alinea arriba, como en tu original
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Avatar a la izquierda para mensajes recibidos
           if (!widget.isMine)
-            CircleAvatar(
-              radius: 14,
-              backgroundImage:
-                  widget.avatarUrl.isNotEmpty
-                      ? CachedNetworkImageProvider(widget.avatarUrl)
-                      : const AssetImage('assets/images/avatar1.webp')
-                          as ImageProvider,
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: CircleAvatar(
+                radius: 16,
+                backgroundImage:
+                    widget.avatarUrl.isNotEmpty
+                        ? CachedNetworkImageProvider(widget.avatarUrl)
+                        : const AssetImage('assets/images/avatar1.webp')
+                            as ImageProvider,
+              ),
             ),
-          if (!widget.isMine)
-            const SizedBox(width: 6), // <-- CLAVE: Espacio simple
-          // La burbuja del mensaje
+
+          // Flexible es importante para que los mensajes largos no rompan la UI
           Flexible(
             child: GestureDetector(
+              // <-- ESTE ES EL WIDGET CLAVE QUE FALTABA
               onLongPress: () {
-                // Tu lógica de menú (onLongPress)
+                if (widget.deleted)
+                  return; // No mostrar menú para mensajes eliminados
+                showModalBottomSheet(
+                  context: context,
+                  backgroundColor: Theme.of(context).canvasColor,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
+                  ),
+                  builder:
+                      (_) => Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Opción para Editar
+                          if (widget.isMine &&
+                              widget.tipoContenido == 'texto' &&
+                              widget.onEdit != null)
+                            ListTile(
+                              leading: const Icon(Icons.edit),
+                              title: const Text('Editar'),
+                              onTap: () {
+                                Navigator.pop(context);
+                                widget.onEdit!();
+                              },
+                            ),
+                          // Opción para Eliminar
+                          if (widget.isMine && widget.onDelete != null)
+                            ListTile(
+                              leading: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.red,
+                              ),
+                              title: const Text(
+                                'Eliminar',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                              onTap: () {
+                                Navigator.pop(context);
+                                widget.onDelete!();
+                              },
+                            ),
+                          // Opción para Reaccionar
+                          if (widget.onReact != null)
+                            ListTile(
+                              leading: const Icon(
+                                Icons.emoji_emotions_outlined,
+                              ),
+                              title: const Text('Reaccionar'),
+                              onTap: () {
+                                Navigator.pop(context);
+                                widget.onReact!();
+                              },
+                            ),
+                        ],
+                      ),
+                );
               },
               child: ChatBubble(
                 clipper: ChatBubbleClipper1(
@@ -608,9 +670,7 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
                 child: Container(
                   padding: contentPadding,
                   constraints: BoxConstraints(
-                    maxWidth:
-                        MediaQuery.of(context).size.width *
-                        (kIsWeb ? 0.55 : 0.75),
+                    maxWidth: MediaQuery.of(context).size.width * 0.75,
                   ),
                   child: Column(
                     crossAxisAlignment:
@@ -623,62 +683,95 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
                       _buildContentWidget(context),
 
                       // Las reacciones
-                      if (widget.reactions.isNotEmpty && !widget.deleted) ...[
+                      if (widget.reactions.isNotEmpty) ...[
                         const SizedBox(height: 4),
-                        // Tu widget de reacciones aquí
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: Wrap(
+                            alignment:
+                                widget.isMine
+                                    ? WrapAlignment.end
+                                    : WrapAlignment.start,
+                            spacing: 4,
+                            runSpacing: 2,
+                            children:
+                                widget.reactions.entries
+                                    .map(
+                                      (e) => Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 5,
+                                          vertical: 1.5,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '${e.key} ${e.value > 1 ? e.value : ''}'
+                                              .trim(),
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color:
+                                                widget.isMine
+                                                    ? Colors.white70
+                                                    : Colors.black54,
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                          ),
+                        ),
                       ],
 
                       // La hora y el check de leído
-                      if (!widget.deleted)
-                        Padding(
-                          padding: const EdgeInsets.only(
-                            top: 4.0,
-                            left: 2.0,
-                            right: 2.0,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            mainAxisAlignment:
-                                widget.isMine
-                                    ? MainAxisAlignment.end
-                                    : MainAxisAlignment.start,
-                            children: [
-                              if (widget.edited)
-                                Text(
-                                  '(editado) ',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontStyle: FontStyle.italic,
-                                    color:
-                                        widget.isMine
-                                            ? Colors.white70
-                                            : Colors.black54,
-                                  ),
-                                ),
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          top: 4.0,
+                          left: 8.0,
+                          right: 8.0,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (widget.edited)
                               Text(
-                                _formatTime(widget.time),
+                                '(editado) ',
                                 style: TextStyle(
                                   fontSize: 10,
+                                  fontStyle: FontStyle.italic,
                                   color:
                                       widget.isMine
                                           ? Colors.white70
                                           : Colors.black54,
                                 ),
                               ),
-                              if (widget.isMine) ...[
-                                const SizedBox(width: 4),
-                                Icon(
-                                  widget.read ? Icons.done_all : Icons.check,
-                                  size: 14,
-                                  color:
-                                      widget.read
-                                          ? Colors.lightBlueAccent.shade100
-                                          : Colors.white70,
-                                ),
-                              ],
+                            Text(
+                              _formatTime(widget.time),
+                              style: TextStyle(
+                                fontSize: 10,
+                                color:
+                                    widget.isMine
+                                        ? Colors.white70
+                                        : Colors.black54,
+                              ),
+                            ),
+                            if (widget.isMine) ...[
+                              const SizedBox(width: 4),
+                              Icon(
+                                widget.read ? Icons.done_all : Icons.check,
+                                size: 14,
+                                color:
+                                    widget.read
+                                        ? Colors.lightBlueAccent.shade100
+                                        : Colors.white70,
+                              ),
                             ],
-                          ),
+                          ],
                         ),
+                      ),
                     ],
                   ),
                 ),
@@ -688,15 +781,16 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
 
           // Avatar a la derecha para mensajes enviados
           if (widget.isMine)
-            const SizedBox(width: 6), // <-- CLAVE: Espacio simple
-          if (widget.isMine)
-            CircleAvatar(
-              radius: 14,
-              backgroundImage:
-                  widget.avatarUrl.isNotEmpty
-                      ? CachedNetworkImageProvider(widget.avatarUrl)
-                      : const AssetImage('assets/images/avatar1.webp')
-                          as ImageProvider,
+            Padding(
+              padding: const EdgeInsets.only(left: 8.0),
+              child: CircleAvatar(
+                radius: 16,
+                backgroundImage:
+                    widget.avatarUrl.isNotEmpty
+                        ? CachedNetworkImageProvider(widget.avatarUrl)
+                        : const AssetImage('assets/images/avatar1.webp')
+                            as ImageProvider,
+              ),
             ),
         ],
       ),

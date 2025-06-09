@@ -434,11 +434,15 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                   return ElevatedButton(
                     onPressed: () => _insertLatexSymbol(stepIndex, symbol),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade50,
+                      backgroundColor: Colors.blue.shade400,
+                      foregroundColor: Colors.blue.shade100,
                       padding: const EdgeInsets.all(10),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
+
+                      side: BorderSide(color: Colors.blue.shade600, width: 1),
+                      elevation: 2, //sombra para que resalten
                     ),
                     child: Math.tex(
                       symbol,
@@ -709,7 +713,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          //TODO: Hacer que el renderizado de la descripcion se haga mas grande conforme al texto
+                          // --- COLUMNA IZQUIERDA (CON LA SOLUCIÓN FLEXIBLE) ---
                           Container(
                             width: 340,
                             padding: const EdgeInsets.all(16),
@@ -756,11 +760,13 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                                     ),
                                   ),
                                 ),
-
                                 if (_modo == 'editar' &&
                                     _versionActualId != null)
                                   Padding(
-                                    padding: const EdgeInsets.only(bottom: 12),
+                                    padding: const EdgeInsets.only(
+                                      top: 12,
+                                      bottom: 4,
+                                    ), //Ajuste de padding
                                     child: Container(
                                       padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
@@ -778,7 +784,10 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                                 if (_modo == 'nueva_version' &&
                                     _ejercicioId != null)
                                   Padding(
-                                    padding: const EdgeInsets.only(bottom: 12),
+                                    padding: const EdgeInsets.only(
+                                      top: 12,
+                                      bottom: 4,
+                                    ), //Ajuste de padding
                                     child: Container(
                                       padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
@@ -793,9 +802,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                                       ),
                                     ),
                                   ),
-
                                 const SizedBox(height: 16),
-
                                 const Text(
                                   'Título',
                                   style: TextStyle(color: Colors.white),
@@ -907,17 +914,26 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                                   ),
                                 ),
                                 const SizedBox(height: 14),
-                                Center(
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: SizedBox(
-                                      width: double.infinity,
-                                      height: 244,
-                                      child: AspectRatio(
-                                        aspectRatio: 4 / 3,
-                                        child: Container(
-                                          color: Colors.white10,
-                                          child: const ExerciseCarousel(),
+
+                                // --- CAMBIO PRINCIPAL AQUÍ ---
+                                // Se envuelve en Flexible para que se encoja si no hay espacio
+                                Flexible(
+                                  child: Center(
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: SizedBox(
+                                        width: double.infinity,
+                                        // Se elimina la altura fija para permitir que sea flexible
+                                        child: AspectRatio(
+                                          aspectRatio: 4 / 3,
+                                          child: Container(
+                                            // Se añade una restricción de altura máxima para que no crezca indefinidamente
+                                            constraints: const BoxConstraints(
+                                              maxHeight: 244,
+                                            ),
+                                            color: Colors.white10,
+                                            child: const ExerciseCarousel(),
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -927,8 +943,10 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                             ),
                           ),
 
-                          //ToDo: Cambiar a un widget de imagen
                           const SizedBox(width: 20),
+
+                          // --- COLUMNA DERECHA (SIN CAMBIOS) ---
+                          // Ahora funcionará correctamente porque la columna izquierda no se desborda
                           Expanded(
                             child: Container(
                               padding: const EdgeInsets.all(16),
