@@ -84,7 +84,8 @@ class CreditsPage extends StatelessWidget {
             icon: Icons.smart_toy_outlined,
             iconColor: Colors.green.shade600,
             title: 'OpenAI API',
-            subtitle: 'Generación de preguntas para el banco de reactivos.',
+            subtitle:
+                'Generación de preguntas para el banco de la Autoevaluación.',
             onTap: () => _launchURL('https://openai.com'),
           ),
           _buildTechnologyTile(
