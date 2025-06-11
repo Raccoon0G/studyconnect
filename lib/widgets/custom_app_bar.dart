@@ -8,9 +8,8 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String? titleText;
   final Widget? titleWidget;
   final List<String> excludeRoutes;
-  final bool showMainTitleOnly; // NUEVO: Para simplificar el AppBar
-  final bool
-  centerTitleOverride; // NUEVO: Para forzar el centrado si es necesario
+  final bool showMainTitleOnly;
+  final bool centerTitleOverride;
 
   const CustomAppBar({
     super.key,
@@ -19,7 +18,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.titleText,
     this.titleWidget,
     this.excludeRoutes = const [],
-    this.showMainTitleOnly = false, // Por defecto, mostrar todo
+    this.showMainTitleOnly = false,
     this.centerTitleOverride = false,
   }) : assert(
          titleText == null || titleWidget == null,
@@ -76,48 +75,16 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     Widget? effectiveTitleContent;
 
     if (showMainTitleOnly) {
-      // Si solo queremos el título principal
       effectiveTitleContent = Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const Text(
-            'Study Connect', // Título fijo en este modo
+            'Study Connect',
             style: TextStyle(
               color: Colors.white,
               fontSize: 22,
-              fontWeight: FontWeight.bold, // Añadido para destacar
-            ),
-          ),
-          if (!isMobile) ...[
-            const SizedBox(width: 16),
-            Image.asset(
-              'assets/images/IPN-Logo.webp',
-              width: 72, // Tu tamaño original
-              height: 72,
-              fit: BoxFit.contain,
-              errorBuilder:
-                  (context, error, stackTrace) => const Icon(
-                    Icons.school,
-                    color: Colors.white70,
-                    size: 40,
-                  ), // Icono más grande como fallback
-            ),
-          ],
-        ],
-      );
-    } else if (titleWidget != null) {
-      effectiveTitleContent = titleWidget;
-    } else if (titleText != null) {
-      effectiveTitleContent = Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            titleText!,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22, // Consistente con tu estilo original
+              fontWeight: FontWeight.bold,
             ),
           ),
           if (!isMobile) ...[
@@ -134,8 +101,43 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
           ],
         ],
       );
+    } else if (titleWidget != null) {
+      effectiveTitleContent = titleWidget;
+    } else if (titleText != null) {
+      // ✅ INICIO DE LA CORRECCIÓN PARA EL DESBORDAMIENTO
+      effectiveTitleContent = Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Se envuelve el Text en Flexible para que se ajuste.
+          Flexible(
+            child: Text(
+              titleText!,
+              style: const TextStyle(color: Colors.white, fontSize: 22),
+              softWrap:
+                  true, // Permite que el texto se divida en varias líneas.
+              textAlign:
+                  isMobile
+                      ? TextAlign.center
+                      : TextAlign.start, // Opcional: Centra el título en móvil.
+            ),
+          ),
+          if (!isMobile) ...[
+            const SizedBox(width: 16),
+            Image.asset(
+              'assets/images/IPN-Logo.webp',
+              width: 72,
+              height: 72,
+              fit: BoxFit.contain,
+              errorBuilder:
+                  (context, error, stackTrace) =>
+                      const Icon(Icons.school, color: Colors.white70, size: 40),
+            ),
+          ],
+        ],
+      );
+      // ✅ FIN DE LA CORRECCIÓN
     } else {
-      // Título por defecto si ninguno se provee y showMainTitleOnly es false
       effectiveTitleContent = Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -167,7 +169,6 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     // --- Determinar las acciones ---
     List<Widget> actions = [];
     if (!showMainTitleOnly) {
-      // Solo mostrar acciones si no estamos en modo "solo título principal"
       if (isMobile) {
         actions = [
           if (FirebaseAuth.instance.currentUser != null)
@@ -213,7 +214,6 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     return PreferredSize(
       preferredSize: Size.fromHeight(height),
       child: Container(
-        // RESTAURADO EL GRADIENTE ORIGINAL
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -234,9 +234,8 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
                   )
                   : null,
           title: effectiveTitleContent,
-          // Centrar título si es móvil Y no es el modo "solo título principal" O si centerTitleOverride es true
           centerTitle: (isMobile && !showMainTitleOnly) || centerTitleOverride,
-          actions: actions, // Usar la lista de acciones determinada
+          actions: actions,
         ),
       ),
     );
