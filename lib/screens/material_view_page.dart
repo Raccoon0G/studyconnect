@@ -215,7 +215,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
         showFeedbackDialogAndSnackbar(
           context: context,
           titulo: '¡Éxito!',
-          mensaje: 'Comentario elimnado correctamente.',
+          mensaje: 'Comentario eliminado correctamente.',
           tipo: CustomDialogType.success,
           snackbarMessage: '✅ ¡Comentario Eliminado!',
           snackbarSuccess: true,
@@ -1668,10 +1668,11 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
   }
 
   void _mostrarDialogoCalificacion() {
-    final controller = TextEditingController();
+    final TextEditingController controller = TextEditingController();
     bool enviando = false;
     int rating = 0;
     bool comoAnonimo = false;
+    String? errorMessage;
 
     showDialog(
       context: context,
@@ -1685,14 +1686,18 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
               ),
               contentPadding: const EdgeInsets.all(24),
               content: _buildContenidoDialogo(
-                controller,
-                () => comoAnonimo,
-                (v) => setStateDialog(() => comoAnonimo = v),
-                () => rating,
-                (v) => setStateDialog(() => rating = v),
-                enviando,
-                (v) => setStateDialog(() => enviando = v),
-                dialogContext,
+                controller: controller,
+                getComoAnonimo: () => comoAnonimo,
+                setComoAnonimo:
+                    (val) => setStateDialog(() => comoAnonimo = val),
+                getRating: () => rating,
+                setRating: (val) => setStateDialog(() => rating = val),
+                isSending: () => enviando,
+                setSending: (val) => setStateDialog(() => enviando = val),
+                getErrorMessage: () => errorMessage,
+                setErrorMessage:
+                    (val) => setStateDialog(() => errorMessage = val),
+                dialogContext: dialogContext,
               ),
             );
           },
@@ -1701,22 +1706,27 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     );
   }
 
-  Widget _buildContenidoDialogo(
-    TextEditingController controller,
-    bool Function() getComoAnonimo,
-    void Function(bool) setComoAnonimo,
-    int Function() getRating,
-    void Function(int) setRating,
-    bool enviando,
-    void Function(bool) setEnviando,
-    BuildContext dialogContext,
-  ) {
+  Widget _buildContenidoDialogo({
+    required TextEditingController controller,
+    required bool Function() getComoAnonimo,
+    required void Function(bool) setComoAnonimo,
+    required int Function() getRating,
+    required void Function(int) setRating,
+    required bool Function() isSending,
+    required void Function(bool) setSending,
+    required String? Function() getErrorMessage,
+    required void Function(String?) setErrorMessage,
+    required BuildContext dialogContext,
+  }) {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 500),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        physics: const BouncingScrollPhysics(),
+        // El padding se ajusta aquí para un mejor look
+        padding: const EdgeInsets.all(0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
@@ -1737,24 +1747,49 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
               ],
             ),
             const SizedBox(height: 12),
-            CustomRatingWidget(
-              rating: getRating(),
-              onRatingChanged: (v) => setRating(v),
-              enableHoverEffect: true,
+            Center(
+              child: CustomRatingWidget(
+                rating: getRating(),
+                onRatingChanged: (nuevoValor) {
+                  setRating(nuevoValor);
+                  if (getErrorMessage() != null) {
+                    setErrorMessage(null);
+                  }
+                },
+                enableHoverEffect: true,
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             TextField(
               controller: controller,
+              onChanged: (_) {
+                if (getErrorMessage() != null) {
+                  setErrorMessage(null);
+                }
+              },
               decoration: const InputDecoration(
                 labelText: 'Comentario',
                 border: OutlineInputBorder(),
               ),
               maxLines: 2,
             ),
+
+            // ✅ Widget para mostrar el mensaje de error.
+            if (getErrorMessage() != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  getErrorMessage()!,
+                  style: const TextStyle(color: Colors.red, fontSize: 13),
+                ),
+              ),
+
             const SizedBox(height: 12),
             CheckboxListTile(
               value: getComoAnonimo(),
-              onChanged: (v) => setComoAnonimo(v ?? false),
+              onChanged: (val) {
+                if (val != null) setComoAnonimo(val);
+              },
               title: const Text('Comentar como anónimo'),
               controlAffinity: ListTileControlAffinity.leading,
               contentPadding: EdgeInsets.zero,
@@ -1769,52 +1804,44 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
+                  // ✅ LÓGICA DE ENVÍO ACTUALIZADA PARA CENSURAR
                   onPressed:
-                      enviando
+                      isSending()
                           ? null
                           : () async {
+                            setErrorMessage(null);
+
                             if (controller.text.trim().isEmpty ||
                                 getRating() == 0) {
-                              await showCustomDialog(
-                                context: dialogContext,
-                                titulo: 'Campos incompletos',
-                                mensaje:
-                                    'Por favor escribe un comentario y selecciona una calificación.',
-                                tipo: CustomDialogType.error,
-                                botones: [
-                                  DialogButton(
-                                    texto: 'Aceptar',
-                                    onPressed: () async {
-                                      Navigator.of(context).pop();
-                                    },
-                                  ),
-                                  DialogButton(
-                                    texto: 'Intentar de nuevo',
-                                    onPressed: () async {
-                                      Navigator.of(context).pop();
-                                      _mostrarDialogoCalificacion();
-                                    },
-                                  ),
-                                ],
+                              setErrorMessage(
+                                'Por favor, deja un comentario y una calificación.',
                               );
                               return;
                             }
-                            setEnviando(true);
+
+                            setSending(true);
+
+                            // Se llama a la función sin esperar un booleano de vuelta.
                             await _enviarComentario(
                               controller.text.trim(),
                               getRating(),
                               getComoAnonimo(),
                             );
-                            setEnviando(false);
-                            Navigator.of(dialogContext).pop();
-                            showCustomSnackbar(
-                              context: context,
-                              message: '✅ Comentario enviado exitosamente.',
-                              success: true,
-                            );
+
+                            setSending(false);
+
+                            // Si el widget sigue montado, cerramos el diálogo y mostramos éxito.
+                            if (mounted) {
+                              Navigator.of(dialogContext).pop();
+                              showCustomSnackbar(
+                                context: context,
+                                message: '✅ Comentario enviado exitosamente.',
+                                success: true,
+                              );
+                            }
                           },
                   icon:
-                      enviando
+                      isSending()
                           ? const SizedBox(
                             width: 20,
                             height: 20,
@@ -1824,7 +1851,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
                             ),
                           )
                           : const Icon(Icons.send),
-                  label: Text(enviando ? 'Enviando...' : 'Enviar'),
+                  label: Text(isSending() ? 'Enviando...' : 'Enviar'),
                 ),
               ],
             ),
@@ -1840,7 +1867,13 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
     bool comoAnonimo,
   ) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null || texto.isEmpty || rating == 0) return;
+    if (user == null || texto.isEmpty || rating == 0) {
+      return; // Si no hay datos básicos, no hacemos nada.
+    }
+
+    // ✅ CAMBIO PRINCIPAL: De Bloquear a Censurar.
+    // Ahora transformamos el texto en lugar de detener la operación.
+    final textoCensurado = ProfanityFilter.censurar(texto);
 
     final userData =
         await FirebaseFirestore.instance
@@ -1858,7 +1891,7 @@ class _MaterialViewPageState extends State<MaterialViewPage> {
       'usuarioId': user.uid,
       'nombre': nombreUsuario,
       'fotoUrl': fotoUrl,
-      'comentario': texto,
+      'comentario': textoCensurado,
       'estrellas': rating,
       'timestamp': Timestamp.now(),
       'tema': widget.tema,

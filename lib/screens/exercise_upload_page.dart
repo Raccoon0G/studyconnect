@@ -125,6 +125,33 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
       return;
     }
 
+    if (ProfanityFilter.esProfano(titulo) ||
+        ProfanityFilter.esProfano(descripcion)) {
+      await showCustomDialog(
+        context: context,
+        titulo: 'Contenido no permitido',
+        mensaje:
+            'Hemos detectado lenguaje inapropiado en el título o la descripción. Por favor, revísalos.',
+        tipo: CustomDialogType.error,
+      );
+      return; // Detiene la subida
+    }
+
+    // 2. Revisar la descripción de cada paso
+    for (final step in _stepsControllers) {
+      final descPaso = (step['desc'] as TextEditingController).text.trim();
+      if (ProfanityFilter.esProfano(descPaso)) {
+        await showCustomDialog(
+          context: context,
+          titulo: 'Contenido no permitido',
+          mensaje:
+              'Hemos detectado lenguaje inapropiado en la descripción de uno de los pasos. Por favor, revísala.',
+          tipo: CustomDialogType.error,
+        );
+        return; // Detiene la subida
+      }
+    }
+
     if (titulo.isEmpty || descripcion.isEmpty) {
       await showCustomDialog(
         context: context,
@@ -713,241 +740,254 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // --- COLUMNA IZQUIERDA (CON LA SOLUCIÓN FLEXIBLE) ---
-                          Container(
-                            width: 340,
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF055B84),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Tema :',
-                                  style: TextStyle(color: Colors.white),
+                          // --- COLUMNA IZQUIERDA (FLEXIBLE) ---
+                          // Se reemplaza el Container con ancho fijo por un Expanded.
+                          // Le damos un factor de flexión para que ocupe una porción del espacio.
+                          Expanded(
+                            flex:
+                                1, // Le damos un poco menos de espacio que a la columna derecha
+                            child: SingleChildScrollView(
+                              // Agregamos un SingleChildScrollView para evitar desbordes verticales
+                              // si el contenido de la columna es muy alto.
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF055B84),
+                                  borderRadius: BorderRadius.circular(20),
                                 ),
-                                const SizedBox(height: 8),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: DropdownButtonFormField<String>(
-                                    value: _temaSeleccionado,
-                                    isExpanded: true,
-                                    hint: const Text('Selecciona un tema'),
-                                    items:
-                                        temasDisponibles.entries.map((entry) {
-                                          return DropdownMenuItem<String>(
-                                            value: entry.key,
-                                            child: Text(
-                                              entry.value,
-                                              overflow: TextOverflow.ellipsis,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize:
+                                      MainAxisSize
+                                          .min, // Para que la columna no se estire innecesariamente
+                                  children: [
+                                    const Text(
+                                      'Tema:',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: DropdownButtonFormField<String>(
+                                        value: _temaSeleccionado,
+                                        isExpanded: true,
+                                        hint: const Text('Selecciona un tema'),
+                                        items:
+                                            temasDisponibles.entries.map((
+                                              entry,
+                                            ) {
+                                              return DropdownMenuItem<String>(
+                                                value: entry.key,
+                                                child: Text(
+                                                  entry.value,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              );
+                                            }).toList(),
+                                        onChanged: (value) {
+                                          setState(() {
+                                            _temaSeleccionado = value;
+                                          });
+                                        },
+                                        decoration: const InputDecoration(
+                                          filled: true,
+                                          fillColor: Colors.white,
+                                          border: OutlineInputBorder(),
+                                          contentPadding: EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+
+                                    if (_modo == 'editar' &&
+                                        _versionActualId != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          top: 12,
+                                          bottom: 4,
+                                        ),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: Colors.amber.shade100,
+                                            borderRadius: BorderRadius.circular(
+                                              8,
                                             ),
-                                          );
-                                        }).toList(),
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _temaSeleccionado = value;
-                                      });
-                                    },
-                                    decoration: const InputDecoration(
-                                      filled: true,
-                                      fillColor: Colors.white,
-                                      border: OutlineInputBorder(),
-                                      contentPadding: EdgeInsets.symmetric(
-                                        horizontal: 10,
+                                          ),
+                                          child: Text(
+                                            'Editando la versión: $_versionActualId',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    if (_modo == 'nueva_version' &&
+                                        _ejercicioId != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          top: 12,
+                                          bottom: 4,
+                                        ),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: Colors.lightBlue.shade100,
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            'Agregando nueva versión para: $_ejercicioId',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+
+                                    const SizedBox(height: 16),
+
+                                    const Text(
+                                      'Título',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    TextField(
+                                      controller: _titleController,
+                                      decoration: const InputDecoration(
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                        border: OutlineInputBorder(),
+                                        contentPadding: EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                        ),
+                                      ),
+                                      onChanged: (_) => setState(() {}),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    const Text(
+                                      'Vista previa (Título):',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Builder(
+                                        builder: (_) {
+                                          final raw = _titleController.text;
+                                          final isPlain =
+                                              raw.trim().isNotEmpty &&
+                                              !RegExp(
+                                                r'[\\\^\_\{\}]',
+                                              ).hasMatch(raw);
+
+                                          if (raw.trim().isEmpty) {
+                                            return Text(
+                                              'Escribe un título',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontStyle: FontStyle.italic,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            );
+                                          } else if (isPlain) {
+                                            return Text(
+                                              raw,
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                                color: Colors.black87,
+                                              ),
+                                            );
+                                          } else {
+                                            return SingleChildScrollView(
+                                              scrollDirection: Axis.horizontal,
+                                              child: CustomLatexText(
+                                                contenido: raw,
+                                                fontSize: 16,
+                                                color: Colors.black87,
+                                              ),
+                                            );
+                                          }
+                                        },
                                       ),
                                     ),
-                                  ),
-                                ),
-                                if (_modo == 'editar' &&
-                                    _versionActualId != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(
-                                      top: 12,
-                                      bottom: 4,
-                                    ), //Ajuste de padding
-                                    child: Container(
-                                      padding: const EdgeInsets.all(8),
+                                    const SizedBox(height: 16),
+                                    const Text(
+                                      'Descripción',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    TextField(
+                                      controller: _descriptionController,
+                                      maxLines: 3,
+                                      decoration: const InputDecoration(
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                        border: OutlineInputBorder(),
+                                        contentPadding: EdgeInsets.all(10),
+                                      ),
+                                      onChanged: (_) => setState(() {}),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    const Text(
+                                      'Vista previa (Descripción):',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
-                                        color: Colors.amber.shade100,
-                                        borderRadius: BorderRadius.circular(8),
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Text(
-                                        'Editando la versión: $_versionActualId',
+                                        _descriptionController.text.isEmpty
+                                            ? 'Escribe una descripción'
+                                            : dividirDescripcionEnLineas(
+                                              _descriptionController.text,
+                                            ),
                                         style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                          color: Colors.black87,
+                                          height: 1.4,
                                         ),
                                       ),
                                     ),
-                                  ),
-                                if (_modo == 'nueva_version' &&
-                                    _ejercicioId != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(
-                                      top: 12,
-                                      bottom: 4,
-                                    ), //Ajuste de padding
-                                    child: Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.lightBlue.shade100,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        'Agregando nueva versión para: $_ejercicioId',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                const SizedBox(height: 16),
-                                const Text(
-                                  'Título',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                const SizedBox(height: 8),
-                                TextField(
-                                  controller: _titleController,
-                                  decoration: const InputDecoration(
-                                    filled: true,
-                                    fillColor: Colors.white,
-                                    border: OutlineInputBorder(),
-                                    contentPadding: EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                    ),
-                                  ),
-                                  onChanged: (_) => setState(() {}),
-                                ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'Vista previa (Título):',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Builder(
-                                    builder: (_) {
-                                      final raw = _titleController.text;
-                                      final isPlain =
-                                          raw.trim().isNotEmpty &&
-                                          !RegExp(
-                                            r'[\\\^\_\{\}]',
-                                          ).hasMatch(raw);
-
-                                      if (raw.trim().isEmpty) {
-                                        return Text(
-                                          'Escribe un título',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontStyle: FontStyle.italic,
-                                            color: Colors.grey.shade600,
-                                          ),
-                                        );
-                                      } else if (isPlain) {
-                                        return Text(
-                                          raw,
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            color: Colors.black87,
-                                          ),
-                                        );
-                                      } else {
-                                        return SingleChildScrollView(
-                                          scrollDirection: Axis.horizontal,
-                                          child: CustomLatexText(
-                                            contenido: raw,
-                                            fontSize: 16,
-                                            color: Colors.black87,
-                                          ),
-                                        );
-                                      }
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                const Text(
-                                  'Descripción',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                const SizedBox(height: 8),
-                                TextField(
-                                  controller: _descriptionController,
-                                  maxLines: 3,
-                                  decoration: const InputDecoration(
-                                    filled: true,
-                                    fillColor: Colors.white,
-                                    border: OutlineInputBorder(),
-                                    contentPadding: EdgeInsets.all(10),
-                                  ),
-                                  onChanged: (_) => setState(() {}),
-                                ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'Vista previa (Descripción):',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    _descriptionController.text.isEmpty
-                                        ? 'Escribe una descripción'
-                                        : dividirDescripcionEnLineas(
-                                          _descriptionController.text,
-                                        ),
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.black87,
-                                      height: 1.4,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 14),
-
-                                // --- CAMBIO PRINCIPAL AQUÍ ---
-                                // Se envuelve en Flexible para que se encoja si no hay espacio
-                                Flexible(
-                                  child: Center(
-                                    child: ClipRRect(
+                                    const SizedBox(height: 14),
+                                    // El carrusel ahora es adaptable gracias al AspectRatio
+                                    ClipRRect(
                                       borderRadius: BorderRadius.circular(12),
-                                      child: SizedBox(
-                                        width: double.infinity,
-                                        // Se elimina la altura fija para permitir que sea flexible
-                                        child: AspectRatio(
-                                          aspectRatio: 4 / 3,
-                                          child: Container(
-                                            // Se añade una restricción de altura máxima para que no crezca indefinidamente
-                                            constraints: const BoxConstraints(
-                                              maxHeight: 244,
-                                            ),
-                                            color: Colors.white10,
-                                            child: const ExerciseCarousel(),
-                                          ),
+                                      child: AspectRatio(
+                                        aspectRatio:
+                                            16 /
+                                            9, // Proporción común para una mejor visualización
+                                        child: Container(
+                                          color: Colors.white10,
+                                          child: const ExerciseCarousel(),
                                         ),
                                       ),
                                     ),
-                                  ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                           ),
 
                           const SizedBox(width: 20),
 
-                          // --- COLUMNA DERECHA (SIN CAMBIOS) ---
-                          // Ahora funcionará correctamente porque la columna izquierda no se desborda
+                          // --- COLUMNA DERECHA (FLEXIBLE) ---
+                          // Envuelta en Expanded para que ocupe el espacio restante de forma flexible.
+                          // Tal como pediste, su contenido no se modifica.
                           Expanded(
+                            flex:
+                                3, // Ocupará más espacio que la columna izquierda
                             child: Container(
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
@@ -970,6 +1010,7 @@ class _ExerciseUploadPageState extends State<ExerciseUploadPage> {
                                 itemBuilder: (context, index) {
                                   final step = _stepsControllers[index];
                                   final locked = step['locked'] as bool;
+                                  // Aquí mantenemos tu Padding y el resto de la lógica intacta
                                   return Padding(
                                     padding: const EdgeInsets.only(bottom: 36),
                                     child: Column(

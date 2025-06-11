@@ -458,6 +458,41 @@ class _UploadMaterialPageState extends State<UploadMaterialPage> {
       return;
     }
 
+    final titulo = _tituloController.text.trim();
+    final subtema = _subtemaController.text.trim();
+    final descripcion = _descripcionController.text.trim();
+
+    // 1. Revisar título, subtítulo y descripción principal
+    if (ProfanityFilter.esProfano(titulo) ||
+        ProfanityFilter.esProfano(subtema) ||
+        ProfanityFilter.esProfano(descripcion)) {
+      await showCustomDialog(
+        context: context,
+        titulo: 'Contenido no permitido',
+        mensaje:
+            'Hemos detectado lenguaje inapropiado en el título o la descripción. Por favor, revísalos.',
+        tipo: CustomDialogType.error,
+      );
+      return; // Detiene la subida
+    }
+
+    // 2. Revisar el contenido de las notas adjuntas
+    for (final archivo in _archivos) {
+      if (archivo['tipo'] == 'nota') {
+        final contenidoNota = archivo['nombre'] as String?;
+        if (contenidoNota != null && ProfanityFilter.esProfano(contenidoNota)) {
+          await showCustomDialog(
+            context: context,
+            titulo: 'Contenido no permitido',
+            mensaje:
+                'Hemos detectado lenguaje inapropiado en el contenido de una de las notas. Por favor, revísala.',
+            tipo: CustomDialogType.error,
+          );
+          return; // Detiene la subida
+        }
+      }
+    }
+
     setState(() => _subiendo = true);
 
     final uid = FirebaseAuth.instance.currentUser?.uid;

@@ -18,9 +18,6 @@ import 'package:path_provider/path_provider.dart'; // Necesario para guardar ima
 import 'dart:io'; // Necesario para File
 import 'package:flutter/foundation.dart'
     show kIsWeb; // Para diferenciar entre web y móvil
-import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 
 class ExerciseViewPage extends StatefulWidget {
   final String tema;
@@ -170,7 +167,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
           //  Mostrar el diálogo y Snackbar de éxito al eliminar
           context: context,
           titulo: '¡Éxito!',
-          mensaje: 'Comentario elimnado correctamente.',
+          mensaje: 'Comentario eliminado correctamente.',
           tipo: CustomDialogType.success,
           snackbarMessage: '✅ ¡Comentario Eliminado!',
           snackbarSuccess: true,
@@ -1029,9 +1026,10 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
   void _mostrarDialogoCalificacion() {
     final TextEditingController controller = TextEditingController();
     bool enviando = false;
-
-    int rating = 0; //
+    int rating = 0;
     bool comoAnonimo = false;
+    // La variable de error se mantiene por si el usuario no llena los campos.
+    String? errorMessage;
 
     showGeneralDialog(
       context: context,
@@ -1055,13 +1053,18 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                   ),
                   contentPadding: const EdgeInsets.all(24),
                   content: _buildContenidoDialogo(
-                    controller,
-                    () => comoAnonimo, //  lo pasamos como función getter
-                    (val) => setStateDialog(() => comoAnonimo = val),
-                    () => rating,
-                    (val) => setStateDialog(() => rating = val),
-                    enviando,
-                    (val) => setStateDialog(() => enviando = val),
+                    context: context,
+                    controller: controller,
+                    getComoAnonimo: () => comoAnonimo,
+                    setComoAnonimo:
+                        (val) => setStateDialog(() => comoAnonimo = val),
+                    getRating: () => rating,
+                    setRating: (val) => setStateDialog(() => rating = val),
+                    isSending: () => enviando,
+                    setSending: (val) => setStateDialog(() => enviando = val),
+                    getErrorMessage: () => errorMessage,
+                    setErrorMessage:
+                        (val) => setStateDialog(() => errorMessage = val),
                   ),
                 );
               },
@@ -1072,33 +1075,33 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     );
   }
 
-  Widget _buildContenidoDialogo(
-    TextEditingController controller,
-    bool Function() getComoAnonimo,
-    void Function(bool) setComoAnonimo,
-    int Function() getRating,
-    void Function(int) setRating,
-    bool enviando,
-    void Function(bool) setEnviando,
-  ) {
+  Widget _buildContenidoDialogo({
+    required BuildContext context,
+    required TextEditingController controller,
+    required bool Function() getComoAnonimo,
+    required void Function(bool) setComoAnonimo,
+    required int Function() getRating,
+    required void Function(int) setRating,
+    required bool Function() isSending,
+    required void Function(bool) setSending,
+    required String? Function() getErrorMessage,
+    required void Function(String?) setErrorMessage,
+  }) {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 500),
       child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ... (El título, las estrellas y el campo de texto se quedan igual)
             Row(
               children: [
-                Expanded(
+                const Expanded(
                   child: Text(
                     'Califica este ejercicio',
-                    style: GoogleFonts.ebGaramond(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
                 IconButton(
@@ -1108,21 +1111,42 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
               ],
             ),
             const SizedBox(height: 12),
-            CustomRatingWidget(
-              rating: getRating(),
-              onRatingChanged: (nuevoValor) => setRating(nuevoValor),
-              enableHoverEffect: true,
+            Center(
+              child: CustomRatingWidget(
+                rating: getRating(),
+                onRatingChanged: (nuevoValor) {
+                  setRating(nuevoValor);
+                  if (getErrorMessage() != null) {
+                    setErrorMessage(null);
+                  }
+                },
+                enableHoverEffect: true,
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             TextField(
               controller: controller,
+              onChanged: (_) {
+                if (getErrorMessage() != null) {
+                  setErrorMessage(null);
+                }
+              },
               decoration: const InputDecoration(
-                labelText: 'Comentario',
+                labelText: 'Escribe un comentario...',
                 border: OutlineInputBorder(),
               ),
               maxLines: 2,
             ),
-            const SizedBox(height: 12),
+
+            if (getErrorMessage() != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  getErrorMessage()!,
+                  style: const TextStyle(color: Colors.red, fontSize: 13),
+                ),
+              ),
+
             CheckboxListTile(
               value: getComoAnonimo(),
               onChanged: (val) {
@@ -1133,50 +1157,6 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
               contentPadding: EdgeInsets.zero,
             ),
             const SizedBox(height: 16),
-
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF6F3FA),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 6,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: DropdownButtonFormField<String>(
-                value: versionSeleccionada,
-                isExpanded: true,
-                items:
-                    versiones.map((ver) {
-                      final fecha = (ver['fecha'] as Timestamp?)?.toDate();
-                      final formatted =
-                          fecha != null
-                              ? DateFormat('dd/MM/yyyy').format(fecha)
-                              : 'Sin fecha';
-                      return DropdownMenuItem<String>(
-                        value: ver['id'],
-                        child: Text('Versión ${ver['id']} - $formatted'),
-                      );
-                    }).toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => versionSeleccionada = value);
-                  }
-                },
-                decoration: const InputDecoration.collapsed(
-                  hintText: 'Seleccionar versión',
-                ),
-                dropdownColor: Colors.white,
-              ),
-            ),
-
-            const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -1186,50 +1166,45 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
+                  // ✅ LÓGICA DE ENVÍO ACTUALIZADA PARA CENSURAR
                   onPressed:
-                      enviando
+                      isSending()
                           ? null
                           : () async {
+                            setErrorMessage(null);
+
                             if (controller.text.trim().isEmpty ||
                                 getRating() == 0) {
-                              showCustomDialog(
-                                context: context,
-                                titulo: 'Campos incompletos',
-                                mensaje:
-                                    'Por favor escribe un comentario y selecciona una calificación.',
-                                tipo: CustomDialogType.error,
-                                botones: [
-                                  DialogButton(
-                                    texto: 'Aceptar',
-                                    onPressed: () async {
-                                      Navigator.of(context).pop();
-                                    },
-                                  ),
-                                  DialogButton(
-                                    texto: 'Intentar de nuevo',
-                                    onPressed: () async {
-                                      Navigator.of(context).pop();
-                                      _mostrarDialogoCalificacion();
-                                    },
-                                  ),
-                                ],
+                              setErrorMessage(
+                                'Por favor, deja un comentario y una calificación.',
                               );
-
                               return;
                             }
 
-                            setEnviando(true);
+                            setSending(true);
+
+                            // Ahora solo llamamos a enviar, ya no esperamos un 'true' o 'false'
                             await _enviarComentario(
-                              controller.text
-                                  .trim(), // hacer trim sirve para eliminar espacios en blanco al inicio y al final
+                              controller.text.trim(),
                               getRating(),
                               getComoAnonimo(),
                             );
-                            setEnviando(false);
-                            Navigator.pop(context);
+
+                            setSending(false);
+
+                            // Como siempre tiene "éxito" (porque censura en vez de bloquear),
+                            // simplemente cerramos el diálogo y mostramos el snackbar.
+                            if (mounted) {
+                              Navigator.pop(context);
+                              showCustomSnackbar(
+                                context: context,
+                                message: '✅ Comentario enviado exitosamente.',
+                                success: true,
+                              );
+                            }
                           },
                   icon:
-                      enviando
+                      isSending()
                           ? const SizedBox(
                             width: 20,
                             height: 20,
@@ -1239,7 +1214,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
                             ),
                           )
                           : const Icon(Icons.send),
-                  label: Text(enviando ? 'Enviando...' : 'Enviar'),
+                  label: Text(isSending() ? 'Enviando...' : 'Enviar'),
                 ),
               ],
             ),
@@ -1255,9 +1230,13 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     bool comoAnonimo,
   ) async {
     final user = FirebaseAuth.instance.currentUser;
+    // La validación de datos vacíos se mantiene, pero ya no devuelve nada.
     if (user == null || texto.isEmpty || rating == 0) return;
 
-    // --- Tu lógica actual para guardar el comentario (SIN CAMBIOS) ---
+    // ✅ CAMBIO PRINCIPAL: De Bloquear a Censurar
+    // En lugar de revisar con esProfano, ahora transformamos el texto.
+    final textoCensurado = ProfanityFilter.censurar(texto);
+    // --- Si el texto es apropiado, la operación continúa ---
     final userData =
         await FirebaseFirestore.instance
             .collection('usuarios')
@@ -1273,7 +1252,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
       'usuarioId': user.uid,
       'nombre': comoAnonimo ? 'Anónimo' : userData['Nombre'],
       'fotoUrl': fotoUrl,
-      'comentario': texto,
+      'comentario': textoCensurado,
       'estrellas': rating,
       'timestamp': Timestamp.now(),
       'tema': widget.tema,
@@ -1285,7 +1264,7 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
         .collection('comentarios_ejercicios')
         .add(comentario);
 
-    // --- Tu lógica para actualizar promedios (SIN CAMBIOS) ---
+    // Lógica para actualizar promedios y enviar notificaciones
     final calSnap =
         await FirebaseFirestore.instance
             .collection('comentarios_ejercicios')
@@ -1317,44 +1296,37 @@ class _ExerciseViewPageState extends State<ExerciseViewPage> {
     final autorId = ejercicioDoc.data()?['AutorId'];
 
     if (autorId != null && autorId.toString().isNotEmpty) {
-      // La función que tienes para actualizar las calificaciones del autor
       await actualizarTodoCalculoDeUsuario(uid: autorId);
     }
 
-    // Solo enviamos notificación si el que comenta NO es el autor del ejercicio.
     if (autorId != null && autorId != user.uid) {
       final nombreEmisor =
           comoAnonimo ? 'Alguien' : userData['Nombre'] ?? 'Alguien';
 
-      // 1. Notificación por la calificación
       await NotificationService.crearNotificacion(
         uidDestino: autorId,
-        tipo:
-            'calificacion', // Tipo que definimos en el widget de notificaciones
+        tipo: 'calificacion',
         titulo: '$nombreEmisor ha calificado tu ejercicio',
         contenido:
             'Le ha dado $rating estrellas a "${ejercicioData?['Titulo'] ?? 'tu ejercicio'}".',
         referenciaId: widget.ejercicioId,
-        tema: widget.tema, // Pasamos el tema para la navegación
+        tema: widget.tema,
         uidEmisor: user.uid,
         nombreEmisor: nombreEmisor,
       );
 
-      // 2. Notificación por el comentario
       await NotificationService.crearNotificacion(
         uidDestino: autorId,
-        tipo: 'comentario', // Tipo que definimos en el widget de notificaciones
+        tipo: 'comentario',
         titulo: '$nombreEmisor ha comentado tu ejercicio',
-        contenido:
-            texto, // El contenido de la notificación es el comentario mismo
+        contenido: texto,
         referenciaId: widget.ejercicioId,
-        tema: widget.tema, // Pasamos el tema para la navegación
+        tema: widget.tema,
         uidEmisor: user.uid,
         nombreEmisor: nombreEmisor,
       );
     }
 
-    // --- Recargamos los datos y mostramos el snackbar (SIN CAMBIOS) ---
     await _cargarComentarios();
     await _cargarDatosDesdeFirestore();
 
