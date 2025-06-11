@@ -159,6 +159,21 @@ class CreditsPage extends StatelessWidget {
                 'Backend: Auth, Firestore, Storage, Functions y Messaging.',
             onTap: () => _launchURL('https://firebase.google.com'),
           ),
+          _buildTechnologyTile(
+            icon: Icons.g_mobiledata_rounded,
+            iconColor: Colors.black,
+            title: 'Github',
+            subtitle: 'Repositorio del proyecto y control de versiones.',
+            onTap:
+                () => _launchURL('https://github.com/Raccoon0G/studyconnect'),
+          ),
+          _buildTechnologyTile(
+            icon: Icons.change_circle_outlined,
+            iconColor: Colors.red,
+            title: 'Git',
+            subtitle: 'Control de versiones distribuido para el código fuente.',
+            onTap: () => _launchURL('https://git-scm.com/'),
+          ),
           const SizedBox(height: 24),
           _buildSectionTitle(context, 'APIs y Servicios Externos'),
           _buildTechnologyTile(
