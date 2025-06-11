@@ -401,7 +401,7 @@ class _HomePageState extends State<HomePage> {
         ),
         const SizedBox(height: 24),
         Text(
-          'A través de ejercicios colaborativos creados por estudiantes como tú.',
+          'A través de ejercicios colaborativos creados por estudiantes como tú',
           textAlign: TextAlign.center,
           style: GoogleFonts.poppins(
             color: const Color(0xFFB0E0FF).withOpacity(0.95),
