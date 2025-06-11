@@ -64,6 +64,14 @@ class ProfanityFilter {
     'pito',
     'joto',
     'coño',
+    'coños',
+    'putada',
+    'putadas',
+    'ojete',
+    'ojetes',
+    'pendejadas',
+    'pendejada',
+    'pendejito',
   ]..sort(
     (a, b) => b.length.compareTo(a.length),
   ); // Se asegura de ordenar por longitud descendente
