@@ -530,12 +530,13 @@ class _ChatHomePageState extends State<ChatHomePage> {
     }
   }
 
-  // Antes era: void _iniciarChat(String otroId) async {
   void _iniciarChat(String otroId, {required bool isLargeScreen}) async {
-    // Nueva firma
+    if (otroId == uid) return; // Prevenir chatear consigo mismo
+
     final nuevoChatId =
         uid.compareTo(otroId) < 0 ? '${uid}_$otroId' : '${otroId}_$uid';
 
+    // Obtener la información del otro usuario para el caché
     await _obtenerUsuario(otroId);
 
     final DocumentReference chatDocRef = FirebaseFirestore.instance
@@ -543,36 +544,53 @@ class _ChatHomePageState extends State<ChatHomePage> {
         .doc(nuevoChatId);
     final DocumentSnapshot chatDocSnapshot = await chatDocRef.get();
 
+    final Timestamp now =
+        Timestamp.now(); // Usaremos el mismo timestamp para todo
+
     if (!chatDocSnapshot.exists) {
+      // Si el chat no existe, lo creamos con todos los campos necesarios
       await chatDocRef.set({
         'ids': [uid, otroId],
         'isGroup': false,
         'groupName': null,
         'groupPhoto': null,
-        'createdBy': null,
-        'lastActivityAt': FieldValue.serverTimestamp(),
-        'lastMessage': '',
+        'createdBy': uid, // Guardamos quién lo inició
+        'createdAt': now, // Guardamos cuándo se creó
+        'lastActivityAt': now,
+        'lastMessageAt':
+            now, // AÑADIDO: Campo clave para el ordenamiento de la lista
+        'lastMessage': '', // Mensaje inicial vacío
+        'lastMessageSenderId': null,
+        'lastMessageType': 'texto',
         'typing': {uid: false, otroId: false},
         'unreadCounts': {uid: 0, otroId: 0},
+        'archivadoPara': [],
+        'silenciadoPor': [],
+        'ocultoPara': [],
       });
     } else {
-      await chatDocRef.set({
-        'ids': [uid, otroId],
-        'isGroup': false,
-        'lastActivityAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      // Si el chat ya existe, solo actualizamos la actividad y nos aseguramos
+      // de que no esté oculto para el usuario actual (por si lo borró antes)
+      await chatDocRef.update({
+        'lastActivityAt': now,
+        'ocultoPara': FieldValue.arrayRemove([uid]),
+      });
     }
 
+    // Actualizamos el estado de la UI para mostrar el chat
     setState(() {
       filtro = '';
       _busquedaController.clear();
       _isCurrentChatGroup = false;
+
       if (!isLargeScreen) {
-        // Solo oculta la lista en pantallas pequeñas
+        // En pantallas pequeñas, ocultamos la lista para ver el detalle
         _showList = false;
       }
+
+      // Asignamos el chat seleccionado
       chatIdSeleccionado = nuevoChatId;
-      otroUid = otroId; // Aseguramos que otroUid se actualice aquí
+      otroUid = otroId;
     });
   }
 
@@ -1660,22 +1678,18 @@ class _ChatHomePageState extends State<ChatHomePage> {
     List<String> idsMiembrosActuales,
   ) {
     final TextEditingController searchController = TextEditingController();
-    // Usamos un ValueNotifier para el filtro DENTRO de este diálogo para que
-    // el StatefulBuilder pueda reconstruir solo la lista de usuarios.
     final ValueNotifier<String> filtroDialogo = ValueNotifier<String>('');
-    List<String> idsSeleccionadosParaAnadir =
-        []; // IDs de usuarios seleccionados en este diálogo
+    List<String> idsSeleccionadosParaAnadir = [];
     showDialog(
       context: context,
       builder: (BuildContext contextDialog) {
         return StatefulBuilder(
-          // StatefulBuilder para manejar el estado del diálogo (selecciones, filtro)
           builder: (BuildContext contextSFB, StateSetter setStateDialog) {
             return AlertDialog(
               title: const Text('Añadir Participantes'),
               content: SizedBox(
                 width: 350,
-                height: 400, // Similar al diálogo de crear grupo
+                height: 400,
                 child: Column(
                   children: [
                     TextField(
@@ -1685,33 +1699,33 @@ class _ChatHomePageState extends State<ChatHomePage> {
                         prefixIcon: Icon(Icons.search),
                       ),
                       onChanged: (text) {
-                        // Actualizamos el ValueNotifier, lo que causará que el StreamBuilder se reconstruya
                         filtroDialogo.value = text.trim().toLowerCase();
                       },
                     ),
                     const SizedBox(height: 12),
                     Expanded(
-                      // Usamos un ValueListenableBuilder para escuchar los cambios en el filtro
                       child: ValueListenableBuilder<String>(
                         valueListenable: filtroDialogo,
                         builder: (contextVLB, filtroActual, child) {
-                          // StreamBuilder para obtener todos los usuarios
                           return StreamBuilder<QuerySnapshot>(
+                            // AQUÍ LA MODIFICACIÓN FINAL
                             stream:
                                 FirebaseFirestore.instance
                                     .collection('usuarios')
+                                    // <-- MODIFICADO: Añadido el filtro de perfil visible
+                                    .where(
+                                      'Config.PerfilVisible',
+                                      isEqualTo: true,
+                                    )
                                     .snapshots(),
                             builder: (contextStream, userSnapshot) {
+                              // El resto del builder no necesita cambios
                               if (!userSnapshot.hasData) {
                                 return const Center(
                                   child: CircularProgressIndicator(),
                                 );
                               }
 
-                              // Filtramos los usuarios:
-                              // 1. No deben ser el usuario actual (uid)
-                              // 2. No deben estar ya en el grupo (idsMiembrosActuales)
-                              // 3. Deben coincidir con el filtro de búsqueda si existe
                               final List<DocumentSnapshot> usuariosFiltrados =
                                   userSnapshot.data!.docs.where((doc) {
                                     final bool esUsuarioActual = doc.id == uid;
@@ -1734,7 +1748,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                         filtroActual,
                                       );
                                     }
-                                    return true; // Incluir si no hay filtro de texto y no es miembro/actual
+                                    return true;
                                   }).toList();
 
                               if (usuariosFiltrados.isEmpty) {
@@ -1764,7 +1778,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                     value: estaSeleccionado,
                                     onChanged: (bool? seleccionado) {
                                       setStateDialog(() {
-                                        // Usa el setState del StatefulBuilder
                                         if (seleccionado == true) {
                                           idsSeleccionadosParaAnadir.add(
                                             userDoc.id,
@@ -1805,6 +1818,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                   ],
                 ),
               ),
+              // ... (Actions del diálogo sin cambios) ...
               actions: [
                 TextButton(
                   child: const Text('Cancelar'),
@@ -1823,7 +1837,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                               idsSeleccionadosParaAnadir,
                             );
                           }
-                          : null, // Deshabilitado si no hay nadie seleccionado
+                          : null,
                 ),
               ],
             );
@@ -3003,6 +3017,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
   }
 
   // Método que abre el diálogo de creación de grupo
+  // Método que abre el diálogo de creación de grupo
   void _mostrarDialogoCrearGrupo() {
     final TextEditingController groupNameDialogController =
         TextEditingController();
@@ -3035,6 +3050,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // ... (Widget de la imagen y TextFields del nombre/descripción sin cambios) ...
                     GestureDetector(
                       onTap: () async {
                         if (kIsWeb) {
@@ -3094,10 +3110,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                         ),
                       ),
                       textCapitalization: TextCapitalization.sentences,
-                      onChanged:
-                          (_) => setStateDialog(
-                            () {},
-                          ), // Para actualizar estado del botón Crear
+                      onChanged: (_) => setStateDialog(() {}),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -3128,18 +3141,25 @@ class _ChatHomePageState extends State<ChatHomePage> {
                           ),
                     ),
                     const SizedBox(height: 8),
+
                     Expanded(
                       child: StreamBuilder<QuerySnapshot>(
+                        // AQUÍ LA MODIFICACIÓN PARA LA LISTA DE USUARIOS
                         stream:
                             FirebaseFirestore.instance
                                 .collection('usuarios')
-                                .where(FieldPath.documentId, whereNotIn: [uid])
+                                // <-- MODIFICADO: Añadido el filtro de perfil visible
+                                .where('Config.PerfilVisible', isEqualTo: true)
+                                // Se mantiene el filtro para no incluir al usuario actual
+                                .where(FieldPath.documentId, isNotEqualTo: uid)
                                 .snapshots(),
                         builder: (ctx, userSnap) {
-                          if (!userSnap.hasData)
+                          // El resto del builder no necesita cambios
+                          if (!userSnap.hasData) {
                             return const Center(
                               child: CircularProgressIndicator(),
                             );
+                          }
 
                           final allUsers = userSnap.data!.docs;
                           final filteredUsers =
@@ -3158,10 +3178,11 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                     return userName.contains(userFilterDialog);
                                   }).toList();
 
-                          if (filteredUsers.isEmpty)
+                          if (filteredUsers.isEmpty) {
                             return const Center(
                               child: Text("No se encontraron usuarios."),
                             );
+                          }
 
                           return ListView.builder(
                             shrinkWrap: true,
@@ -3172,8 +3193,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                   userDoc.data()! as Map<String, dynamic>;
                               final nombre = userData['Nombre'] ?? 'Usuario';
                               final String? foto =
-                                  userData['FotoPerfil']
-                                      as String?; // Hacerlo nullable
+                                  userData['FotoPerfil'] as String?;
                               final isSelected = selectedUsersForGroupDialog
                                   .contains(userDoc.id);
 
@@ -3213,6 +3233,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                   ],
                 ),
               ),
+              // ... (Actions del diálogo sin cambios) ...
               actionsAlignment: MainAxisAlignment.spaceBetween,
               actions: [
                 TextButton(
@@ -3306,8 +3327,9 @@ class _ChatHomePageState extends State<ChatHomePage> {
                               _isCurrentChatGroup = true;
                               chatIdSeleccionado = newChatId;
                               otroUid = null;
-                              if (MediaQuery.of(context).size.width < 720.0)
+                              if (MediaQuery.of(context).size.width < 720.0) {
                                 _showList = false;
+                              }
                             });
                           }
                           : null,
@@ -3318,14 +3340,11 @@ class _ChatHomePageState extends State<ChatHomePage> {
           },
         );
       },
-    ).then((_) {
-      // No necesitas disponer los controladores aquí si se definen dentro del builder del showDialog
-      // o si son locales a la función _mostrarDialogoCrearGrupo
-    });
+    ).then((_) {});
   }
 
   // Panel izquierdo con header, tabs, buscador, historias y lista de chats
-
+  // Panel izquierdo con header, tabs, buscador, historias y lista de chats
   Widget _buildChatList() {
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 200, maxWidth: 320),
@@ -3336,7 +3355,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- 1) Header “Chats” con iconos ---
+              // --- 1) Header “Chats” con iconos --- (Sin cambios)
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -3370,15 +3389,14 @@ class _ChatHomePageState extends State<ChatHomePage> {
                 ),
               ),
 
-              // --- 2) TabBar (como lo dejamos, que ya funciona bien centrado) ---
+              // --- 2) TabBar --- (Sin cambios)
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 8.0,
                   vertical: 4.0,
                 ),
                 child: TabBar(
-                  isScrollable:
-                      false, // Para que intenten caber todas las pestañas
+                  isScrollable: false,
                   labelColor: Theme.of(context).colorScheme.onPrimary,
                   unselectedLabelColor: Colors.white.withOpacity(0.75),
                   labelStyle: const TextStyle(
@@ -3414,26 +3432,23 @@ class _ChatHomePageState extends State<ChatHomePage> {
               Container(
                 margin: const EdgeInsets.fromLTRB(12, 10, 12, 6),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(
-                    0.20,
-                  ), // Ligeramente más opaco para contraste del hint
+                  color: Colors.black.withOpacity(0.20),
                   borderRadius: BorderRadius.circular(25),
                 ),
                 child: TextField(
                   controller: _busquedaController,
                   style: const TextStyle(color: Colors.black, fontSize: 14.5),
                   decoration: InputDecoration(
-                    hintText:
-                        'Buscar chats o usuarios...', // MODIFICADO: Texto original
+                    hintText: 'Buscar chats o usuarios...',
                     hintStyle: TextStyle(
                       color: Colors.black.withOpacity(0.75),
                       fontSize: 14.5,
-                    ), // MODIFICADO: Mayor opacidad
+                    ),
                     prefixIcon: Icon(
                       Icons.search,
                       color: Colors.black.withOpacity(0.75),
                       size: 22,
-                    ), // MODIFICADO
+                    ),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(
                       vertical: 14,
@@ -3441,7 +3456,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                     ),
                   ),
                   onChanged: (texto) {
-                    // ... (lógica de debounce onChanged se mantiene igual) ...
+                    // --- INICIO: LÓGICA DE BÚSQUEDA MODIFICADA ---
                     final lower = texto.trim().toLowerCase();
                     if (filtro != lower) {
                       setState(() {
@@ -3458,8 +3473,9 @@ class _ChatHomePageState extends State<ChatHomePage> {
                     if (_debounceTimer?.isActive ?? false)
                       _debounceTimer!.cancel();
                     if (filtro.isEmpty) {
-                      if (_isSearchingGlobalUsers)
+                      if (_isSearchingGlobalUsers) {
                         setState(() => _isSearchingGlobalUsers = false);
+                      }
                       return;
                     }
                     _debounceTimer = Timer(_debounceDuration, () async {
@@ -3467,11 +3483,20 @@ class _ChatHomePageState extends State<ChatHomePage> {
                               _busquedaController.text.trim().toLowerCase() &&
                           mounted) {
                         try {
+                          // AQUÍ LA MODIFICACIÓN PARA LA BÚSQUEDA
                           final snap =
                               await FirebaseFirestore.instance
                                   .collection('usuarios')
+                                  // <-- MODIFICADO: Añadido el filtro de perfil visible
+                                  .where(
+                                    'Config.PerfilVisible',
+                                    isEqualTo: true,
+                                  )
                                   .get();
+
                           if (!mounted) return;
+
+                          // El filtrado por nombre se sigue haciendo en el cliente después de traer solo los visibles
                           setState(() {
                             _usuarios =
                                 snap.docs.where((u) {
@@ -3485,21 +3510,23 @@ class _ChatHomePageState extends State<ChatHomePage> {
                           });
                         } catch (e) {
                           print("Error durante la búsqueda con debounce: $e");
-                          if (mounted)
+                          if (mounted) {
                             setState(() {
                               _isSearchingGlobalUsers = false;
                               _usuarios = [];
                             });
+                          }
                         }
                       } else if (!mounted) {
                         _debounceTimer?.cancel();
                       }
                     });
+                    // --- FIN: LÓGICA DE BÚSQUEDA MODIFICADA ---
                   },
                 ),
               ),
 
-              // --- Título para la sección de sugerencias ---
+              // --- Título para la sección de sugerencias --- (Sin cambios)
               Padding(
                 padding: const EdgeInsets.only(
                   left: 16.0,
@@ -3508,7 +3535,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                   right: 16.0,
                 ),
                 child: Text(
-                  'Sugerencias', // Cambiado para que sea más general
+                  'Sugerencias',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.9),
                     fontSize: 14,
@@ -3521,14 +3548,17 @@ class _ChatHomePageState extends State<ChatHomePage> {
               SizedBox(
                 height: 99,
                 child: Scrollbar(
-                  thumbVisibility:
-                      true, // Intenta que la barra sea visible (en web/desktop al menos con hover)
+                  thumbVisibility: true,
                   child: StreamBuilder<QuerySnapshot>(
+                    // AQUÍ LA MODIFICACIÓN PARA SUGERENCIAS
                     stream:
                         FirebaseFirestore.instance
                             .collection('usuarios')
+                            // <-- MODIFICADO: Añadido el filtro de perfil visible
+                            .where('Config.PerfilVisible', isEqualTo: true)
                             .snapshots(),
                     builder: (context, snap) {
+                      // El resto del builder no necesita cambios, ya que ahora solo recibirá usuarios visibles
                       if (snap.connectionState == ConnectionState.waiting &&
                           !snap.hasData) {
                         return const Center(
@@ -3574,10 +3604,9 @@ class _ChatHomePageState extends State<ChatHomePage> {
 
                       allOtherUsers.shuffle();
                       List<DocumentSnapshot> suggestedUsers =
-                          allOtherUsers.take(10).toList(); // Mostrar hasta 10
+                          allOtherUsers.take(10).toList();
 
                       if (suggestedUsers.isEmpty) {
-                        // Por si acaso take(10) devuelve vacío
                         return const Center(
                           child: Text(
                             "No hay sugerencias disponibles.",
@@ -3607,7 +3636,6 @@ class _ChatHomePageState extends State<ChatHomePage> {
                               userData['Nombre'] as String? ?? 'Usuario';
 
                           return Tooltip(
-                            // Añadido Tooltip para el nombre completo
                             message: nombre,
                             child: GestureDetector(
                               onTap: () {
@@ -3635,7 +3663,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                       alignment: Alignment.bottomRight,
                                       children: [
                                         CircleAvatar(
-                                          radius: 28, // Un poco más grande
+                                          radius: 28,
                                           backgroundImage:
                                               foto.isNotEmpty
                                                   ? NetworkImage(foto)
@@ -3658,7 +3686,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                                 color:
                                                     Colors
                                                         .lightGreenAccent
-                                                        .shade700, // Más intenso
+                                                        .shade700,
                                                 shape: BoxShape.circle,
                                               ),
                                             ),
@@ -3695,7 +3723,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                 endIndent: 10,
               ),
 
-              // --- 5) Contenido de cada tab (Lista de Chats) ---
+              // --- 5) Contenido de cada tab (Lista de Chats) --- (Sin cambios)
               Expanded(
                 child: TabBarView(
                   children: [
