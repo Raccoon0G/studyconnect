@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // <-- IMPORTANTE: Añadido para poder copiar al portapapeles
 import 'package:flutter_chat_bubble/chat_bubble.dart';
 import 'package:flutter_chat_bubble/bubble_type.dart';
 import 'package:flutter_chat_bubble/clippers/chat_bubble_clipper_1.dart';
@@ -67,14 +68,12 @@ class ChatBubbleCustom extends StatefulWidget {
 }
 
 class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
-  // --- Controladores de Media ---
+  // --- Controladores de Media (Sin cambios) ---
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState? _audioPlayerState;
-
   VideoPlayerController? _videoPlayerController;
   ChewieController? _chewieController;
   bool _isVideoPlayerInitialized = false;
-
   static final Set<String> _registeredViewFactories = {};
 
   @override
@@ -165,9 +164,11 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
   }
 
   Widget _buildContentWidget(BuildContext context) {
-    if (widget.deleted || widget.tipoContenido == 'texto_eliminado') {
+    // --- INICIO DE CORRECCIÓN 1: LÓGICA DE ELIMINAR ---
+    if (widget.deleted) {
+      // Si el widget está marcado como eliminado, SIEMPRE mostramos este texto.
       return Text(
-        widget.text ?? 'Mensaje eliminado',
+        'Mensaje eliminado',
         style: TextStyle(
           fontSize: 15,
           height: 1.3,
@@ -180,6 +181,7 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
     Widget mediaContent;
 
     switch (widget.tipoContenido) {
+      // ... (El resto de tu switch case no necesita cambios)
       case 'imagen':
       case 'gif':
         mediaContent =
@@ -320,7 +322,8 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
       default:
         mediaContent = Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4.0),
-          child: Text(
+          child: SelectableText(
+            // <-- TAMBIÉN SE PUEDE CAMBIAR Text POR SelectableText
             widget.text ?? '',
             style: TextStyle(
               fontSize: 15,
@@ -331,6 +334,7 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
         );
     }
 
+    // ... (el resto del método no cambia)
     List<Widget> children = [];
     if (widget.showName && !widget.isMine && widget.authorName.isNotEmpty) {
       children.add(
@@ -358,7 +362,7 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
       children.add(
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
-          child: Text(
+          child: SelectableText(
             widget.text!,
             style: TextStyle(
               fontSize: 14,
@@ -380,6 +384,7 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
     );
   }
 
+  // ... (Pega aquí tus otros helpers: _buildYoutubePreviewWidget, _buildAudioPlayerMobile, etc. sin cambios)
   Widget _buildYoutubePreviewWidget() {
     return GestureDetector(
       onTap: () => _launchUrl(widget.text),
@@ -537,18 +542,18 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
     return SizedBox(height: 50, child: HtmlElementView(viewType: viewId));
   }
 
-  // --- FIN DE HELPERS DE MEDIA ---
-
-  @override
-  // En tu archivo chat_bubble.dart, dentro de la clase _ChatBubbleCustomState
   @override
   Widget build(BuildContext context) {
     Color bubbleBackgroundColor =
-        widget.deleted
-            ? (widget.isMine ? Colors.grey.shade700 : Colors.grey.shade300)
-            : widget.isMine
+        widget.isMine
             ? Theme.of(context).colorScheme.primary
             : const Color(0xFFE7E7ED);
+
+    // Si el mensaje está eliminado, el color de fondo es siempre gris, sin importar de quién sea.
+    if (widget.deleted) {
+      bubbleBackgroundColor =
+          widget.isMine ? Colors.grey.shade700 : Colors.grey.shade300;
+    }
 
     EdgeInsets contentPadding = const EdgeInsets.symmetric(
       horizontal: 12,
@@ -565,11 +570,9 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
         widget.tipoContenido == 'video';
 
     if (isSpecialMedia) {
-      contentPadding = EdgeInsets.zero; // El widget interno maneja su padding
+      contentPadding = EdgeInsets.zero;
     } else if (hasMediaWithoutCaption) {
-      contentPadding = const EdgeInsets.all(
-        3,
-      ); // Menos padding para solo imagen
+      contentPadding = const EdgeInsets.all(3);
     }
 
     return Padding(
@@ -579,7 +582,6 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
             widget.isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Avatar a la izquierda para mensajes recibidos
           if (!widget.isMine)
             Padding(
               padding: const EdgeInsets.only(right: 8.0),
@@ -593,13 +595,10 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
               ),
             ),
 
-          // Flexible es importante para que los mensajes largos no rompan la UI
           Flexible(
             child: GestureDetector(
-              // <-- ESTE ES EL WIDGET CLAVE QUE FALTABA
               onLongPress: () {
-                if (widget.deleted)
-                  return; // No mostrar menú para mensajes eliminados
+                if (widget.deleted) return;
                 showModalBottomSheet(
                   context: context,
                   backgroundColor: Theme.of(context).canvasColor,
@@ -612,7 +611,29 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
                       (_) => Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Opción para Editar
+                          // --- INICIO DE CORRECCIÓN 2: AÑADIR OPCIÓN DE COPIAR ---
+                          // Solo mostramos la opción si el mensaje tiene texto
+                          if (widget.text != null && widget.text!.isNotEmpty)
+                            ListTile(
+                              leading: const Icon(Icons.copy_rounded),
+                              title: const Text('Copiar mensaje'),
+                              onTap: () {
+                                Navigator.pop(context); // Cierra el menú
+                                Clipboard.setData(
+                                  ClipboardData(text: widget.text!),
+                                );
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Mensaje copiado al portapapeles',
+                                    ),
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              },
+                            ),
+
+                          // --- FIN DE CORRECCIÓN 2 ---
                           if (widget.isMine &&
                               widget.tipoContenido == 'texto' &&
                               widget.onEdit != null)
@@ -624,7 +645,6 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
                                 widget.onEdit!();
                               },
                             ),
-                          // Opción para Eliminar
                           if (widget.isMine && widget.onDelete != null)
                             ListTile(
                               leading: const Icon(
@@ -640,7 +660,6 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
                                 widget.onDelete!();
                               },
                             ),
-                          // Opción para Reaccionar
                           if (widget.onReact != null)
                             ListTile(
                               leading: const Icon(
@@ -679,10 +698,7 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
                             : CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // El contenido (texto, imagen, video, etc.)
                       _buildContentWidget(context),
-
-                      // Las reacciones
                       if (widget.reactions.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Padding(
@@ -725,8 +741,6 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
                           ),
                         ),
                       ],
-
-                      // La hora y el check de leído
                       Padding(
                         padding: const EdgeInsets.only(
                           top: 4.0,
@@ -778,8 +792,6 @@ class _ChatBubbleCustomState extends State<ChatBubbleCustom> {
               ),
             ),
           ),
-
-          // Avatar a la derecha para mensajes enviados
           if (widget.isMine)
             Padding(
               padding: const EdgeInsets.only(left: 8.0),
