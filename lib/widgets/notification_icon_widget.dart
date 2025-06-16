@@ -5,8 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:vibration/vibration.dart';
 import '../services/notification_service.dart';
-import '../services/user_service.dart';
-import '../services/navigation_service.dart'; // <-- IMPORTAMOS EL NUEVO SERVICIO
+import '../services/services.dart';
+import '../services/navigation_service.dart';
 
 // La función de formato de fecha no cambia
 String formatFechaPersonalizada(DateTime fecha) {
@@ -47,6 +47,7 @@ class NotificationIconWidget extends StatefulWidget {
 class _NotificationIconWidgetState extends State<NotificationIconWidget> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   int _previousUnreadCount = 0;
+
   void _playNotificationSound() async {
     await _audioPlayer.play(AssetSource('audio/notification.mp3'));
     if (await Vibration.hasVibrator() ?? false) {
@@ -56,6 +57,7 @@ class _NotificationIconWidgetState extends State<NotificationIconWidget> {
 
   OverlayEntry? _overlayEntry;
   final GlobalKey _notificationIconKey = GlobalKey();
+
   @override
   void dispose() {
     _audioPlayer.dispose();
@@ -162,14 +164,34 @@ class _NotificationIconWidgetState extends State<NotificationIconWidget> {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return const SizedBox.shrink();
+    if (user == null) {
+      return const SizedBox.shrink();
+    }
+
+    // 1. PRIMER STREAMBUILDER: Para obtener la configuración del usuario en tiempo real.
     return StreamBuilder<DocumentSnapshot>(
-      stream: UserService.obtenerConfiguracionUsuario(user.uid),
+      stream:
+          FirebaseFirestore.instance
+              .collection('usuarios')
+              .doc(user.uid)
+              .snapshots(),
       builder: (context, userConfigSnapshot) {
-        final userData =
-            userConfigSnapshot.data?.data() as Map<String, dynamic>?;
-        final bool sonidosActivados =
-            userData?['Config']?['Notificaciones'] ?? true;
+        // 2. EXTRAER EL VALOR BOOLEANO:
+        // Por defecto, las notificaciones están activadas si no se encuentra el valor.
+        bool notificacionesActivas = true;
+
+        if (userConfigSnapshot.hasData && userConfigSnapshot.data!.exists) {
+          final userData =
+              userConfigSnapshot.data!.data() as Map<String, dynamic>?;
+
+          // Accedemos de forma segura a Config -> Notificaciones.
+          if (userData != null && userData.containsKey('Config')) {
+            notificacionesActivas =
+                userData['Config']['Notificaciones'] ?? true;
+          }
+        }
+
+        // 3. SEGUNDO STREAMBUILDER: Para obtener las notificaciones.
         return StreamBuilder<List<Map<String, dynamic>>>(
           stream: NotificationService.obtenerNotificaciones(user.uid),
           builder: (context, notificationsSnapshot) {
@@ -180,12 +202,17 @@ class _NotificationIconWidgetState extends State<NotificationIconWidget> {
                       (n) => n['leido'] == false && n['archivada'] == false,
                     )
                     .length;
+
+            // 4. LÓGICA CONDICIONAL: Comprueba si hay nuevas notificaciones Y si están activadas.
             if (notificationsSnapshot.hasData &&
                 noLeidas > _previousUnreadCount &&
-                sonidosActivados) {
+                notificacionesActivas) {
               _playNotificationSound();
             }
+
             _previousUnreadCount = noLeidas;
+
+            // El resto de la UI no cambia
             return GestureDetector(
               key: _notificationIconKey,
               onTap: () => _showNotifications(context, notificaciones),
@@ -237,7 +264,7 @@ class _NotificationIconWidgetState extends State<NotificationIconWidget> {
   }
 }
 
-// El resto del código usa la versión que ya arreglaba el bug de estado
+// El resto del código no necesita modificaciones
 enum _NotifView { nuevas, leidas, archivadas }
 
 class _NotificationsContent extends StatefulWidget {
@@ -498,8 +525,7 @@ class __NotificationsContentState extends State<_NotificationsContent> {
                               notifId: visibleNotifications[index]['id'],
                               action: action,
                             ),
-                        onClosePanel:
-                            widget.onClose, // Pasamos el callback de cierre
+                        onClosePanel: widget.onClose,
                       );
                     },
                   ),
@@ -514,7 +540,7 @@ class _NotificationTile extends StatelessWidget {
   final bool isMobile;
   final _NotifView currentView;
   final Function(String action) onAction;
-  final VoidCallback onClosePanel; // Para cerrar el panel
+  final VoidCallback onClosePanel;
 
   const _NotificationTile({
     required this.notification,
@@ -525,8 +551,17 @@ class _NotificationTile extends StatelessWidget {
   });
 
   IconData _getIconForType(String tipo) {
-    /* ... (sin cambios) ... */
-    return Icons.notifications;
+    // Puedes personalizar esto según los tipos de notificaciones que tengas
+    switch (tipo) {
+      case 'nuevo_mensaje':
+        return Icons.message;
+      case 'nuevo_seguidor':
+        return Icons.person_add;
+      case 'anuncio':
+        return Icons.campaign;
+      default:
+        return Icons.notifications;
+    }
   }
 
   Widget _buildTrailingButtons(BuildContext context) {
@@ -592,13 +627,12 @@ class _NotificationTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool isUnread = currentView == _NotifView.nuevas;
 
-    // El ListTile ahora contiene los botones en `trailing`
     final tile = ListTile(
       leading: CircleAvatar(
         backgroundColor:
             isUnread ? Colors.blue.withOpacity(0.1) : Colors.grey.shade200,
         child: Icon(
-          _getIconForType(notification['tipo']),
+          _getIconForType(notification['tipo'] ?? ''),
           color: isUnread ? Colors.blue.shade700 : Colors.grey.shade600,
         ),
       ),
@@ -610,7 +644,7 @@ class _NotificationTile extends StatelessWidget {
         ),
       ),
       subtitle: Text(
-        '${notification['contenido']}\n${formatFechaPersonalizada((notification['fecha'] as Timestamp).toDate())}',
+        '${notification['contenido'] ?? ''}\n${formatFechaPersonalizada((notification['fecha'] as Timestamp).toDate())}',
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(color: Colors.grey.shade600),
@@ -620,7 +654,6 @@ class _NotificationTile extends StatelessWidget {
 
     return Material(
       color: isUnread ? Colors.blue.withOpacity(0.08) : Colors.transparent,
-      // Usamos un InkWell para hacer el cuerpo del Tile clickable
       child: InkWell(
         onTap: () {
           // 1. Cierra el panel
