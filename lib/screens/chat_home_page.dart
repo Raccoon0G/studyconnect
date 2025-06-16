@@ -361,19 +361,29 @@ class _ChatHomePageState extends State<ChatHomePage> {
     return DateFormat.Hm().format(dt);
   }
 
-  Future<void> _obtenerUsuario(String usuarioId) async {
-    if (cacheUsuarios.containsKey(usuarioId)) return;
+  Future<DocumentSnapshot?> _obtenerUsuario(String usuarioId) async {
+    if (cacheUsuarios.containsKey(usuarioId)) return null;
+
     final doc =
         await FirebaseFirestore.instance
             .collection('usuarios')
             .doc(usuarioId)
             .get();
-    final nombre = doc['Nombre'] ?? 'Usuario';
-    final foto = doc['FotoPerfil'] ?? '';
-    // aquí reemplazamos la simple asignación por un setState:
-    setState(() {
-      cacheUsuarios[usuarioId] = {'nombre': nombre, 'foto': foto};
-    });
+
+    if (doc.exists) {
+      // Si el documento existe, lo añadimos al caché y lo devolvemos
+      final nombre = doc['Nombre'] ?? 'Usuario';
+      final foto = doc['FotoPerfil'] ?? '';
+      if (mounted) {
+        setState(() {
+          cacheUsuarios[usuarioId] = {'nombre': nombre, 'foto': foto};
+        });
+      }
+      return doc;
+    } else {
+      // Si NO existe, devolvemos null
+      return null;
+    }
   }
 
   // Añade esta nueva función a tu _ChatHomePageState
@@ -3762,16 +3772,14 @@ class _ChatHomePageState extends State<ChatHomePage> {
     required bool filterGroups,
     required bool filterArchived,
   }) {
-    // --- CASO 1: HAY TEXTO EN EL FILTRO DE BÚSQUEDA GLOBAL DE USUARIOS ---
     if (filtro.isNotEmpty) {
+      // --- Lógica de búsqueda de usuarios (sin cambios) ---
       if (_isSearchingGlobalUsers) {
-        // Muestra Shimmer mientras se buscan usuarios globales
         return ListView.builder(
-          itemCount: 7, // Un número arbitrario de shimmers
+          itemCount: 7,
           itemBuilder: (_, __) => const ShimmerChatTile(),
         );
       } else if (_usuarios.isEmpty) {
-        // No se encontraron usuarios con el filtro actual
         return const Center(
           child: Padding(
             padding: EdgeInsets.all(16.0),
@@ -3782,18 +3790,14 @@ class _ChatHomePageState extends State<ChatHomePage> {
           ),
         );
       } else {
-        // Muestra la lista de usuarios encontrados
         return ListView.builder(
           padding: const EdgeInsets.symmetric(vertical: 4),
           itemCount: _usuarios.length,
           itemBuilder: (contextListBuilder, i) {
-            // Contexto para MediaQuery
             final userDoc = _usuarios[i];
             final userData = userDoc.data() as Map<String, dynamic>? ?? {};
             final nombre = userData['Nombre'] ?? 'Usuario Desconocido';
-            // Intenta obtener la foto del caché, si no, usa un placeholder o nada.
             final foto = cacheUsuarios[userDoc.id]?['foto'] ?? '';
-
             return MouseRegion(
               cursor: SystemMouseCursors.click,
               onEnter: (_) => setState(() => hoveredUserId = userDoc.id),
@@ -3840,7 +3844,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                               ? Theme.of(
                                 context,
                               ).colorScheme.primary.withOpacity(0.8)
-                              : null, // Color base si no hay hover
+                              : null,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
@@ -3905,17 +3909,13 @@ class _ChatHomePageState extends State<ChatHomePage> {
           },
         );
       }
-    }
-    // --- CASO 2: NO HAY TEXTO EN EL FILTRO DE BÚSQUEDA (MOSTRAMOS CHATS EXISTENTES) ---
-    else {
+    } else {
+      // --- Lógica para mostrar CHATS EXISTENTES ---
       return StreamBuilder<QuerySnapshot>(
         stream:
             FirebaseFirestore.instance
                 .collection('Chats')
-                .where(
-                  'ids',
-                  arrayContains: uid,
-                ) // Solo chats donde el usuario actual es miembro
+                .where('ids', arrayContains: uid)
                 .orderBy('lastMessageAt', descending: true)
                 .snapshots(),
         builder: (contextStreamBuilder, chatSnapshot) {
@@ -3928,19 +3928,12 @@ class _ChatHomePageState extends State<ChatHomePage> {
           }
 
           if (!chatSnapshot.hasData || chatSnapshot.data!.docs.isEmpty) {
-            String mensajeVacio = 'Inicia una conversación o crea un grupo';
-            if (filterArchived)
-              mensajeVacio = 'No tienes chats archivados';
-            else if (filterUnread)
-              mensajeVacio = 'No tienes mensajes no leídos';
-            else if (filterGroups)
-              mensajeVacio = 'No estás en ningún grupo aún';
-            return Center(
+            return const Center(
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: EdgeInsets.all(16.0),
                 child: Text(
-                  mensajeVacio,
-                  style: const TextStyle(color: Colors.white70),
+                  'Inicia una conversación o crea un grupo',
+                  style: TextStyle(color: Colors.white70),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -3952,54 +3945,36 @@ class _ChatHomePageState extends State<ChatHomePage> {
               chatsExistentes.where((chatDoc) {
                 final data = chatDoc.data() as Map<String, dynamic>?;
                 if (data == null) return false;
-
                 final List<String> ocultoPorLista = List<String>.from(
                   data['ocultoPara'] ?? [],
                 );
                 if (ocultoPorLista.contains(uid)) return false;
-
                 final List<String> archivadoPorLista = List<String>.from(
                   data['archivadoPara'] ?? [],
                 );
                 final bool estaArchivadoPorUsuarioActual = archivadoPorLista
                     .contains(uid);
-
-                if (filterArchived)
+                if (filterArchived) {
                   return estaArchivadoPorUsuarioActual;
-                else {
+                } else {
                   if (estaArchivadoPorUsuarioActual) return false;
                   final bool esUnGrupo = (data['isGroup'] as bool?) ?? false;
                   final Map<String, dynamic> unreadMap =
                       (data['unreadCounts'] as Map<String, dynamic>?) ?? {};
                   final int contadorNoLeidos = (unreadMap[uid] as int?) ?? 0;
-
-                  if (filterGroups && !esUnGrupo)
-                    return false; // Si filtramos por grupos y no es grupo, no mostrar
-                  if (filterUnread && contadorNoLeidos == 0)
-                    return false; // Si filtramos por no leídos y no hay, no mostrar
-                  return true; // Cumple con los filtros o no hay filtros específicos (pestaña "Todos")
+                  if (filterGroups && !esUnGrupo) return false;
+                  if (filterUnread && contadorNoLeidos == 0) return false;
+                  return true;
                 }
               }).toList();
 
           if (chatsVisibles.isEmpty) {
-            String mensajeVacioFiltrado =
-                'No hay conversaciones para mostrar aquí';
-            if (filterArchived)
-              mensajeVacioFiltrado = 'No tienes chats archivados';
-            else if (filterUnread)
-              mensajeVacioFiltrado =
-                  'No tienes mensajes no leídos en esta vista';
-            else if (filterGroups)
-              mensajeVacioFiltrado = 'No hay grupos para mostrar en esta vista';
-            else if (chatsExistentes.isNotEmpty)
-              mensajeVacioFiltrado =
-                  'Todos tus chats están ocultos o archivados'; // Para la pestaña "Todos" si todo está filtrado por otras condiciones
-            return Center(
+            return const Center(
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: EdgeInsets.all(16.0),
                 child: Text(
-                  mensajeVacioFiltrado,
-                  style: const TextStyle(color: Colors.white70),
+                  'No hay conversaciones para mostrar aquí',
+                  style: TextStyle(color: Colors.white70),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -4010,28 +3985,62 @@ class _ChatHomePageState extends State<ChatHomePage> {
             padding: const EdgeInsets.symmetric(vertical: 4),
             itemCount: chatsVisibles.length,
             itemBuilder: (contextItemBuilder, idx) {
-              // Contexto para MediaQuery
               final chatDoc = chatsVisibles[idx];
               final data = chatDoc.data()! as Map<String, dynamic>;
-              final List<dynamic> idsDynamic = data['ids'] ?? [];
               final List<String> idsParticipantes = List<String>.from(
-                idsDynamic,
+                data['ids'] ?? [],
               );
               final bool isGroup = (data['isGroup'] as bool?) ?? false;
               final String chatId = chatDoc.id;
 
-              String? otherIdForChat;
-              if (!isGroup) {
-                otherIdForChat = idsParticipantes.firstWhere(
+              String calculatedTitle;
+              String? calculatedPhotoUrl;
+
+              if (isGroup) {
+                calculatedTitle = (data['groupName'] ?? 'Grupo').toString();
+                calculatedPhotoUrl = data['groupPhoto'] as String?;
+              } else {
+                final otherIdForChat = idsParticipantes.firstWhere(
                   (id) => id != uid,
                   orElse: () => '',
                 );
-                if (otherIdForChat.isNotEmpty &&
-                    !cacheUsuarios.containsKey(otherIdForChat)) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) _obtenerUsuario(otherIdForChat!);
-                  });
+
+                if (otherIdForChat.isNotEmpty) {
+                  final cachedUserData = cacheUsuarios[otherIdForChat];
+                  if (cachedUserData != null) {
+                    calculatedTitle =
+                        cachedUserData['nombre'] ?? 'Usuario Desconocido';
+                    calculatedPhotoUrl = cachedUserData['foto'];
+                  } else {
+                    calculatedTitle = 'Cargando...';
+                    calculatedPhotoUrl = null;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted &&
+                          !cacheUsuarios.containsKey(otherIdForChat)) {
+                        _obtenerUsuario(otherIdForChat).then((userDoc) {
+                          if (userDoc == null && mounted) {
+                            setState(() {
+                              cacheUsuarios[otherIdForChat] = {
+                                'nombre': 'Usuario Eliminado',
+                                'foto': '',
+                              };
+                            });
+                          }
+                        });
+                      }
+                    });
+                  }
+                } else {
+                  calculatedTitle = 'Error en Chat';
+                  calculatedPhotoUrl = null;
                 }
+              }
+
+              final String title = calculatedTitle;
+              final String? photoUrl = calculatedPhotoUrl;
+
+              if (title == 'Cargando...') {
+                return const ShimmerChatTile();
               }
 
               final String preview =
@@ -4041,88 +4050,44 @@ class _ChatHomePageState extends State<ChatHomePage> {
                       ? '${cacheUsuarios[data['createdBy']]?['nombre'] ?? "Alguien"} creó el grupo'
                       : 'Inicia la conversación';
 
-              String calculatedTitle;
-              String? calculatedPhotoUrl;
-
-              if (isGroup) {
-                calculatedTitle = (data['groupName'] ?? 'Grupo').toString();
-                calculatedPhotoUrl = data['groupPhoto'] as String?;
-              } else {
-                if (otherIdForChat != null && otherIdForChat.isNotEmpty) {
-                  final cachedUserData = cacheUsuarios[otherIdForChat];
-                  if (cachedUserData != null) {
-                    calculatedTitle =
-                        cachedUserData['nombre'] ?? 'Nombre no disponible';
-                    calculatedPhotoUrl = cachedUserData['foto'] ?? '';
-                  } else {
-                    calculatedTitle =
-                        'Cargando...'; // Usuario aún no cargado en caché
-                    calculatedPhotoUrl = ''; // Sin foto mientras carga
-                  }
-                } else {
-                  calculatedTitle =
-                      'Chat Individual'; // Fallback si otherIdForChat es inválido
-                  calculatedPhotoUrl = '';
-                }
-              }
-
-              final String title = calculatedTitle;
-              final String? photoUrl = calculatedPhotoUrl;
-              // ----- FIN DE LÓGICA CORREGIDA Y DESGLOSADA -----
-
-              if (!isGroup &&
-                  (otherIdForChat == null ||
-                      otherIdForChat.isEmpty ||
-                      title == 'Cargando...')) {
-                return const ShimmerChatTile(); // Muestra shimmer si la info del otro user aún no está
-              }
-
               final String hora =
                   data['lastMessageAt'] != null
                       ? DateFormat.Hm().format(
                         (data['lastMessageAt'] as Timestamp).toDate(),
                       )
                       : '';
-              final unreadMap =
-                  (data['unreadCounts'] as Map<String, dynamic>?) ?? {};
-              final int unreadCount = (unreadMap[uid] as int?) ?? 0;
-              final List<String> archivadoPorItem = List<String>.from(
+              final int unreadCount =
+                  ((data['unreadCounts'] as Map<String, dynamic>?) ?? {})[uid]
+                      as int? ??
+                  0;
+              final bool estaArchivadoItem = List<String>.from(
                 data['archivadoPara'] ?? [],
-              );
-              final bool estaArchivadoItem = archivadoPorItem.contains(uid);
-              final List<String> silenciadoPorItem = List<String>.from(
+              ).contains(uid);
+              final bool estaSilenciadoItem = List<String>.from(
                 data['silenciadoPor'] ?? [],
-              );
-              final bool estaSilenciadoItem = silenciadoPorItem.contains(uid);
+              ).contains(uid);
 
               return ValueListenableBuilder<String?>(
                 valueListenable: hoveredChatId,
                 builder: (context, hoveredValue, _) {
                   final isHovered = hoveredValue == chatId;
                   return MouseRegion(
-                    // ... (tu MouseRegion existente) ...
+                    onEnter: (_) => hoveredChatId.value = chatId,
+                    onExit: (_) => hoveredChatId.value = null,
                     child: GestureDetector(
                       onTap: () {
-                        // ---- INICIO DE MODIFICACIÓN EN onTap ----
                         final dataChat =
-                            chatDoc.data()!
-                                as Map<
-                                  String,
-                                  dynamic
-                                >; // Asegúrate de tener acceso a los datos del chatDoc
+                            chatDoc.data()! as Map<String, dynamic>;
                         final bool esEsteChatUnGrupo =
                             (dataChat['isGroup'] as bool?) ?? false;
-
                         if (chatId.isNotEmpty &&
                             uid.isNotEmpty &&
-                            !estaArchivadoItem &&
                             unreadCount > 0) {
                           FirebaseFirestore.instance
                               .collection('Chats')
                               .doc(chatId)
                               .update({'unreadCounts.$uid': 0});
                         }
-
                         final screenWidth =
                             MediaQuery.of(contextItemBuilder).size.width;
                         const double tabletBreakpoint = 720.0;
@@ -4130,36 +4095,20 @@ class _ChatHomePageState extends State<ChatHomePage> {
                             screenWidth >= tabletBreakpoint;
 
                         setState(() {
-                          // <--- IMPORTANTE: Envuelve las actualizaciones de estado en setState
-                          _isCurrentChatGroup =
-                              esEsteChatUnGrupo; // <--- ACTUALIZA LA VARIABLE DE ESTADO
+                          _isCurrentChatGroup = esEsteChatUnGrupo;
                           chatIdSeleccionado = chatId;
-
                           if (esEsteChatUnGrupo) {
                             otroUid = null;
                           } else {
-                            // Tu lógica existente para obtener otherIdForChat para chats 1 a 1
-                            final List<dynamic> idsDynamicOnTap =
-                                dataChat['ids'] ?? [];
-                            final List<String> idsParticipantesOnTap =
-                                List<String>.from(idsDynamicOnTap);
-                            otroUid = idsParticipantesOnTap.firstWhere(
+                            otroUid = idsParticipantes.firstWhere(
                               (id) => id != uid,
                               orElse: () => '',
                             );
-                            if (otroUid!.isNotEmpty &&
-                                !cacheUsuarios.containsKey(otroUid)) {
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                if (mounted) _obtenerUsuario(otroUid!);
-                              });
-                            }
                           }
-
                           if (!currentIsLargeScreen) {
                             _showList = false;
                           }
                         });
-                        // ---- FIN DE MODIFICACIÓN EN onTap ----
                       },
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 250),
@@ -4181,9 +4130,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                   ? Theme.of(
                                     context,
                                   ).colorScheme.primaryContainer
-                                  : const Color(
-                                    0xFF015C8B,
-                                  ), // Ajusta colores de hover
+                                  : const Color(0xFF015C8B),
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
@@ -4278,17 +4225,19 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                         ),
                                       ),
                                     if (estaSilenciadoItem &&
-                                        !estaArchivadoItem) // Mostrar icono de silencio si no está archivado
+                                        !estaArchivadoItem)
                                       Padding(
                                         padding: EdgeInsets.only(
                                           left: unreadCount > 0 ? 4.0 : 0.0,
-                                        ), // Espacio si hay contador
+                                        ),
                                         child: Icon(
                                           Icons.notifications_off,
                                           color: Colors.white54,
                                           size: 16,
                                         ),
                                       ),
+
+                                    // --- INICIO: POPUPMENUBUTTON REINCORPORADO ---
                                     PopupMenuButton<String>(
                                       icon: const Icon(
                                         Icons.more_vert,
@@ -4300,19 +4249,19 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                           Theme.of(context).brightness ==
                                                   Brightness.dark
                                               ? Colors.grey[800]
-                                              : Colors
-                                                  .white, // Ajustar color del menú
+                                              : Colors.white,
                                       onSelected: (value) {
-                                        if (value == 'archivar')
+                                        if (value == 'archivar') {
                                           _archivarChat(chatId);
-                                        else if (value == 'desarchivar')
+                                        } else if (value == 'desarchivar') {
                                           _desarchivarChat(chatId);
-                                        else if (value == 'silenciar')
+                                        } else if (value == 'silenciar') {
                                           _silenciarChat(chatId);
-                                        else if (value == 'quitar_silencio')
+                                        } else if (value == 'quitar_silencio') {
                                           _quitarSilencioChat(chatId);
-                                        else if (value == 'eliminar')
+                                        } else if (value == 'eliminar') {
                                           _confirmarEliminarChat(chatId, title);
+                                        }
                                       },
                                       itemBuilder: (BuildContext popupContext) {
                                         List<PopupMenuEntry<String>> items = [];
@@ -4364,6 +4313,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                         return items;
                                       },
                                     ),
+                                    // --- FIN: POPUPMENUBUTTON REINCORPORADO ---
                                   ],
                                 ),
                               ],
@@ -4391,12 +4341,10 @@ class _ChatHomePageState extends State<ChatHomePage> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
-          // ---- INICIO: Lógica condicional para el botón de Atrás ----
-          if (!isLargeScreen) // Solo muestra el botón si NO es pantalla grande
+          if (!isLargeScreen)
             IconButton(
               icon: const Icon(Icons.arrow_back, color: Colors.white),
               onPressed: () {
-                // En pantalla pequeña, este botón siempre te lleva de vuelta a la lista.
                 setState(() {
                   _showList = true;
                   chatIdSeleccionado = null;
@@ -4404,11 +4352,7 @@ class _ChatHomePageState extends State<ChatHomePage> {
                 });
               },
             ),
-          if (!isLargeScreen) // Solo muestra el SizedBox si el botón de atrás está presente
-            const SizedBox(width: 10),
-          // ---- FIN: Lógica condicional para el botón de Atrás ----
-
-          // El resto del contenido del Header
+          if (!isLargeScreen) const SizedBox(width: 10),
           if (chatIdSeleccionado != null)
             Expanded(
               child: StreamBuilder<DocumentSnapshot>(
@@ -4418,84 +4362,137 @@ class _ChatHomePageState extends State<ChatHomePage> {
                         .doc(chatIdSeleccionado!)
                         .snapshots(),
                 builder: (context, chatSnap) {
-                  if (!chatSnap.hasData && otroUid == null) {
-                    // Si no hay datos Y no estamos iniciando un nuevo chat 1a1
-                    // En pantalla grande y sin chat seleccionado, mostrar placeholder
-                    if (isLargeScreen) {
-                      return const Text(
-                        'Selecciona un chat',
-                        style: TextStyle(color: Colors.white, fontSize: 18),
-                        overflow: TextOverflow.ellipsis,
-                      );
-                    }
-                    // En pantalla pequeña (o si hay error cargando), un loader simple
-                    return const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
+                  if (!chatSnap.hasData) {
+                    return const Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       ),
                     );
                   }
+                  if (!chatSnap.data!.exists) {
+                    return const Text(
+                      "Chat no disponible",
+                      style: TextStyle(color: Colors.white),
+                    );
+                  }
 
-                  if (chatSnap.hasData && chatSnap.data?.data() != null) {
-                    final chatData =
-                        chatSnap.data!.data() as Map<String, dynamic>;
-                    final bool esGrupo =
-                        (chatData['isGroup'] as bool?) ?? false;
+                  final chatData =
+                      chatSnap.data!.data() as Map<String, dynamic>;
+                  final bool esGrupo = (chatData['isGroup'] as bool?) ?? false;
 
-                    if (esGrupo) {
-                      final String nombreGrupo =
-                          chatData['groupName'] ?? 'Grupo';
-                      final String? fotoGrupoUrl =
-                          chatData['groupPhoto'] as String?;
-                      final String? groupCreatorId =
-                          chatData['createdBy'] as String?;
-                      final List<String> miembrosIds = List<String>.from(
-                        chatData['ids'] ?? [],
-                      );
-
-                      return GestureDetector(
-                        onTap: () {
-                          _mostrarDialogoMiembrosGrupo(
-                            chatIdSeleccionado!,
-                            nombreGrupo,
-                            fotoGrupoUrl,
-                            miembrosIds, // Puedes mantenerla como lista inicial si la usas antes del StreamBuilder
-                            groupCreatorId, // << ¡Importante pasar esto!
-                          );
-                        },
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 20,
-                              backgroundImage:
-                                  (fotoGrupoUrl != null &&
-                                          fotoGrupoUrl.isNotEmpty)
-                                      ? NetworkImage(fotoGrupoUrl)
-                                      : const AssetImage(
-                                            'assets/images/avatar1.webp',
-                                          )
-                                          as ImageProvider,
+                  if (esGrupo) {
+                    // --- INICIO: UI RECONSTRUIDA PARA GRUPO ---
+                    final String nombreGrupo = chatData['groupName'] ?? 'Grupo';
+                    final String? fotoGrupoUrl =
+                        chatData['groupPhoto'] as String?;
+                    final String? groupCreatorId =
+                        chatData['createdBy'] as String?;
+                    final List<String> miembrosIds = List<String>.from(
+                      chatData['ids'] ?? [],
+                    );
+                    return GestureDetector(
+                      onTap: () {
+                        _mostrarDialogoMiembrosGrupo(
+                          chatIdSeleccionado!,
+                          nombreGrupo,
+                          fotoGrupoUrl,
+                          miembrosIds,
+                          groupCreatorId,
+                        );
+                      },
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 20,
+                            backgroundImage:
+                                (fotoGrupoUrl != null &&
+                                        fotoGrupoUrl.isNotEmpty)
+                                    ? NetworkImage(fotoGrupoUrl)
+                                    : const AssetImage(
+                                          'assets/images/avatar1.webp',
+                                        )
+                                        as ImageProvider,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  nombreGrupo,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  '${miembrosIds.length} miembro(s)',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
+                          ),
+                        ],
+                      ),
+                    );
+                    // --- FIN: UI RECONSTRUIDA PARA GRUPO ---
+                  } else {
+                    final otherId = (chatData['ids'] as List<dynamic>)
+                        .firstWhere((id) => id != uid, orElse: () => null);
+
+                    if (otherId == null) {
+                      return const Text(
+                        "Error en chat",
+                        style: TextStyle(color: Colors.white),
+                      );
+                    }
+
+                    // Usamos un FutureBuilder para manejar el caso de usuario eliminado
+                    return FutureBuilder<DocumentSnapshot>(
+                      future:
+                          FirebaseFirestore.instance
+                              .collection('usuarios')
+                              .doc(otherId)
+                              .get(),
+                      builder: (context, userSnap) {
+                        if (!userSnap.hasData) {
+                          return const Text(
+                            "Cargando...",
+                            style: TextStyle(color: Colors.white),
+                          );
+                        }
+                        if (!userSnap.data!.exists) {
+                          // SI EL USUARIO FUE ELIMINADO
+                          return Row(
+                            children: [
+                              const CircleAvatar(
+                                radius: 20,
+                                child: Icon(Icons.person_off),
+                              ),
+                              const SizedBox(width: 10),
+                              Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Text(
-                                    nombreGrupo,
+                                    "Usuario Eliminado",
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 16,
                                     ),
-                                    overflow: TextOverflow.ellipsis,
                                   ),
                                   Text(
-                                    '${miembrosIds.length} miembro(s)',
+                                    "No disponible",
                                     style: const TextStyle(
                                       color: Colors.white70,
                                       fontSize: 12,
@@ -4503,71 +4500,18 @@ class _ChatHomePageState extends State<ChatHomePage> {
                                   ),
                                 ],
                               ),
-                            ),
-                          ],
-                        ),
-                      );
-                    } else {
-                      // Chat 1 a 1
-                      final List<String> idsParticipantes = List<String>.from(
-                        chatData['ids'] ?? [],
-                      );
-                      final Iterable<String> otrosIdsFiltrados =
-                          idsParticipantes.where((id) => id != uid);
-                      final String? idOtroUsuarioDelChat =
-                          otrosIdsFiltrados.isNotEmpty
-                              ? otrosIdsFiltrados.first
-                              : null;
-
-                      if (idOtroUsuarioDelChat != null) {
-                        // Actualizar otroUid si es diferente y estamos en un chat 1a1 ya cargado
-                        if (otroUid != idOtroUsuarioDelChat) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted) {
-                              setState(() {
-                                otroUid = idOtroUsuarioDelChat;
-                              });
-                            }
-                          });
+                            ],
+                          );
                         }
-                        return _buildHeaderInfoUsuario(idOtroUsuarioDelChat);
-                      } else {
-                        return const Text(
-                          'Usuario no encontrado',
-                          style: TextStyle(color: Colors.white),
-                        );
-                      }
-                    }
-                  } else if (otroUid != null) {
-                    // Si estamos iniciando un nuevo chat 1a1 y el stream del chat aún no tiene datos
-                    return _buildHeaderInfoUsuario(otroUid!);
+                        // Si el usuario existe, construimos el header normal
+                        return _buildHeaderInfoUsuario(otherId);
+                      },
+                    );
                   }
-
-                  // Fallback general (puede ser un loader o un placeholder si estamos en pantalla grande)
-                  return Expanded(
-                    child:
-                        (isLargeScreen && chatIdSeleccionado == null)
-                            ? const Text(
-                              'Selecciona un chat',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            )
-                            : const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            ),
-                  );
                 },
               ),
             )
-          else // Si chatIdSeleccionado es null (esto se mostrará en pantalla grande antes de seleccionar un chat)
+          else
             const Expanded(
               child: Text(
                 'Selecciona un chat',

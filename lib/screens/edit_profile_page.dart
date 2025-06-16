@@ -498,6 +498,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
+  // En _EditProfilePageState
+
   Future<void> _eliminarCuenta() async {
     if (firebaseAuthUser == null || _usuarioActual == null || isSaving) return;
 
@@ -546,9 +548,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
             ],
           ),
     );
+    // Si el usuario cierra este diálogo, no continuamos.
+    if (eliminarAportaciones == null) return;
 
     setState(() => isSaving = true);
     try {
+      // --- INICIO DE LA LÓGICA DE BORRADO ---
+      // 1. Eliminar datos de Firestore (como ya lo hacías)
       if (eliminarAportaciones == true) {
         await _eliminarAportacionesUsuario(_usuarioActual!.id);
       }
@@ -556,33 +562,113 @@ class _EditProfilePageState extends State<EditProfilePage> {
           .collection(usersCollection)
           .doc(_usuarioActual!.id)
           .delete();
+
+      // 2. Eliminar el usuario de Firebase Auth
       await firebaseAuthUser!.delete();
 
+      // 3. Si todo sale bien, navegar fuera
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Cuenta eliminada correctamente.')),
         );
         Navigator.pushNamedAndRemoveUntil(context, routeHome, (route) => false);
       }
+      // --- FIN DE LA LÓGICA DE BORRADO ---
     } on FirebaseAuthException catch (e) {
-      if (mounted) {
-        String mensajeError = "Error al eliminar cuenta.";
-        if (e.code == 'requires-recent-login') {
-          mensajeError =
-              "Esta operación es sensible y requiere autenticación reciente. Por favor, cierra sesión y vuelve a iniciarla antes de eliminar tu cuenta.";
-        } else {
-          mensajeError = "Error: ${e.message ?? e.code}";
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(mensajeError),
-            duration: const Duration(seconds: 6),
-          ),
+      if (e.code == 'requires-recent-login') {
+        // --- INICIO DE LA NUEVA LÓGICA DE REAUTENTICACIÓN ---
+        if (!mounted) return;
+        setState(
+          () => isSaving = false,
+        ); // Desactivar el loading para mostrar el diálogo
+
+        final passwordController = TextEditingController();
+        final bool? reautenticado = await showDialog<bool>(
+          context: context,
+          builder:
+              (context) => AlertDialog(
+                title: const Text("Confirmación requerida"),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      "Por seguridad, ingresa tu contraseña para continuar con la eliminación.",
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: passwordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Contraseña',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text("Cancelar"),
+                  ),
+                  ElevatedButton(
+                    onPressed: () async {
+                      if (passwordController.text.trim().isEmpty) return;
+
+                      setState(
+                        () => isSaving = true,
+                      ); // Activar loading de nuevo
+
+                      final credencial = EmailAuthProvider.credential(
+                        email: firebaseAuthUser!.email!,
+                        password: passwordController.text.trim(),
+                      );
+
+                      try {
+                        await firebaseAuthUser!.reauthenticateWithCredential(
+                          credencial,
+                        );
+                        Navigator.pop(
+                          context,
+                          true,
+                        ); // Contraseña correcta, cerrar diálogo y proceder
+                      } on FirebaseAuthException catch (reauthError) {
+                        Navigator.pop(context); // Cerrar diálogo de contraseña
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              "Contraseña incorrecta. Intenta de nuevo. Error: ${reauthError.code}",
+                            ),
+                          ),
+                        );
+                      } finally {
+                        if (mounted) setState(() => isSaving = false);
+                      }
+                    },
+                    child: const Text("Confirmar"),
+                  ),
+                ],
+              ),
         );
+
+        // Si la reautenticación fue exitosa, reintentamos la eliminación
+        if (reautenticado == true) {
+          await _eliminarCuenta(); // Vuelve a llamar a la función entera para reintentar
+        }
+        // --- FIN DE LA NUEVA LÓGICA ---
+      } else {
+        // Manejar otros errores de FirebaseAuth
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Error al eliminar cuenta: ${e.message ?? e.code}"),
+              duration: const Duration(seconds: 6),
+            ),
+          );
+        }
       }
     } catch (e) {
       debugPrint('Error al eliminar cuenta: $e');
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -590,6 +676,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
             ),
           ),
         );
+      }
     } finally {
       if (mounted) setState(() => isSaving = false);
     }
