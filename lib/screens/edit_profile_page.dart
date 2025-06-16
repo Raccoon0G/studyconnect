@@ -100,9 +100,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
         _usuarioOriginalParaComparar!.fotoPerfilUrl)
       changed = true;
 
-    if (_usuarioActual!.config['ModoOscuro'] !=
-        _usuarioOriginalParaComparar!.config['ModoOscuro'])
-      changed = true;
+    // if (_usuarioActual!.config['ModoOscuro'] !=
+    //     _usuarioOriginalParaComparar!.config['ModoOscuro'])
+    //   changed = true;
     if (_usuarioActual!.config['Notificaciones'] !=
         _usuarioOriginalParaComparar!.config['Notificaciones'])
       changed = true;
@@ -637,6 +637,27 @@ class _EditProfilePageState extends State<EditProfilePage> {
     final theme = Theme.of(context);
     final bool emailEstaVerificado = firebaseAuthUser?.emailVerified ?? false;
 
+    // Define las reglas de color para la pista del interruptor
+    final MaterialStateProperty<Color?> trackColor =
+        MaterialStateProperty.resolveWith<Color?>((Set<MaterialState> states) {
+          // Si el estado es "seleccionado" (encendido), usa el color primario
+          if (states.contains(MaterialState.selected)) {
+            return theme.colorScheme.primary.withOpacity(0.6);
+          }
+          // Si no, para el estado "apagado", usa un gris claro
+          return Colors.grey.shade300;
+        });
+
+    // Define las reglas de color para el círculo del interruptor
+    final MaterialStateProperty<Color?> thumbColor =
+        MaterialStateProperty.resolveWith<Color?>((Set<MaterialState> states) {
+          if (states.contains(MaterialState.selected)) {
+            return theme.colorScheme.primary;
+          }
+          // Si está "apagado", usa un gris sólido y visible
+          return Colors.grey.shade500;
+        });
+
     return PopScope(
       canPop: false, // Siempre interceptar
       // USANDO onPopInvokedWithResult SEGÚN SUGERENCIA DEL LINTER
@@ -927,33 +948,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                             _buildSectionTitle("Configuración", theme),
                             SwitchListTile.adaptive(
                               value:
-                                  _usuarioActual!.config['ModoOscuro'] ?? true,
-                              title: Text(
-                                'Modo Oscuro',
-                                style: TextStyle(
-                                  color: theme.colorScheme.onSurface,
-                                ),
-                              ),
-                              onChanged:
-                                  isSaving
-                                      ? null
-                                      : (val) {
-                                        setState(
-                                          () =>
-                                              _usuarioActual!
-                                                      .config['ModoOscuro'] =
-                                                  val,
-                                        );
-                                        _checkForUnsavedChanges();
-                                      },
-                              secondary: Icon(
-                                Icons.brightness_6_outlined,
-                                color: theme.colorScheme.secondary,
-                              ),
-                              activeColor: theme.colorScheme.primary,
-                            ),
-                            SwitchListTile.adaptive(
-                              value:
                                   _usuarioActual!.config['Notificaciones'] ??
                                   true,
                               title: Text(
@@ -978,6 +972,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                 Icons.notifications_active_outlined,
                                 color: theme.colorScheme.secondary,
                               ),
+                              thumbColor: thumbColor,
+                              trackColor: trackColor,
+                              trackOutlineColor: MaterialStateProperty.all(
+                                Colors.transparent,
+                              ), // Para quitar un borde extra
                               activeColor: theme.colorScheme.primary,
                             ),
                             SwitchListTile.adaptive(
@@ -1006,6 +1005,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                 Icons.visibility_outlined,
                                 color: theme.colorScheme.secondary,
                               ),
+                              thumbColor: thumbColor,
+                              trackColor: trackColor,
+                              trackOutlineColor: MaterialStateProperty.all(
+                                Colors.transparent,
+                              ), // Para quitar un borde extra
                               activeColor: theme.colorScheme.primary,
                             ),
                             const SizedBox(height: 24),
